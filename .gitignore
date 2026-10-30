@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+
+# Lean / Lake build artifacts (sources and lake-manifest.json stay tracked)
+formal/.lake/
+formal/build/
+
+# Local qualification artifacts (committed evidence lives in docs/kctx/reports/)
+*.local/
+.DS_Store

@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Picks an interpreter and runs kctx.py through `uv run` against this
+# directory's pyproject.toml, so pydantic/structlog (used only by the graph
+# package) are always available -- uv syncs the venv on every invocation.
+# Spaces have no bare python3, only versioned /opt/bb/bin/python3.1x, so
+# select_python() still picks the system interpreter uv is told to use
+# (--python), rather than letting uv download its own.
+set -euo pipefail
+
+select_python() {
+  if command -v python3 >/dev/null 2>&1; then
+    printf '%s\n' "python3"
+    return 0
+  fi
+  local best=""
+  local candidate
+  for candidate in /opt/bb/bin/python3.1[0-9]; do
+    [ -x "$candidate" ] || continue
+    if [ -z "$best" ] || [[ "$candidate" > "$best" ]]; then
+      best="$candidate"
+    fi
+  done
+  if [ -n "$best" ]; then
+    printf '%s\n' "$best"
+    return 0
+  fi
+  echo "kctx: no python3 interpreter found on PATH or under /opt/bb/bin" >&2
+  return 1
+}
+
+select_uv() {
+  if command -v uv >/dev/null 2>&1; then
+    command -v uv
+    return 0
+  fi
+  local candidate
+  for candidate in "$HOME/.local/bin/uv" /usr/local/bin/uv /bb/bin/uv; do
+    if [ -x "$candidate" ]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+py="$(select_python)"
+
+if uv_bin="$(select_uv)"; then
+  exec "$uv_bin" run --quiet --project "$script_dir" --python "$py" \
+    python "${script_dir}/kctx.py" "$@"
+fi
+
+echo "kctx: no uv found on PATH, in \$HOME/.local/bin, /usr/local/bin, or /bb/bin." >&2
+echo "kctx requires uv to run (it manages the graph package's pydantic/structlog deps)." >&2
+echo "install uv: https://docs.astral.sh/uv/getting-started/installation/" >&2
+exit 1

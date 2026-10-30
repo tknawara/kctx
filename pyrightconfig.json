@@ -1,0 +1,7 @@
+{
+  "extraPaths": ["."],
+  "executionEnvironments": [
+    { "root": "tests", "extraPaths": [".", ".."] },
+    { "root": ".", "extraPaths": ["."] }
+  ]
+}

@@ -1,0 +1,14 @@
+name = "Kctx"
+version = "0.1.0"
+defaultTargets = ["Kctx", "kctxref"]
+
+# No dependencies: Lean core only (no mathlib), per the handover's
+# "avoid importing large libraries unless they materially simplify the proof".
+
+[[lean_lib]]
+name = "Kctx"
+
+
+[[lean_exe]]
+name = "kctxref"
+root = "Kctx.Reference"

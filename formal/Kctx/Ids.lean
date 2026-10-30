@@ -43,9 +43,9 @@ structure ClaimRef where
 deriving DecidableEq, Repr, Inhabited
 
 /-! Core has no `deriving BEq` handler; these explicit instances are
-field-wise (nominal ids compare by underlying string) or decide-based. -/
-instance {k : IdKind} : BEq (Ident k) := ⟨fun a b => a.val == b.val⟩
+decide-based so `simp` can reason through them uniformly. -/
+instance {k : IdKind} : BEq (Ident k) := ⟨fun a b => decide (a = b)⟩
 instance : BEq IdKind := ⟨fun a b => decide (a = b)⟩
-instance : BEq ClaimRef := ⟨fun a b => a.id == b.id && a.rev == b.rev⟩
+instance : BEq ClaimRef := ⟨fun a b => decide (a = b)⟩
 
 end Kctx

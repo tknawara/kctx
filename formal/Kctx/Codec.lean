@@ -440,7 +440,7 @@ def encObservation (o : Observation) : Json :=
   .arr #[encStr o.id.val, encObsOutcome o.outcome, encInt o.observedAt,
          encTtl o.ttl, encStr o.system, encStr o.locator]
 
-def decObservation : Json → Except String Observation
+def decObservationRaw : Json → Except String Observation
   | .arr a =>
     if a.size != 6 then throw "expected observation" else do
     let idj ← fieldAt a 0
@@ -455,22 +455,31 @@ def decObservation : Json → Except String Observation
     let ttl ← decTtl ttlj
     let system ← decStr sysj
     let locator ← decStr locj
-    let o : Observation := { id := ⟨id⟩, outcome, observedAt, ttl, system, locator }
-    if recordWfObservation o then pure o else throw "observation not well-formed"
+    pure ({ id := ⟨id⟩, outcome, observedAt, ttl, system, locator } : Observation)
   | _ => throw "expected observation"
+
+def decObservation (j : Json) : Except String Observation :=
+  match decObservationRaw j with
+  | .ok x => if recordWfObservation x then pure x else throw "observation not well-formed"
+  | .error e => throw e
+
+theorem decObservationRaw_encObservation (o : Observation) (h : recordWfObservation o = true) :
+    decObservationRaw (encObservation o) = pure o := by
+  have hred : decObservationRaw (encObservation o) = pure o := by
+    simp [decObservationRaw, encObservation, fieldAt, pure_bind, reduceIte, decStr_encStr, decInt_encInt, decObsOutcome_encObsOutcome, decTtl_encTtl]
+  exact hred
 
 theorem decObservation_encObservation (o : Observation) (h : recordWfObservation o = true) :
     decObservation (encObservation o) = pure o := by
-  have hred : decObservation (encObservation o) =
-      (if recordWfObservation o then pure o else throw "observation not well-formed") := by
-    simp [decObservation, encObservation, fieldAt, pure_bind, reduceIte, decStr_encStr, decInt_encInt, decObsOutcome_encObsOutcome, decTtl_encTtl]
-  rw [hred, if_pos h]
+  rw [decObservation, decObservationRaw_encObservation o h]
+  show (if recordWfObservation o = true then pure o else throw "observation not well-formed") = pure o
+  rw [if_pos h]
 
 -- Claim: [claimRef, prop, scope]
 def encClaim (c : Claim) : Json :=
   .arr #[encClaimRef ⟨c.id, c.rev⟩, encProp c.prop, encScope c.scope]
 
-def decClaim : Json → Except String Claim
+def decClaimRaw : Json → Except String Claim
   | .arr a =>
     if a.size != 3 then throw "expected claim [ref, prop, scope]" else do
     let rj ← fieldAt a 0
@@ -479,22 +488,31 @@ def decClaim : Json → Except String Claim
     let r ← decClaimRef rj
     let p ← decProp pj
     let s ← decScope sj
-    let c : Claim := { id := r.id, rev := r.rev, prop := p, scope := s }
-    if recordWfClaim c then pure c else throw "claim not well-formed"
+    pure ({ id := r.id, rev := r.rev, prop := p, scope := s } : Claim)
   | _ => throw "expected claim [ref, prop, scope]"
+
+def decClaim (j : Json) : Except String Claim :=
+  match decClaimRaw j with
+  | .ok x => if recordWfClaim x then pure x else throw "claim not well-formed"
+  | .error e => throw e
+
+theorem decClaimRaw_encClaim (c : Claim) (h : recordWfClaim c = true) :
+    decClaimRaw (encClaim c) = pure c := by
+  have hred : decClaimRaw (encClaim c) = pure c := by
+    simp [decClaimRaw, encClaim, fieldAt, pure_bind, reduceIte, decClaimRef_encClaimRef, decProp_encProp, decScope_encScope]
+  exact hred
 
 theorem decClaim_encClaim (c : Claim) (h : recordWfClaim c = true) :
     decClaim (encClaim c) = pure c := by
-  have hred : decClaim (encClaim c) =
-      (if recordWfClaim c then pure c else throw "claim not well-formed") := by
-    simp [decClaim, encClaim, fieldAt, pure_bind, reduceIte, decClaimRef_encClaimRef, decProp_encProp, decScope_encScope]
-  rw [hred, if_pos h]
+  rw [decClaim, decClaimRaw_encClaim c h]
+  show (if recordWfClaim c = true then pure c else throw "claim not well-formed") = pure c
+  rw [if_pos h]
 
 -- Binding: [obsId, claimRef, role]
 def encBinding (b : Binding) : Json :=
   .arr #[encStr b.obs.val, encClaimRef b.ref, encSupportRole b.role]
 
-def decBinding : Json → Except String Binding
+def decBindingRaw : Json → Except String Binding
   | .arr a =>
     if a.size != 3 then throw "expected binding [obs, ref, role]" else do
     let oj ← fieldAt a 0
@@ -503,22 +521,31 @@ def decBinding : Json → Except String Binding
     let obs ← decStr oj
     let r ← decClaimRef rj
     let role ← decSupportRole rolej
-    let b : Binding := { obs := ⟨obs⟩, ref := r, role }
-    if recordWfBinding b then pure b else throw "binding not well-formed"
+    pure ({ obs := ⟨obs⟩, ref := r, role } : Binding)
   | _ => throw "expected binding [obs, ref, role]"
+
+def decBinding (j : Json) : Except String Binding :=
+  match decBindingRaw j with
+  | .ok x => if recordWfBinding x then pure x else throw "binding not well-formed"
+  | .error e => throw e
+
+theorem decBindingRaw_encBinding (b : Binding) (h : recordWfBinding b = true) :
+    decBindingRaw (encBinding b) = pure b := by
+  have hred : decBindingRaw (encBinding b) = pure b := by
+    simp [decBindingRaw, encBinding, fieldAt, pure_bind, reduceIte, decStr_encStr, decClaimRef_encClaimRef, decSupportRole_encSupportRole]
+  exact hred
 
 theorem decBinding_encBinding (b : Binding) (h : recordWfBinding b = true) :
     decBinding (encBinding b) = pure b := by
-  have hred : decBinding (encBinding b) =
-      (if recordWfBinding b then pure b else throw "binding not well-formed") := by
-    simp [decBinding, encBinding, fieldAt, pure_bind, reduceIte, decStr_encStr, decClaimRef_encClaimRef, decSupportRole_encSupportRole]
-  rw [hred, if_pos h]
+  rw [decBinding, decBindingRaw_encBinding b h]
+  show (if recordWfBinding b = true then pure b else throw "binding not well-formed") = pure b
+  rw [if_pos h]
 
 -- Correction: [kind, target, recordedAt]
 def encCorrection (c : Correction) : Json :=
   .arr #[encCorrectionKind c.kind, encClaimRef c.target, encInt c.recordedAt]
 
-def decCorrection : Json → Except String Correction
+def decCorrectionRaw : Json → Except String Correction
   | .arr a =>
     if a.size != 3 then throw "expected correction [kind, target, recordedAt]" else do
     let kj ← fieldAt a 0
@@ -527,16 +554,25 @@ def decCorrection : Json → Except String Correction
     let kind ← decCorrectionKind kj
     let target ← decClaimRef tj
     let recordedAt ← decInt aj
-    let c : Correction := { kind, target, recordedAt }
-    if recordWfCorrection c then pure c else throw "correction not well-formed"
+    pure ({ kind, target, recordedAt } : Correction)
   | _ => throw "expected correction [kind, target, recordedAt]"
+
+def decCorrection (j : Json) : Except String Correction :=
+  match decCorrectionRaw j with
+  | .ok x => if recordWfCorrection x then pure x else throw "correction not well-formed"
+  | .error e => throw e
+
+theorem decCorrectionRaw_encCorrection (c : Correction) (h : recordWfCorrection c = true) :
+    decCorrectionRaw (encCorrection c) = pure c := by
+  have hred : decCorrectionRaw (encCorrection c) = pure c := by
+    simp [decCorrectionRaw, encCorrection, fieldAt, pure_bind, reduceIte, decCorrectionKind_encCorrectionKind, decClaimRef_encClaimRef, decInt_encInt]
+  exact hred
 
 theorem decCorrection_encCorrection (c : Correction) (h : recordWfCorrection c = true) :
     decCorrection (encCorrection c) = pure c := by
-  have hred : decCorrection (encCorrection c) =
-      (if recordWfCorrection c then pure c else throw "correction not well-formed") := by
-    simp [decCorrection, encCorrection, fieldAt, pure_bind, reduceIte, decCorrectionKind_encCorrectionKind, decClaimRef_encClaimRef, decInt_encInt]
-  rw [hred, if_pos h]
+  rw [decCorrection, decCorrectionRaw_encCorrection c h]
+  show (if recordWfCorrection c = true then pure c else throw "correction not well-formed") = pure c
+  rw [if_pos h]
 
 -- Derivation:
 -- [id, rule, [groups], conclusionRef, conclusionProp, scope, [footprint],
@@ -548,7 +584,7 @@ def encDerivation (d : Derivation) : Json :=
          encList encDep d.footprint, encOpt (fun i => encStr i.val) d.evidence,
          encOpt encWitness d.witness]
 
-def decDerivation : Json → Except String Derivation
+def decDerivationRaw : Json → Except String Derivation
   | .arr a =>
     if a.size != 9 then throw "expected derivation" else do
     let idj ← fieldAt a 0
@@ -569,20 +605,26 @@ def decDerivation : Json → Except String Derivation
     let footprint ← decList decDep footj
     let evidence ← decOpt (fun j => (⟨·⟩) <$> decStr j) evidencej
     let witness ← decOpt decWitness witnessj
-    let d : Derivation :=
-      { id, rule, premiseGroups, conclusion, conclusionProp,
-        scope := s, footprint, evidence, witness }
-    if recordWfDerivation d then pure d else throw "derivation not well-formed"
+    pure (Derivation.mk id rule premiseGroups conclusion conclusionProp
+      s footprint evidence witness)
   | _ => throw "expected derivation"
+
+def decDerivation (j : Json) : Except String Derivation :=
+  match decDerivationRaw j with
+  | .ok x => if recordWfDerivation x then pure x else throw "derivation not well-formed"
+  | .error e => throw e
+
+theorem decDerivationRaw_encDerivation (d : Derivation) (h : recordWfDerivation d = true) :
+    decDerivationRaw (encDerivation d) = pure d := by
+  have hred : decDerivationRaw (encDerivation d) = pure d := by
+    simp [decDerivationRaw, encDerivation, fieldAt, pure_bind, reduceIte, decStr_encStr, decRuleId_encRuleId, decClaimRef_encClaimRef, decProp_encProp, decScope_encScope, decDep_encDep, decList_encList, decOpt_encOpt, decWitness_encWitness]
+  exact hred
 
 theorem decDerivation_encDerivation (d : Derivation) (h : recordWfDerivation d = true) :
     decDerivation (encDerivation d) = pure d := by
-  have hred : decDerivation (encDerivation d) =
-      (if recordWfDerivation d then pure d else throw "derivation not well-formed") := by
-    simp [decDerivation, encDerivation, fieldAt, pure_bind, reduceIte, decStr_encStr, decRuleId_encRuleId, decClaimRef_encClaimRef,
-      decProp_encProp, decScope_encScope, decDep_encDep, decList_encList,
-      decOpt_encOpt, decWitness_encWitness]
-  rw [hred, if_pos h]
+  rw [decDerivation, decDerivationRaw_encDerivation d h]
+  show (if recordWfDerivation d = true then pure d else throw "derivation not well-formed") = pure d
+  rw [if_pos h]
 
 /-! ## KB codec. -/
 

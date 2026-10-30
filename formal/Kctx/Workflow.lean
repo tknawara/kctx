@@ -206,11 +206,9 @@ def commitOp (kb : KB) (journal : List JournalEntry) (op : Op) : KB × CommitOut
       else (kb, .inputConflict)
   | none =>
     if kb.head != op.expectedHead then (kb, .predecessorConflict)
-    else
-      let kb' := applyChanges kb op.changes
-      if kb'.wellFormed then
-        ({ kb' with head := op.id }, .committed)
-      else (kb, .rejectedInvalid)
+    else if (applyChanges kb op.changes).wellFormed then
+      ({ (applyChanges kb op.changes) with head := op.id }, .committed)
+    else (kb, .rejectedInvalid)
 
 def journalAfter (journal : List JournalEntry) (kb : KB) (op : Op) : List JournalEntry :=
   match journal.find? (fun e => e.id == op.id) with

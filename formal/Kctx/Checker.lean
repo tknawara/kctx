@@ -88,24 +88,20 @@ def Derivation.consultedIds (d : Derivation) : List String :=
       | some i => [i.val]
       | none => [])
 
-/-- Executable derivation check over a read view. -/
+/-- v1 atom set for conjunction introduction: every premise must be an
+atomic content claim; the conclusion conjoins those atoms in premise order. -/
+def andIntroAtoms (v : KbView) (g : List ClaimRef) : List Atom :=
+  g.map (fun r => ((v.propOf r).asAtom).getD default)
 
 def checkAndIntro (v : KbView) (d : Derivation) : Verdict :=
   match d.premiseGroups with
   | [g] =>
     if g.isEmpty then .rejected .ruleShapeMismatch
+    else if !(g.all (fun r => (v.propOf r).asAtom.isSome)) then .rejected .ruleShapeMismatch
     else if !(g.all (fun r => v.scopeOf r == some d.scope)) then .rejected .ruleShapeMismatch
-    else
-      let atoms := g.flatMap (fun r =>
-        match v.findClaim r with
-        | some c => match c.prop.asAtom with
-          | some a => [a]
-          | none => []
-        | none => [])
-      if g.length != atoms.length then .rejected .ruleShapeMismatch
-      else if d.conclusionProp != .conj atoms then .rejected .ruleShapeMismatch
-      else if !footprintDeclares v d then .rejected .footprintIncomplete
-      else .accepted
+    else if d.conclusionProp != .conj (andIntroAtoms v g) then .rejected .ruleShapeMismatch
+    else if !footprintDeclares v d then .rejected .footprintIncomplete
+    else .accepted
   | _ => .rejected .ruleShapeMismatch
 
 def checkSpecialize (v : KbView) (d : Derivation) : Verdict :=
@@ -129,10 +125,10 @@ def checkObsSupports (v : KbView) (ctx : EvalCtx) (d : Derivation) : Verdict :=
       match v.findObs i with
       | none => .rejected .missingPremise
       | some o =>
-        if d.conclusionProp.asAtom.isNone then .rejected .ruleShapeMismatch
+        if !(v.scopeOf d.conclusion == some d.scope) then .rejected .ruleShapeMismatch
+        else if d.conclusionProp.asAtom.isNone then .rejected .ruleShapeMismatch
         else if o.outcome != .ok then .rejected .evidenceNotOk
-        else if !(v.bindings.any (fun b =>
-            b.obs == i && b.ref == d.conclusion && b.role == .supports))
+        else if !v.bindings.contains (Binding.mk i d.conclusion .supports)
           then .rejected .evidenceNotOk
         else if assessFresh o.ttl o.observedAt ctx.now != .fresh
           then .rejected .evidenceNotFresh

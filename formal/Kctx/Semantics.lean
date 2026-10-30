@@ -1,5 +1,6 @@
 import Kctx.Model
 import Kctx.Time
+import Kctx.Checker
 
 set_option autoImplicit false
 
@@ -39,20 +40,14 @@ structural facts its rule requires; truth-transfer premises (`ip.holds ...`)
 appear only where the rule genuinely concludes interpreted content. -/
 
 inductive Derives (ip : Interp) (v : KbView) (ctx : EvalCtx) : Derivation → Prop
-  | andIntro (d : Derivation) (g : List ClaimRef) (atoms : List Atom)
+  | andIntro (d : Derivation) (g : List ClaimRef)
       (hr : d.rule = RuleId.andIntro)
       (hg : d.premiseGroups = [g])
       (hatoms : ∀ r ∈ g, ∃ a : Atom, v.propOf r = .atom a)
-      (hconj : d.conclusionProp = .conj (g.flatMap (fun r =>
-         match (v.propOf r).asAtom with
-         | some a => [a]
-         | none => [])))
+      (hconj : d.conclusionProp = .conj (andIntroAtoms v g))
       (hscope : ∀ r ∈ g, v.scopeOf r = some d.scope)
       (hne : 0 < g.length)
-      (hprem : ∀ a ∈ g.flatMap (fun r =>
-         match (v.propOf r).asAtom with
-         | some a => [a]
-         | none => []), ip.holds (.atom a) d.scope) :
+      (hprem : ∀ a ∈ andIntroAtoms v g, ip.holds (.atom a) d.scope) :
       Derives ip v ctx d
   | specialize (d : Derivation) (r : ClaimRef) (src tgt : Claim)
       (hr : d.rule = RuleId.specialize)

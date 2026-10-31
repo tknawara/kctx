@@ -13,7 +13,7 @@ repository on the revision recorded below.
 | G01 Toolchains | **partial** | Lean pinned `leanprover/lean4:v4.21.0` via elan + `formal/lean-toolchain`; `formal/scripts/proof_check.sh` runs clean from checkout (build + axiom audit + report + reference smoke). Python dev tooling (Ruff/Pyright via `uv`) and the pinned Docker image build are *not yet wired* — no network-pullable base image was available in this environment; `formal/Dockerfile` + `compose.yaml` are written but unbuilt. |
 | G02 Types | **partial** | `src/kctx/semantics` introduces nominal identity (`Ident` with `IdKind`), `ClaimRef`, tagged-union `ClaimProp`, frozen dataclasses, explicit rejection unions; negative fixtures reject id mix indirectly via wire decoding. The *existing* CLI modules are not yet routed through these types (staged per handover §16 M2). |
 | G03 Language | **pass** | Vocabulary, scope/time/coverage contracts and positive/negative examples reviewed alongside this implementation (Lean model + `formal/theorems.json` assumptions fields). |
-| G04 Proofs | **partial (20/22)** | T01–T06, T08–T14, T16–T22 proved; axiom audit clean (propext/Classical.choice/Quot.sound only); non-vacuity examples kernel-decided. **T07/T15 (footprint locality + historical extension) are specified but open** — recorded in `formal/theorems.json` and `formal/proof-report.json`. |
+| G04 Proofs | **pass (22/22)** | T01–T22 all discharged, including T07 (`Kctx.T07_checkDerivationV_agree` + `_ext` in `formal/Kctx/Locality.lean`) and T15 (`Kctx.T15_supported_ext`). Axiom audit clean (propext/Classical.choice/Quot.sound only; `formal/proof-report.json`, `open_obligations: []`); non-vacuity examples kernel-decided. |
 | G05 Correspondence | **pass** | `scripts/conformance_check.py`: 35 reviewed cases, Lean reference evaluator vs actual Python `kctx.semantics` functions, **0 mismatches** (`conformance-report.json`). |
 | G06 Workflows | **partial** | Pure `plan_transition`/`can_conclude` implemented in both sides with one readiness predicate (bypass fixed) and covered by conformance + 25 unit tests; existing `proposals.py`/`investigations.py` CLI paths not yet routed through them. |
 | G07 Compatibility | **partial** | Existing 266-test suite still green (291 total with semantics tests, 30 skips = absent graph deps). Frozen compatibility fixtures for legacy Markdown/citations not yet extracted (needs work-KB corpus). |
@@ -41,9 +41,7 @@ cd formal && ./scripts/proof_check.sh         # writes formal/proof-report.json
 
 ## Open obligations and blockers
 
-1. **T07/T15 proofs** (footprint locality; historical extension). Specified in
-   `formal/theorems.json`; proof work remains.
-2. **G01 Docker image** — needs a network-reachable base image pull
+1. **G01 Docker image** — needs a network-reachable base image pull
    (unavailable in this environment); files are in place.
 3. **G10/G11 corpora and Dolt** — require the work environment (real KB,
    `cite` provider, Dolt, bbgithub). None can be qualified from this machine,

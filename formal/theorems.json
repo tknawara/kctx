@@ -2,163 +2,218 @@
   "schema_version": 1,
   "semantic_version": "1.0.0",
   "lean_toolchain": "leanprover/lean4:v4.21.0",
-  "note": "T07/T15 (footprint locality and its historical-extension corollary) are specified but not yet discharged; tracked as the only open obligations. T11 is discharged by Kctx.assessFresh_stale_mono in Kctx/Time.lean.",
   "theorems": {
     "T01": {
-      "theorem": ["Kctx.T01_observation", "Kctx.T01_claim", "Kctx.T01_binding", "Kctx.T01_correction", "Kctx.T01_derivation"],
+      "theorem": [
+        "Kctx.T01_observation",
+        "Kctx.T01_claim",
+        "Kctx.T01_binding",
+        "Kctx.T01_correction",
+        "Kctx.T01_derivation"
+      ],
       "meaning": "Decoding/admission success produces a well-formed internal value.",
       "assumptions": "Input is the positional-array JSON wire format; the decoders run recordWf* before returning.",
       "executable": "Kctx.decObservation / decClaim / decBinding / decCorrection / decDerivation",
       "fixtures": "tests/conformance/*"
     },
     "T02": {
-      "theorem": ["Kctx.T02_observation", "Kctx.T02_claim", "Kctx.T02_binding", "Kctx.T02_correction", "Kctx.T02_derivation", "Kctx.T02_evalCtx"],
+      "theorem": [
+        "Kctx.T02_observation",
+        "Kctx.T02_claim",
+        "Kctx.T02_binding",
+        "Kctx.T02_correction",
+        "Kctx.T02_derivation",
+        "Kctx.T02_evalCtx"
+      ],
       "meaning": "Encoding and decoding valid protocol values preserves their semantic value.",
       "assumptions": "Canonical positional arrays; recordWf* holds on the value.",
       "executable": "Kctx.encObservation / decObservation (etc.)",
       "fixtures": "tests/conformance/*"
     },
     "T03": {
-      "theorem": ["Kctx.T03_commit_wf"],
+      "theorem": [
+        "Kctx.T03_commit_wf"
+      ],
       "meaning": "Successful core operations preserve well-formed admitted state.",
       "assumptions": "Modeled state; drafts are not required (they never reach commit).",
       "executable": "Kctx.commitOp",
       "fixtures": "tests/conformance/commit_cases.jsonl"
     },
     "T04": {
-      "theorem": ["Kctx.T04_checker_sound"],
+      "theorem": [
+        "Kctx.T04_checker_sound"
+      ],
       "meaning": "Derivation checker acceptance implies the declarative derivability judgment, for every interpretation.",
       "assumptions": "PremisesHold supplies premise truth under the interpretation (the checker verifies structure only). Universal over well-formed views and acyclic witnesses.",
       "executable": "Kctx.checkDerivationV",
       "fixtures": "tests/conformance/derivation_cases.jsonl"
     },
     "T05": {
-      "theorem": ["Kctx.T05_derives_sound"],
+      "theorem": [
+        "Kctx.T05_derives_sound"
+      ],
       "meaning": "Every enabled rule preserves its declared proposition semantics.",
       "assumptions": "Each constructor discharged separately (andIntro/specialize/obsSupports/allChecked); no global soundness axiom.",
       "executable": "Kctx.Derives",
       "fixtures": "tests/conformance/derivation_cases.jsonl"
     },
     "T06": {
-      "theorem": ["Kctx.T06_reusable_iff"],
+      "theorem": [
+        "Kctx.T06_reusable_iff"
+      ],
       "meaning": "Matching the complete declared footprint preserves the reusable judgment under the stated context/time premises.",
       "assumptions": "Footprint entries matched exactly (contains); check accepted.",
       "executable": "Kctx.Reusable",
       "fixtures": "tests/conformance/reuse_cases.jsonl"
     },
     "T07": {
-      "theorem": [],
-      "status": "open",
+      "theorem": [
+        "Kctx.T07_checkDerivationV_agree",
+        "Kctx.T07_checkDerivationV_ext"
+      ],
       "meaning": "Changes outside the declared footprint cannot change the relevant evaluation.",
-      "assumptions": "Locality premise must be justified by the footprint construction (consultedIds).",
+      "assumptions": "Agreement form: views identical on the checker's observables (claim/observation lookups restricted to consultedIds, the evidence-binding test, the correction guards) give identical verdicts. Extension form: appending claims/observations/corrections with identities outside consultedIds preserves the verdict. The locality premise is justified by the footprint construction (consultedIds_* lemmas: the checker queries only premise/conclusion/evidence/footprint identities). Bindings are not extended: new bindings are acquisition, not noise.",
       "executable": "Kctx.checkDerivationV",
-      "fixtures": "-"
+      "fixtures": "tests/conformance/derivation_cases.jsonl"
     },
     "T08": {
-      "theorem": ["Kctx.T08_missing_dep_not_reusable"],
+      "theorem": [
+        "Kctx.T08_missing_dep_not_reusable"
+      ],
       "meaning": "Every required mismatching or missing dependency prevents a fresh assessment for that derivation.",
       "assumptions": "Independent alternatives unaffected (see T09).",
       "executable": "Kctx.Reusable",
       "fixtures": "tests/conformance/reuse_cases.jsonl"
     },
     "T09": {
-      "theorem": ["Kctx.T09_alternative_survives"],
+      "theorem": [
+        "Kctx.T09_alternative_survives"
+      ],
       "meaning": "A surviving accepted alternative derivation preserves positive support.",
       "assumptions": "Policy blockers such as contestation remain separate (UsableFor).",
       "executable": "Kctx.Supported",
       "fixtures": "tests/conformance/support_cases.jsonl"
     },
     "T10": {
-      "theorem": ["Kctx.T10_all_support_removed"],
+      "theorem": [
+        "Kctx.T10_all_support_removed"
+      ],
       "meaning": "Invalidating every supporting derivation removes the support judgment; no negation transfer.",
       "assumptions": "Does not establish the negated proposition (NonVacuity example).",
       "executable": "Kctx.Supported",
       "fixtures": "tests/conformance/support_cases.jsonl"
     },
     "T11": {
-      "theorem": ["Kctx.assessFresh_stale_mono"],
+      "theorem": [
+        "Kctx.assessFresh_stale_mono"
+      ],
       "meaning": "With fixed inputs and no new validation, increasing evaluation time cannot restore expired recency.",
       "assumptions": "Integer epoch seconds; inclusive TTL boundary; future timestamps are unknown, never fresh (assessFresh_future_not_fresh).",
       "executable": "Kctx.assessFresh",
       "fixtures": "tests/conformance/freshness_cases.jsonl"
     },
     "T12": {
-      "theorem": ["Kctx.T12_footprint_declared", "Kctx.T12_copy_keeps_freshness"],
+      "theorem": [
+        "Kctx.T12_footprint_declared",
+        "Kctx.T12_copy_keeps_freshness"
+      ],
       "meaning": "Composition/copying cannot widen scope, renew evidence age, or drop dependencies.",
       "assumptions": "The checker requires every consulted identity to be declared in the footprint; copying preserves observedAt/ttl exactly.",
       "executable": "Kctx.footprintDeclares",
       "fixtures": "tests/conformance/reuse_cases.jsonl"
     },
     "T13": {
-      "theorem": ["Kctx.T13_witness_required"],
+      "theorem": [
+        "Kctx.T13_witness_required"
+      ],
       "meaning": "Missing coverage cannot justify universal coverage or absence.",
       "assumptions": "Typed completeness witness mandatory for allChecked.",
       "executable": "Kctx.checkAllChecked",
       "fixtures": "tests/conformance/derivation_cases.jsonl"
     },
     "T14": {
-      "theorem": ["Kctx.T14_derives_only_enabled"],
+      "theorem": [
+        "Kctx.T14_derives_only_enabled"
+      ],
       "meaning": "No reverse inference or relation composition is accepted without an enabled typed rule.",
       "assumptions": "Countermodels in NonVacuity (contextualizes does not create support).",
       "executable": "Kctx.Derives",
       "fixtures": "formal/Kctx/Theorems2.lean (NonVacuity)"
     },
     "T15": {
-      "theorem": [],
-      "status": "open",
+      "theorem": [
+        "Kctx.T15_supported_ext"
+      ],
       "meaning": "Historical resolution and evaluation are unchanged by extensions outside the pinned historical context.",
-      "assumptions": "Follows from T07 locality over pinned snapshots.",
-      "executable": "Kctx.checkDerivationV",
-      "fixtures": "-"
+      "assumptions": "The derivation list is pinned (the historical context); additions whose identities lie outside supportFootprint (the union of the consulted footprints of the derivations concluding r) neither create nor destroy support. New derivations may add support: they are new history.",
+      "executable": "Kctx.Supported",
+      "fixtures": "tests/conformance/support_cases.jsonl"
     },
     "T16": {
-      "theorem": ["Kctx.T16_add_correction_no_new_support"],
+      "theorem": [
+        "Kctx.T16_add_correction_no_new_support"
+      ],
       "meaning": "A supersession/correction edge alone cannot confer support or validation on its target.",
       "assumptions": "Corrections only gate (monotone removal lemma checkDerivationV_drop_correction).",
       "executable": "Kctx.Supported",
       "fixtures": "formal/Kctx/Theorems2.lean (NonVacuity)"
     },
     "T17": {
-      "theorem": ["Kctx.T17_usable_conditions"],
+      "theorem": [
+        "Kctx.T17_usable_conditions"
+      ],
       "meaning": "UsableFor success entails every mandatory condition of the selected policy.",
       "assumptions": "Explicit policy fields (requireFreshEvidence/requireValidated/requireUncontested).",
       "executable": "Kctx.UsableFor",
       "fixtures": "tests/conformance/support_cases.jsonl"
     },
     "T18": {
-      "theorem": ["Kctx.T18_transition_conditions"],
+      "theorem": [
+        "Kctx.T18_transition_conditions"
+      ],
       "meaning": "An accepted proposal transition satisfies its readiness, actor, evidence, and gate preconditions.",
       "assumptions": "One readiness predicate for both filing paths; actor required for decided statuses.",
       "executable": "Kctx.planTransition",
       "fixtures": "tests/conformance/transition_cases.jsonl"
     },
     "T19": {
-      "theorem": ["Kctx.T19_conclude_conditions"],
+      "theorem": [
+        "Kctx.T19_conclude_conditions"
+      ],
       "meaning": "Investigation conclusion satisfies its structural and hypothesis requirements.",
       "assumptions": "Malformed hypothesis bullets block conclusion (never invisible).",
       "executable": "Kctx.canConclude",
       "fixtures": "tests/conformance/conclude_cases.jsonl"
     },
     "T20": {
-      "theorem": ["Kctx.T20_predecessor_conflict"],
+      "theorem": [
+        "Kctx.T20_predecessor_conflict"
+      ],
       "meaning": "Conditional application of a plan requires its expected predecessor; rejection leaves modeled state unchanged.",
       "assumptions": "Modeled state; real storage refinement needs integration tests.",
       "executable": "Kctx.commitOp",
       "fixtures": "tests/conformance/commit_cases.jsonl"
     },
     "T21": {
-      "theorem": ["Kctx.T21_replay_same", "Kctx.T21_replay_conflict"],
+      "theorem": [
+        "Kctx.T21_replay_same",
+        "Kctx.T21_replay_conflict"
+      ],
       "meaning": "Replay of an already-applied operation id with the same input is idempotent; different input conflicts.",
       "assumptions": "Journal consulted first; all modeled operations support retries.",
       "executable": "Kctx.commitOp",
       "fixtures": "tests/conformance/commit_cases.jsonl"
     },
     "T22": {
-      "theorem": ["Kctx.T22_deterministic", "Kctx.T22_commit_deterministic"],
+      "theorem": [
+        "Kctx.T22_deterministic",
+        "Kctx.T22_commit_deterministic"
+      ],
       "meaning": "Evaluation is deterministic for the same explicit inputs and semantic version.",
       "assumptions": "Purity by construction: no clock/random/IO in the core.",
       "executable": "Kctx.checkDerivationV / Kctx.commitOp",
       "fixtures": "whole conformance run (same inputs -> same outputs)"
     }
-  }
+  },
+  "note": "All 22 obligations discharged. Axiom audit allowlist: propext, Classical.choice, Quot.sound."
 }

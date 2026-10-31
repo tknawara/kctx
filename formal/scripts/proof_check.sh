@@ -25,7 +25,8 @@ AUDIT_FILE=$(mktemp /tmp/kctx-audit.XXXXXX.lean)
     T12_footprint_declared T12_copy_keeps_freshness T13_witness_required \
     T14_derives_only_enabled T16_add_correction_no_new_support T17_usable_conditions \
     T18_transition_conditions T19_conclude_conditions T20_predecessor_conflict \
-    T21_replay_same T21_replay_conflict T22_deterministic T22_commit_deterministic; do
+    T21_replay_same T21_replay_conflict T22_deterministic T22_commit_deterministic \
+    T07_checkDerivationV_agree T07_checkDerivationV_ext T15_supported_ext; do
     echo "#print axioms Kctx.$t"
   done
 } > "$AUDIT_FILE"
@@ -53,6 +54,7 @@ for m in re.finditer(r"'([^']+)'\s+does not depend on any axioms", log):
 missing = [
     "Kctx.T04_checker_sound", "Kctx.T05_derives_sound", "Kctx.T18_transition_conditions",
     "Kctx.T21_replay_same", "Kctx.T22_deterministic",
+    "Kctx.T07_checkDerivationV_agree", "Kctx.T15_supported_ext",
 ]
 for name in missing:
     if name not in entries:
@@ -68,7 +70,7 @@ report = {
     "build": "ok",
     "semantic_version": "1.0.0",
     "audit": entries,
-    "open_obligations": ["T07", "T15"],
+    "open_obligations": [],
     "result": "pass" if ok else "fail",
 }
 with open("proof-report.json", "w") as f:

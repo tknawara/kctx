@@ -8,6 +8,7 @@ import Kctx.Workflow
 import Kctx.Codec
 import Kctx.Theorems
 import Kctx.Theorems2
+import Kctx.Locality
 
 /-! # kctx knowledge calculus — root
 

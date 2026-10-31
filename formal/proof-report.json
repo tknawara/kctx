@@ -1,5 +1,5 @@
 {
-  "generated": "2026-10-31T00:06:16.593287+00:00",
+  "generated": "2026-10-31T00:30:59.513532+00:00",
   "toolchain": "Lean (version 4.21.0, x86_64-unknown-linux-gnu, commit 6741444a63ee, Release)",
   "build": "ok",
   "semantic_version": "1.0.0",
@@ -93,6 +93,18 @@
     "Kctx.T21_replay_conflict": [
       "propext"
     ],
+    "Kctx.T07_checkDerivationV_agree": [
+      "propext",
+      "Quot.sound"
+    ],
+    "Kctx.T07_checkDerivationV_ext": [
+      "propext",
+      "Quot.sound"
+    ],
+    "Kctx.T15_supported_ext": [
+      "propext",
+      "Quot.sound"
+    ],
     "Kctx.T01_observation": [],
     "Kctx.T01_claim": [],
     "Kctx.T01_binding": [],
@@ -104,9 +116,6 @@
     "Kctx.T22_deterministic": [],
     "Kctx.T22_commit_deterministic": []
   },
-  "open_obligations": [
-    "T07",
-    "T15"
-  ],
+  "open_obligations": [],
   "result": "pass"
 }

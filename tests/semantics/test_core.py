@@ -339,5 +339,71 @@ class WireTests(unittest.TestCase):
         self.assertEqual(SEMANTIC_VERSION, "1.0.0")
 
 
+class LocalityTests(unittest.TestCase):
+    """T07/T15 mirror: unrelated records cannot change a verdict; historical
+    support is stable under unrelated additions."""
+
+    def test_t07_unrelated_claim_and_observation_do_not_change_verdict(self):
+        from kctx.semantics import KbView, Observation, Claim
+
+        kb, deriv, ref, scope, prop = demo_parts()
+        ctx = EvalCtx(now=120, require_validated=False)
+        v = kb.view()
+        v2 = KbView(
+            observations=v.observations + (
+                Observation("other-obs", ObsOutcome.DENIED, 999, Ttl("noExpiry"), "x", "y"),
+            ),
+            claims=v.claims + (
+                Claim("other-claim", "r1", prop, scope),
+            ),
+            bindings=v.bindings,
+            corrections=v.corrections,
+            derivations=v.derivations,
+            validations=v.validations,
+        )
+        self.assertEqual(
+            check_derivation_v(v2, ctx, deriv), check_derivation_v(v, ctx, deriv)
+        )
+        self.assertEqual(check_derivation_v(v2, ctx, deriv), "accepted")
+
+    def test_t07_unrelated_correction_does_not_change_verdict(self):
+        from kctx.semantics import KbView
+
+        kb, deriv, _, _, _ = demo_parts()
+        ctx = EvalCtx(now=120, require_validated=False)
+        v = kb.view()
+        v2 = KbView(
+            observations=v.observations,
+            claims=v.claims,
+            bindings=v.bindings,
+            corrections=v.corrections
+            + (Correction(CorrectionKind.DISPUTE, ClaimRef("other", "r9"), 300),),
+            derivations=v.derivations,
+            validations=v.validations,
+        )
+        self.assertEqual(
+            check_derivation_v(v2, ctx, deriv), check_derivation_v(v, ctx, deriv)
+        )
+
+    def test_t15_supported_stable_under_unrelated_additions(self):
+        from kctx.semantics import KbView, Observation, Claim
+
+        kb, deriv, ref, scope, prop = demo_parts()
+        ctx = EvalCtx(now=120, require_validated=False)
+        v = kb.view()
+        v2 = KbView(
+            observations=v.observations
+            + (Observation("other-obs", ObsOutcome.DENIED, 999, Ttl("noExpiry"), "x", "y"),),
+            claims=v.claims + (Claim("other-claim", "r1", prop, scope),),
+            bindings=v.bindings,
+            corrections=v.corrections
+            + (Correction(CorrectionKind.SUPERSEDE, ClaimRef("other", "r9"), 300),),
+            derivations=v.derivations,  # pinned historical context
+            validations=v.validations,
+        )
+        self.assertEqual(supported(v2, ctx, ref), supported(v, ctx, ref))
+        self.assertTrue(supported(v2, ctx, ref))
+
+
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()

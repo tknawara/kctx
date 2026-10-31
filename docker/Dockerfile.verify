@@ -15,8 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # clang links the reference evaluator).
 ENV ELAN_HOME=/opt/elan
 RUN curl -sSfL https://elan.lean-lang.org/elan-init.sh | sh -s -- -y \
-      --default-toolchain leanprover/lean4:v4.21.0 --no-modify-path \
-      --prefix /opt/elan && \
+      --default-toolchain leanprover/lean4:v4.21.0 --no-modify-path && \
     /opt/elan/bin/lean --version
 
 # Graph-package deps, pinned exactly as pyproject.toml pins them.
@@ -26,10 +25,11 @@ RUN pip install --no-cache-dir --break-system-packages \
 # Dolt CLI, pinned. Not a database or a backing repo — the tool only; the
 # KB's data stays the user's. Integration tests build throwaway databases
 # under per-test temp dirs.
-RUN curl -sSfL -o /tmp/dolt.zip \
-      "https://github.com/dolthub/dolt/releases/download/${DOLT_VERSION}/dolt-linux-amd64.zip" && \
-    unzip -j /tmp/dolt.zip -d /usr/local/bin "dolt-linux-amd64/bin/dolt" && \
-    chmod +x /usr/local/bin/dolt && rm /tmp/dolt.zip && \
+RUN curl -sSfL -o /tmp/dolt.tgz \
+      "https://github.com/dolthub/dolt/releases/download/${DOLT_VERSION}/dolt-linux-amd64.tar.gz" && \
+    tar -xzf /tmp/dolt.tgz -C /tmp && \
+    mv /tmp/dolt-linux-amd64/bin/dolt /usr/local/bin/dolt && \
+    chmod +x /usr/local/bin/dolt && rm -rf /tmp/dolt.tgz /tmp/dolt-linux-amd64 && \
     dolt version && \
     git config --system user.email kctx-verify@example.invalid && \
     git config --system user.name "kctx verify"

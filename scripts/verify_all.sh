@@ -17,7 +17,10 @@ python3 scripts/check_contracts.py
 echo "=== [3/4] lean proofs + axiom audit ==="
 (cd formal && ./scripts/proof_check.sh)
 
-echo "=== [4/4] lean<->python conformance ==="
+echo "=== [4/5] lean<->python conformance ==="
 python3 scripts/conformance_check.py
+
+echo "=== [5/5] dolt shadow-graph integration (real dolt CLI; stub citation parser) ==="
+python3 scripts/dolt_smoke.py
 
 echo "VERIFY_ALL_OK"

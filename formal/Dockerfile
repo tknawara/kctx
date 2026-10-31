@@ -10,8 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # elan with exactly the pinned toolchain (leanprover/lean4:v4.21.0).
 ENV ELAN_HOME=/opt/elan
 RUN curl -sSfL https://elan.lean-lang.org/elan-init.sh | sh -s -- -y \
-      --default-toolchain leanprover/lean4:v4.21.0 --no-modify-path \
-      --prefix /opt/elan && \
+      --default-toolchain leanprover/lean4:v4.21.0 --no-modify-path && \
     /opt/elan/bin/lean --version
 
 ENV PATH="/opt/elan/bin:${PATH}"

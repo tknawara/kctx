@@ -39,9 +39,11 @@ from kctx.graph.observability import get_logger, run_logged, span
 
 
 def graph_dir() -> Path:
-    override = os.environ.get("KCTX_GRAPH_DIR")
-    if override:
-        return Path(override)
+    from kctx.config import Config
+
+    cfg = Config.load()
+    if cfg.graph_dir is not None:
+        return cfg.graph_dir
     if Path("/workarea").is_dir():
         return Path("/workarea/kb-graph")
     return Path.home() / ".local" / "share" / "kb-graph"

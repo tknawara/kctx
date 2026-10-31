@@ -4,7 +4,7 @@
 Builds a throwaway KB with one asset + one durable code citation, runs the
 real `kctx graph sync` (which shells out to the real `dolt` CLI), and
 asserts nodes/edges landed in a real throwaway Dolt database. The citation
-parser is the container stub (KCTX_CITE_PY=docker/cite_stub.py) — this
+parser is the container stub (config cite_py=docker/cite_stub.py) — this
 verifies the *integration* (extractor -> sync -> dolt SQL round trip), not
 the real citation grammar (that needs the dotfiles skill; G13).
 """
@@ -27,9 +27,18 @@ def main() -> int:
         print("SKIP: container cite stub missing (host run)")
         return 3
     kb = Path(tempfile.mkdtemp())
-    os.environ["KCTX_ROOT"] = str(kb)
-    os.environ["KCTX_CITE_PY"] = str(stub)
-    os.environ["KCTX_GRAPH_DIR"] = str(kb / "graphdir")
+    # one config file instead of three env vars (docs/kctx/config.md)
+    sys.path.insert(0, str(ROOT / "src"))
+    from kctx.config import write_config
+
+    os.environ["KCTX_CONFIG"] = str(
+        write_config(
+            kb / "config.toml",
+            root=str(kb),
+            cite_py=str(stub),
+            graph_dir=str(kb / "graphdir"),
+        )
+    )
     (kb / "inventory" / "assets").mkdir(parents=True)
     (kb / "inventory" / "assets" / "a1.json").write_text(
         '{"id":"a1","kind":"service","name":"S","locator":"x","owner":"o",'

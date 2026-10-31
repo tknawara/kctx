@@ -17,6 +17,8 @@ corrections ordering, cursor semantics, gate binding — all landed earlier).
 | domain targets | `src/kctx/domain/targets.py` | `uses`-target spellings parsed once into a closed sum; fixtures pin the six variants and widening rules. (nav.py wiring is queued below — the parse module + tests land first.) |
 | graph package | `graph/` → `src/kctx/graph/` | Self-bootstrapping under both import styles; all imports fixed (cli, kctx.py, 7 test files). |
 | observability seam | `src/kctx/observability.py` | Entry-point logging no longer couples every invocation to the graph package (§7.2); graph owns the structlog impl behind the seam during the port. |
+| config layer | `src/kctx/config.py` | One `config.toml`, no layering (`docs/kctx/config.md`). Wired: root/cite_bin/cite_py/graph_dir/log_dir. All legacy env vars (KCTX_ROOT, CITE_BIN, KCTX_CITE_PY, KCTX_GRAPH_DIR, KCTX_LOG_DIR) removed from production modules; `KCTX_CONFIG` is the single remaining knob. 13 fixtures. |
+| frontmatter codec | `src/kctx/codecs/frontmatter.py` | Shared parser with duplicate-key diagnostics; `storage.py` delegates. |
 | entry | `kctx.py` | Puts `src` on sys.path; logging via the seam; `-v` consumed at the boundary. |
 
 ## Queue (dependency order)

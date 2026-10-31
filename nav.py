@@ -83,10 +83,10 @@ def project_dirs(root: Path) -> List[Path]:
 
 
 def locate_cite_bin() -> Optional[str]:
-    candidates = []
-    env = os.environ.get("CITE_BIN")
-    if env:
-        candidates.append(env)
+    from kctx.config import Config
+
+    cfg = Config.load()
+    candidates = [str(cfg.cite_bin)] if cfg.cite_bin is not None else []
     config_dir = os.environ.get("CLAUDE_CONFIG_DIR")
     if config_dir:
         candidates.append(str(Path(config_dir) / "skills" / "grounding" / "cite"))
@@ -688,7 +688,7 @@ def resolve_ev_path(root: Path, home: str, stem: str) -> Optional[Path]:
 def _tracked_files(root: Path) -> List[Path]:
     """Every file `git ls-files` reports, so untracked scratch/build junk
     isn't scanned. Falls back to a plain filesystem walk when `root` isn't a
-    git repo at all (a test fixture's throwaway KCTX_ROOT)."""
+    git repo at all (a test fixture's throwaway config root)."""
     if (root / ".git").exists():
         try:
             proc = subprocess.run(

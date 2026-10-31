@@ -19,7 +19,7 @@ TTL encoding in the twin: `ttl_kind` — 0 = expireAfter(secs),
 1 = noExpiry, 2 = missing. Result: 0 = fresh · 1 = stale · 2 = unknown.
 """
 
-from nagini.contracts import *
+from nagini_contracts.contracts import *
 
 
 def assess_fresh_tagged(
@@ -35,31 +35,22 @@ def assess_fresh_tagged(
     - stale arises only from expire-after past its window.
     """
     Requires(0 <= ttl_kind and ttl_kind <= 2)
-    Requires(ttl_kind == 0 implies ttl_secs >= 0)
+    Requires(Implies(ttl_kind == 0, ttl_secs >= 0))
     Ensures(Result() == 0 or Result() == 1 or Result() == 2)
     # future observation -> unknown
-    Ensures(now < observed_at implies Result() == 2)
+    Ensures(Implies(now < observed_at, Result() == 2))
     # missing policy -> unknown
-    Ensures(ttl_kind == 2 implies Result() == 2)
+    Ensures(Implies(ttl_kind == 2, Result() == 2))
     # no-expiry, not-future -> fresh
-    Ensures(ttl_kind == 1 and observed_at <= now implies Result() == 0)
+    Ensures(Implies(ttl_kind == 1 and observed_at <= now, Result() == 0))
     # expire-after: inclusive window fresh
-    Ensures(
-        ttl_kind == 0
-        and observed_at <= now
-        and now <= observed_at + ttl_secs
-        implies Result() == 0
-    )
+    Ensures(Implies(ttl_kind == 0 and observed_at <= now and now <= observed_at + ttl_secs, Result() == 0))
     # expire-after: past the window stale
-    Ensures(
-        ttl_kind == 0
-        and now > observed_at + ttl_secs
-        implies Result() == 1
-    )
+    Ensures(Implies(ttl_kind == 0 and now > observed_at + ttl_secs, Result() == 1))
     # stale only from expire-after past its window
-    Ensures(Result() == 1 implies ttl_kind == 0 and now > observed_at + ttl_secs)
+    Ensures(Implies(Result() == 1, ttl_kind == 0 and now > observed_at + ttl_secs))
     # fresh implies a non-future observation
-    Ensures(Result() == 0 implies observed_at <= now)
+    Ensures(Implies(Result() == 0, observed_at <= now))
 
     if observed_at > now:
         return 2

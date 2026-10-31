@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 import sys
 
-from _base import KctxTestCase, no_cite_available
+from _base import KctxTestCase, no_cite_available, set_config, clear_config
 
 # after _base: it puts the repo root on sys.path, where the kctx.py entry
 # script would otherwise shadow the kctx package.
@@ -19,8 +19,9 @@ class LocateCitePyTest(KctxTestCase):
         super().setUp()
         self._saved = {
             k: __import__("os").environ.get(k)
-            for k in ("KCTX_CITE_PY", "CLAUDE_CONFIG_DIR")
+            for k in ("CLAUDE_CONFIG_DIR",)
         }
+        clear_config("cite_py")
         cite_loader.reset_cache()
 
     def tearDown(self):
@@ -34,25 +35,21 @@ class LocateCitePyTest(KctxTestCase):
         cite_loader.reset_cache()
         super().tearDown()
 
-    def test_env_override_points_at_a_file(self):
-        import os
-
+    def test_config_override_points_at_a_file(self):
         stub = self.root / "cite_stub.py"
         stub.write_text("MARKER = 'stub-cite'\n", encoding="utf-8")
-        os.environ["KCTX_CITE_PY"] = str(stub)
+        set_config(cite_py=str(stub))
         self.assertEqual(cite_loader.locate_cite_py(), stub)
 
-    def test_env_override_missing_file_raises(self):
-        import os
-
-        os.environ["KCTX_CITE_PY"] = str(self.root / "does-not-exist.py")
+    def test_config_override_missing_file_raises(self):
+        set_config(cite_py=str(self.root / "does-not-exist.py"))
         with self.assertRaises(KctxError):
             cite_loader.locate_cite_py()
 
     def test_claude_config_dir_candidate(self):
         import os
 
-        os.environ.pop("KCTX_CITE_PY", None)
+        clear_config("cite_py")
         config_dir = self.root / "_config"
         skill_dir = config_dir / "skills" / "grounding"
         skill_dir.mkdir(parents=True)
@@ -63,7 +60,7 @@ class LocateCitePyTest(KctxTestCase):
     def test_nothing_found_raises_not_found(self):
         import os
 
-        os.environ.pop("KCTX_CITE_PY", None)
+        clear_config("cite_py")
         os.environ.pop("CLAUDE_CONFIG_DIR", None)
         with no_cite_available():
             with self.assertRaises(KctxError) as cm:
@@ -75,7 +72,7 @@ class LocateCitePyTest(KctxTestCase):
 
         stub = self.root / "cite_stub2.py"
         stub.write_text("MARKER = 'loaded-once'\n", encoding="utf-8")
-        os.environ["KCTX_CITE_PY"] = str(stub)
+        set_config(cite_py=str(stub))
         mod1 = cite_loader.load_cite_module()
         self.assertEqual(mod1.MARKER, "loaded-once")
         stub.write_text("MARKER = 'changed'\n", encoding="utf-8")

@@ -11,14 +11,19 @@ import shutil
 import stat
 import subprocess
 import sys
+
 import tempfile
 import unittest
 from pathlib import Path
+
 from typing import Optional
 
 _KCTX_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _KCTX_DIR not in sys.path:
     sys.path.insert(0, _KCTX_DIR)
+# src must precede the repo root on sys.path: the root kctx.py entry script
+# otherwise shadows the kctx package (load-bearing order; see test files).
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 # The deployed ~/.claude/skills/grounding/cite is whatever a session last
 # redeployed and can lag the dotfiles checkout (e.g. missing `stale`/`--mark`
@@ -36,8 +41,8 @@ def dotfiles_cite_available() -> bool:
 
 @contextlib.contextmanager
 def use_dotfiles_cite():
-    saved = os.environ.get("CITE_BIN")
-    os.environ["CITE_BIN"] = str(DOTFILES_CITE_BIN)
+    saved = dict(_CFG_VALUES)
+    set_config(cite_bin=str(DOTFILES_CITE_BIN))
     try:
         yield
     finally:
@@ -53,10 +58,11 @@ def no_cite_available():
     so locate_cite_bin() genuinely finds nothing -- including the laptop's
     own dotfiles checkout, which would otherwise satisfy the last fallback
     and defeat the 'missing script' scenario this is meant to test."""
-    keys = ("CITE_BIN", "CLAUDE_CONFIG_DIR", "HOME")
+    keys = ("CLAUDE_CONFIG_DIR", "HOME")
     saved = {k: os.environ.get(k) for k in keys}
+    saved_cfg = dict(_CFG_VALUES)
     tmp_home = tempfile.mkdtemp()
-    os.environ.pop("CITE_BIN", None)
+    clear_config("cite_bin", "cite_py")
     os.environ.pop("CLAUDE_CONFIG_DIR", None)
     os.environ["HOME"] = tmp_home
     try:
@@ -67,22 +73,66 @@ def no_cite_available():
                 os.environ.pop(k, None)
             else:
                 os.environ[k] = v
+        clear_config()
+        _CFG_VALUES.update(saved_cfg)
+        set_config()
         shutil.rmtree(tmp_home, ignore_errors=True)
+
+
+# ---- config-file test seam (the one env knob: KCTX_CONFIG) ----------------
+# kctx reads tool locations from config.toml only (src/kctx/config.py);
+# tests point KCTX_CONFIG at a per-session file and rewrite it as needed.
+# State lives ON the kctx.config module instance: this file can be imported
+# twice (_base and tests._base), and two module-globals would split-brain
+# the config — one canonical home avoids that entirely.
+import kctx.config as _kc
+
+if not hasattr(_kc, "_TEST_CFG_VALUES"):
+    _kc._TEST_CFG_VALUES = {}  # type: ignore[attr-defined]
+    _kc._TEST_CFG_FILE = Path(tempfile.mkdtemp(prefix="kctx-test-cfg-")) / "config.toml"  # type: ignore[attr-defined]
+    _kc._TEST_CFG_SAVED_ENV = os.environ.get("KCTX_CONFIG")  # type: ignore[attr-defined]
+    os.environ["KCTX_CONFIG"] = str(_kc._TEST_CFG_FILE)  # type: ignore[attr-defined]
+
+_CFG_VALUES = _kc._TEST_CFG_VALUES
+_CFG_FILE = _kc._TEST_CFG_FILE
+
+
+def set_config(**keys: str) -> Path:
+    """Merge keys into the session config and rewrite the file."""
+    bad = sorted(set(keys) - set(_kc.KEYS))
+    if bad:
+        raise AssertionError(f"unknown config keys {bad}")
+    _CFG_VALUES.update(keys)
+    _CFG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    _CFG_FILE.write_text("\n".join(f'{k} = "{v}"' for k, v in _CFG_VALUES.items()) + "\n", encoding="utf-8")
+    return _CFG_FILE
+
+
+def clear_config(*keys: str) -> None:
+    """Remove keys (or all when none given) from the session config."""
+    if keys:
+        for k in keys:
+            _CFG_VALUES.pop(k, None)
+    else:
+        _CFG_VALUES.clear()
+    _CFG_FILE.write_text("\n".join(f'{k} = "{v}"' for k, v in _CFG_VALUES.items()) + "\n", encoding="utf-8")
 
 
 class KctxTestCase(unittest.TestCase):
     def setUp(self):
         self._tmpdir = tempfile.TemporaryDirectory()
         self.root = Path(self._tmpdir.name)
-        self._old_kctx_root = os.environ.get("KCTX_ROOT")
-        os.environ["KCTX_ROOT"] = str(self.root)
+        self._prior_cfg = dict(_CFG_VALUES)
+        set_config(root=str(self.root))
 
     def tearDown(self):
-        if self._old_kctx_root is None:
-            os.environ.pop("KCTX_ROOT", None)
-        else:
-            os.environ["KCTX_ROOT"] = self._old_kctx_root
+        clear_config()
+        _CFG_VALUES.update(self._prior_cfg)
+        set_config()
         self._tmpdir.cleanup()
+
+    def set_config(self, **keys: str) -> Path:
+        return set_config(**keys)
 
     def write_cite_stub(
         self, payload: dict, exit_code: int = 0, argv_log: Optional[Path] = None
@@ -95,6 +145,7 @@ class KctxTestCase(unittest.TestCase):
         invocation's `"$*"` to that file, for tests asserting which flags
         (`--touch`, `--mark`, `--offline`, ...) nav.py actually passed."""
         stub = self.root / "_fixture-cite-stub"
+        set_config(cite_bin=str(stub))
         lines = ["#!/usr/bin/env bash"]
         if argv_log is not None:
             lines.append(f"printf '%s\\n' \"$*\" >> {shlex.quote(str(argv_log))}")
@@ -146,7 +197,7 @@ class KctxTestCase(unittest.TestCase):
         os.environ["KCTX_GIT_URL_TEMPLATE"] = str(remotes_dir) + "/{org}/{repo}"
         os.environ["KCTX_CACHE"] = str(self.root / "_fixture-cache")
         os.environ["CITE_FETCH_INTERVAL_MIN"] = "0"
-        os.environ["CITE_BIN"] = str(DOTFILES_CITE_BIN)
+        set_config(cite_bin=str(DOTFILES_CITE_BIN))
         try:
             yield remote
         finally:

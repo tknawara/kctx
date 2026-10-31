@@ -80,12 +80,20 @@ for name in ["ruleNotEnabled", "missingPremise", "missingConclusion",
     check(f"rejection name present on both sides: {name}",
           name in py_checker and name in lean_checker)
 
-# 5) root-resolution safety: installed entry must not adopt arbitrary git repos
-# (checked in the repo's own cli; here we assert the documented precedence is testable)
+# 5) root-resolution safety: the config file is the single source; absent it,
+# find_root discovers the KB by its own marker (inventory/assets), never by
+# "any Git repo". No legacy env vars remain in production modules.
+_storage = (ROOT / "storage.py").read_text()
+check("config-driven root in storage.find_root", "Config.load()" in _storage)
 check(
-    "KCTX_ROOT honored by storage.find_root",
-    'os.environ.get("KCTX_ROOT")' in (ROOT / "storage.py").read_text(),
+    "KB-marker discovery, not any-git-repo",
+    'inventory" / "assets' in _storage and '"(candidate / \".git\").exists()' not in _storage,
 )
+for gone in ("KCTX_ROOT", "CITE_BIN", "KCTX_CITE_PY", "KCTX_GRAPH_DIR", "KCTX_LOG_DIR"):
+    check(
+        f"legacy env {gone} absent from production modules",
+        gone not in _storage and gone not in (ROOT / "nav.py").read_text(),
+    )
 
 print(f"\ncontracts: {'FAIL' if failures else 'PASS'} ({len(failures)} failures)")
 raise SystemExit(1 if failures else 0)

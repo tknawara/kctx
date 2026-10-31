@@ -20,9 +20,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 from kctx.semantics.model import Ttl  # noqa: E402
 from kctx.semantics.time import Freshness, assess_fresh  # noqa: E402
 
-from formal.nagini.assess_fresh_contracts import (  # noqa: E402
-    assess_fresh_tagged,
+# import the verified twin by path: the contracts module is only importable
+# inside the Nagini image, and cwd differs between host and container.
+import importlib.util  # noqa: E402
+
+_spec = importlib.util.spec_from_file_location(
+    "assess_fresh_contracts",
+    Path(__file__).resolve().parent / "assess_fresh_contracts.py",
 )
+_mod = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_mod)
+assess_fresh_tagged = _mod.assess_fresh_tagged
 
 # twin <-> production encodings
 POLICIES = [(-1, 5, Ttl("expireAfter", 5)), (-1, 50, Ttl("expireAfter", 50)),

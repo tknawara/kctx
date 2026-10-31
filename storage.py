@@ -26,20 +26,35 @@ from errors import KctxError
 def find_root() -> Path:
     """Resolve the knowledge workspace root.
 
-    KCTX_ROOT wins when set (this is how tests isolate themselves). Otherwise
-    walk up from this file's own location looking for a .git directory, so
-    the tool works the same regardless of the caller's cwd.
+    config.toml's `root` wins when set (see src/kctx/config.py; tests point
+    KCTX_CONFIG at a temp config). Otherwise discover the workspace from the
+    caller's cwd by its own marker (inventory/assets), never by "any Git
+    repository".
     """
-    env = os.environ.get("KCTX_ROOT")
-    if env:
-        return Path(env).resolve()
-    here = Path(__file__).resolve().parent
-    for candidate in [here, *here.parents]:
-        if (candidate / ".git").exists():
+    # Tool locations come from config.toml only (see src/kctx/config.py);
+    # $KCTX_CONFIG points at the file when it lives somewhere non-default.
+    from kctx.config import Config
+
+    cfg = Config.load()
+    if cfg.root is not None:
+        if not cfg.root.is_dir():
+            raise KctxError(
+                "not-found",
+                f"config root {str(cfg.root)!r} (from {str(cfg.source)!r}) "
+                "does not exist",
+            )
+        return cfg.root.resolve()
+    # No config: discover a knowledge workspace from the caller's cwd by its
+    # own marker (inventory/assets), never by "any Git repo".
+    cwd = Path.cwd()
+    for candidate in [cwd, *cwd.parents]:
+        if (candidate / "inventory" / "assets").is_dir():
             return candidate
     raise KctxError(
         "not-found",
-        "could not locate repo root (no .git found above tools/kctx and KCTX_ROOT is unset)",
+        "could not locate a knowledge workspace: write a config.toml "
+        "(root = \"/path/to/kb\") or run from inside the workspace "
+        "(identified by inventory/assets/, not by any Git repo)",
     )
 
 

@@ -6,8 +6,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../../../"
 
 echo "=== nagini: verify contracts ==="
-python3 -m nagini.translation.verification \
-  formal/nagini/assess_fresh_contracts.py
+nagini formal/nagini/assess_fresh_contracts.py
 
 echo "=== equivalence grid: verified twin vs production core ==="
 python3 formal/nagini/equivalence_grid.py

@@ -39,9 +39,11 @@ _log_path: Optional[Path] = None
 
 
 def log_dir() -> Path:
-    override = os.environ.get("KCTX_LOG_DIR")
-    if override:
-        return Path(override)
+    from kctx.config import Config
+
+    cfg = Config.load()
+    if cfg.log_dir is not None:
+        return cfg.log_dir
     xdg = os.environ.get("XDG_STATE_HOME")
     if xdg:
         return Path(xdg) / "kctx" / "logs"

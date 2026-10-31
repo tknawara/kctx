@@ -8,6 +8,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     rm -rf /var/lib/apt/lists/*
 
 # Nagini pulls its Viper backend on demand; pin the pip package.
-RUN pip install --no-cache-dir "nagini==0.40.1"
+RUN pip install --no-cache-dir "nagini==1.3.1"
 
 WORKDIR /work/kctx

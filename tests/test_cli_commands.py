@@ -7,7 +7,7 @@ import json
 import os
 from contextlib import redirect_stdout
 
-from _base import KctxTestCase, no_cite_available
+from _base import KctxTestCase, no_cite_available, set_config, clear_config
 
 import cli
 import inventory
@@ -54,9 +54,9 @@ class CliWiringTest(KctxTestCase):
             code, payload = _run(["--json", "stale"])
         finally:
             if old is None:
-                os.environ.pop("CITE_BIN", None)
+                clear_config("cite_bin")
             else:
-                os.environ["CITE_BIN"] = old
+                set_config(cite_bin=str(old))
         self.assertEqual(code, 0)
 
     def test_stale_drain_requires_project_or_paths(self):
@@ -70,13 +70,13 @@ class CliWiringTest(KctxTestCase):
         stub = self.write_cite_stub(
             {"results": [], "warnings": [], "skipped": [], "exit_code": 0}
         )
-        os.environ["CITE_BIN"] = stub
+        set_config(cite_bin=str(stub))
         try:
             code, payload = _run(
                 ["--json", "stale", "--drain", "--project", "demo-project"]
             )
         finally:
-            os.environ.pop("CITE_BIN", None)
+            clear_config("cite_bin")
         self.assertEqual(code, 0)
         self.assertEqual(payload["total_remaining"], 0)
 
@@ -99,13 +99,13 @@ class CliWiringTest(KctxTestCase):
             },
             exit_code=2,
         )
-        os.environ["CITE_BIN"] = stub
+        set_config(cite_bin=str(stub))
         try:
             code, payload = _run(
                 ["--json", "stale", "--drain", "--project", "demo-project"]
             )
         finally:
-            os.environ.pop("CITE_BIN", None)
+            clear_config("cite_bin")
         self.assertEqual(code, 2)
         self.assertEqual(payload["total_remaining"], 1)
 

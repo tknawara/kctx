@@ -1,6 +1,6 @@
 import os
 
-from _base import KctxTestCase, no_cite_available as _no_cite_available
+from _base import KctxTestCase, no_cite_available as _no_cite_available, set_config, clear_config
 
 import corrections as corrections_mod
 import dossiers as dossiers_mod
@@ -193,11 +193,11 @@ class ContextTest(KctxTestCase):
             },
             exit_code=2,
         )
-        os.environ["CITE_BIN"] = stub
+        set_config(cite_bin=str(stub))
         try:
             result = nav.context(self.root, "service-pbpsvc")
         finally:
-            os.environ.pop("CITE_BIN", None)
+            clear_config("cite_bin")
 
         citations = result["freshness"]["citations"]
         self.assertTrue(citations["available"])
@@ -437,11 +437,11 @@ class StaleTest(KctxTestCase):
             },
             exit_code=2,
         )
-        os.environ["CITE_BIN"] = stub
+        set_config(cite_bin=str(stub))
         try:
             result = nav.stale(self.root)
         finally:
-            os.environ.pop("CITE_BIN", None)
+            clear_config("cite_bin")
 
         self.assertTrue(result["citations"]["available"])
         self.assertEqual(result["citations"]["total"], 1)
@@ -453,11 +453,11 @@ class StaleTest(KctxTestCase):
             {"entries": [], "groups": {}, "total": 0, "oldest_age_days": 0.0},
             argv_log=argv_log,
         )
-        os.environ["CITE_BIN"] = stub
+        set_config(cite_bin=str(stub))
         try:
             result = nav.stale(self.root, offline=True)
         finally:
-            os.environ.pop("CITE_BIN", None)
+            clear_config("cite_bin")
 
         self.assertTrue(result["offline"])
         self.assertIn("--offline", argv_log.read_text(encoding="utf-8"))
@@ -468,11 +468,11 @@ class StaleTest(KctxTestCase):
             {"entries": [], "groups": {}, "total": 0, "oldest_age_days": 0.0},
             argv_log=argv_log,
         )
-        os.environ["CITE_BIN"] = stub
+        set_config(cite_bin=str(stub))
         try:
             result = nav.stale(self.root)
         finally:
-            os.environ.pop("CITE_BIN", None)
+            clear_config("cite_bin")
 
         self.assertFalse(result["offline"])
         self.assertNotIn("--offline", argv_log.read_text(encoding="utf-8"))
@@ -519,11 +519,11 @@ class DrainTest(KctxTestCase):
             {"results": [], "warnings": [], "skipped": [], "exit_code": 0},
             argv_log=argv_log,
         )
-        os.environ["CITE_BIN"] = stub
+        set_config(cite_bin=str(stub))
         try:
             result = nav.drain(self.root, project="demo-project")
         finally:
-            os.environ.pop("CITE_BIN", None)
+            clear_config("cite_bin")
 
         logged = argv_log.read_text(encoding="utf-8")
         self.assertIn("--touch", logged)
@@ -570,11 +570,11 @@ class DrainTest(KctxTestCase):
             },
             exit_code=2,
         )
-        os.environ["CITE_BIN"] = stub
+        set_config(cite_bin=str(stub))
         try:
             result = nav.drain(self.root, project="demo-project")
         finally:
-            os.environ.pop("CITE_BIN", None)
+            clear_config("cite_bin")
 
         remaining = result["remaining"]
         self.assertEqual([i["line_no"] for i in remaining["expired_noncode"]], [3])
@@ -612,11 +612,11 @@ class DrainTest(KctxTestCase):
             encoding="utf-8",
         )
         stub.chmod(stub.stat().st_mode | 0o111)
-        os.environ["CITE_BIN"] = str(stub)
+        set_config(cite_bin=str(stub))
         try:
             result = nav.drain(self.root, project="demo-project")
         finally:
-            os.environ.pop("CITE_BIN", None)
+            clear_config("cite_bin")
 
         self.assertEqual(len(result["touched_files"]), 1)
         touched = result["touched_files"][0]
@@ -634,11 +634,11 @@ class DrainTest(KctxTestCase):
             {"results": [], "warnings": [], "skipped": [], "exit_code": 0},
             argv_log=argv_log,
         )
-        os.environ["CITE_BIN"] = stub
+        set_config(cite_bin=str(stub))
         try:
             result = nav.drain(self.root, paths=[str(extra)])
         finally:
-            os.environ.pop("CITE_BIN", None)
+            clear_config("cite_bin")
 
         self.assertEqual(result["paths"], [str(extra)])
         self.assertIn(str(extra), argv_log.read_text(encoding="utf-8"))
@@ -675,11 +675,11 @@ class DrainTest(KctxTestCase):
         stub = self.write_cite_stub(
             {"results": [], "warnings": [], "skipped": [], "exit_code": 0}
         )
-        os.environ["CITE_BIN"] = stub
+        set_config(cite_bin=str(stub))
         try:
             result = nav.drain(self.root, project="demo-project")
         finally:
-            os.environ.pop("CITE_BIN", None)
+            clear_config("cite_bin")
 
         self.assertEqual(result["open_corrections_total"], 1)
         row = result["open_corrections"][0]

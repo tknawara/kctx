@@ -3,9 +3,9 @@ parses ⟦cite ...⟧ tokens with the one real parser instead of a reimplemented
 copy, and reuses its repo-identity resolution (see identity.py).
 
 Lookup order mirrors nav.locate_cite_bin()'s search for the `cite` script,
-plus an explicit KCTX_CITE_PY override for tests and non-standard layouts:
+plus a config.toml cite_py override (see src/kctx/config.py):
 
-  1. KCTX_CITE_PY, if set -- must point directly at a cite.py file.
+  1. config.toml cite_py, if set -- points directly at a cite.py file.
   2. $CLAUDE_CONFIG_DIR/skills/grounding/cite.py (a Space's deployed skill).
   3. ~/.claude/skills/grounding/cite.py (the laptop's deployed skill).
   4. ~/workspace/dotfiles/.claude/skills/grounding/cite.py (a dev checkout,
@@ -21,13 +21,15 @@ from errors import KctxError
 
 
 def locate_cite_py() -> Path:
-    env = os.environ.get("KCTX_CITE_PY")
-    if env:
-        p = Path(env)
-        if p.is_file():
-            return p
+    from kctx.config import Config
+
+    cfg = Config.load()
+    if cfg.cite_py is not None:
+        if cfg.cite_py.is_file():
+            return cfg.cite_py
         raise KctxError(
-            "not-found", f"KCTX_CITE_PY={env!r} does not point to an existing file"
+            "not-found",
+            f"config cite_py {str(cfg.cite_py)!r} does not point at an existing file",
         )
 
     candidates = []

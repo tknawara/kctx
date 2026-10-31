@@ -21,6 +21,7 @@ def _styled_help(context: click.Context, text: str) -> str:
     output = Console(
         file=buffer,
         force_terminal=True,
+        no_color=False,
         width=context.terminal_width or 80,
         markup=False,
         highlight=False,

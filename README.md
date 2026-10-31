@@ -109,7 +109,7 @@ age. Illustrative citations remain distinguishable from evidence.
 
 Source reads and write-backs reject unsafe traversal/symlink targets. Secret
 redaction covers rendering and diagnostics; authored regex redaction is bounded
-and fails closed. See [citation flow and limits](docs/kctx/flows.md#citation-flow).
+and fails closed. See [citation flow and limits](docs/kctx/flows.md#citation).
 
 ## Authored workflows versus signed admission
 
@@ -169,14 +169,17 @@ commits are not current until the authenticated release publication succeeds.
 ```sh
 # Locked Python checks, static misuse fixtures, behavior, Lean audit,
 # full-response cross-host conformance and actual CLI/Dolt smoke
-docker compose --profile verify run --build --rm verify
+docker compose --profile verify run --build --rm verify &&
 
 # Executable twin verification and production equivalence grids
-docker compose --profile nagini run --build --rm nagini
+docker compose --profile nagini run --build --rm nagini &&
 
 # Installed runtime without Lean/Docker/formal artifacts
 docker compose --profile verify run --build --rm runtime
 ```
+
+The chain stops on the first failed stage. The runtime includes Git, Dolt and
+the GitHub CLI; no host tool installation is needed beyond Docker Compose.
 
 Additional real-process qualification is provided by
 `scripts/qualify_storage.py`, `scripts/qualify_remote.py` and

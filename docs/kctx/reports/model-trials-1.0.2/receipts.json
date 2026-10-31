@@ -1,0 +1,966 @@
+{
+  "schema_version": 1,
+  "protocol_sha256": "37110f972c6f49a9995ebd0f34393aba8465f8414f941f991fb61da40f7c2ff6",
+  "trials": [
+    {
+      "arm": "baseline",
+      "task": "atlas-01",
+      "input_sha256": "fc74f2f40ee02d6a513c9f7ed04153b22050e6445039255a6c2ebc8f0d6e5ee3",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a64011d55",
+      "transcript_path": "transcripts/baseline-atlas-01.json",
+      "output": {
+        "outcome": "supported",
+        "scope": "atlas/production",
+        "evidence_ids": [
+          "atlas-01"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "0989f558640ad0f651cd34b10f74c9dc6cabe5a7c70c5a9ac1f9d4fec364f4d8"
+    },
+    {
+      "arm": "baseline",
+      "task": "atlas-02",
+      "input_sha256": "f470f3a4d831eb034f1f6170acd101ec5c300a7390f4ccb63667a03d0c546a31",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a66411d56",
+      "transcript_path": "transcripts/baseline-atlas-02.json",
+      "output": {
+        "outcome": "unknown",
+        "scope": "atlas/production",
+        "evidence_ids": [
+          "atlas-02"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "4febbb7534b364b7245b95f7be71d0dc871c0e501b3ed2e49353479675b935df"
+    },
+    {
+      "arm": "baseline",
+      "task": "atlas-03",
+      "input_sha256": "1549fe78b91f0e653b478c24ecfe69977aeb255654f29040bf4830459b00823d",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a68011d57",
+      "transcript_path": "transcripts/baseline-atlas-03.json",
+      "output": {
+        "outcome": "historical",
+        "scope": "atlas/production",
+        "evidence_ids": [
+          "atlas-03"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "20a192637ac90b10c5d70289fc7ee6316f92b069d4a6248baacb86342a11ef85"
+    },
+    {
+      "arm": "baseline",
+      "task": "atlas-04",
+      "input_sha256": "a156c885ac7454e19b415c26ec41c687de99d26bbca7a29e6ddbffe5946dc708",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a69c11d58",
+      "transcript_path": "transcripts/baseline-atlas-04.json",
+      "output": {
+        "outcome": "both",
+        "scope": "atlas/production",
+        "evidence_ids": [
+          "atlas-04"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "784a3ff67da0a67e61e97022c7fbc68d1d4a86a7bd7ab15160c71a3791cd4b2c"
+    },
+    {
+      "arm": "baseline",
+      "task": "atlas-05",
+      "input_sha256": "3ca2114dfcfb6605f977d622bc0dd7f293854effff1ce1b371b0922b10dc0b82",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a6b411d59",
+      "transcript_path": "transcripts/baseline-atlas-05.json",
+      "output": {
+        "outcome": "incomplete",
+        "scope": "atlas/production",
+        "evidence_ids": [
+          "atlas-05"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "0f078531c8da092f5d079a88e9ece798d049193c8a90f8f88d78207972ff32ca"
+    },
+    {
+      "arm": "baseline",
+      "task": "atlas-06",
+      "input_sha256": "af1c53ff35f1d04ae26f8a080f80e28634615fd8826446bbd5e033fdaa856ad7",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a6cc11d5a",
+      "transcript_path": "transcripts/baseline-atlas-06.json",
+      "output": {
+        "outcome": "historical",
+        "scope": "atlas/production",
+        "evidence_ids": [
+          "atlas-06"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "f38b1e882fb19c72b378514a73a1e44f6732cf803c70fe7d4dc748d18c8a0fb5"
+    },
+    {
+      "arm": "baseline",
+      "task": "atlas-07",
+      "input_sha256": "15b02b7d826a38dedd4c090656cd416f6a752031c7f67121672ff911468b2cb4",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a6e811d5b",
+      "transcript_path": "transcripts/baseline-atlas-07.json",
+      "output": {
+        "outcome": "incomplete",
+        "scope": "atlas/production",
+        "evidence_ids": [
+          "atlas-07"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "83077dfdcc0521885c39b3db310ef948b4fc516fe4a2e118fdc0746f520af00a"
+    },
+    {
+      "arm": "baseline",
+      "task": "atlas-08",
+      "input_sha256": "896d0a6225085c0d310f16363237087e09d532bf0777cc101cfd42e04d46b7b8",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a6fc11d5c",
+      "transcript_path": "transcripts/baseline-atlas-08.json",
+      "output": {
+        "outcome": "not-applicable",
+        "scope": "atlas/production",
+        "evidence_ids": [
+          "atlas-08"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "92479b34197233feb5691533dfdf6ac705b13d843199f3cb0ef20d97f67b1169"
+    },
+    {
+      "arm": "baseline",
+      "task": "atlas-09",
+      "input_sha256": "48cd600767630fe4dfc5210a9721d8256c8f6f9c3cb2bdb28cca1ba2bd154fe8",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a71811d5d",
+      "transcript_path": "transcripts/baseline-atlas-09.json",
+      "output": {
+        "outcome": "mixed",
+        "scope": "atlas/production",
+        "evidence_ids": [
+          "atlas-09"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "5ad156ad0b22ebc3bfc69004961e373dbaea31375180540370cc262d01c15bf5"
+    },
+    {
+      "arm": "baseline",
+      "task": "atlas-10",
+      "input_sha256": "7306254d3729f2f9c33ea35542e625ab76a52af3323299b1ec40dbfcbcbc21de",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a73011d5e",
+      "transcript_path": "transcripts/baseline-atlas-10.json",
+      "output": {
+        "outcome": "hypothesis",
+        "scope": "atlas/production",
+        "evidence_ids": [
+          "atlas-10"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "35108427c7e15646a03347b4d9127b2a71079c0550b51bed7efc23623a28497e"
+    },
+    {
+      "arm": "baseline",
+      "task": "atlas-11",
+      "input_sha256": "e4200833ff8328bcefc71e771d3bc8700e50f1e1c57356377122f38a7e5e4155",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a74811d5f",
+      "transcript_path": "transcripts/baseline-atlas-11.json",
+      "output": {
+        "outcome": "incomplete",
+        "scope": "atlas/production",
+        "evidence_ids": [
+          "atlas-11"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "fbe55f5e0342c9cd2e3b8da1b746babc8bc9c310cd80a55419f41b7844e89889"
+    },
+    {
+      "arm": "baseline",
+      "task": "atlas-12",
+      "input_sha256": "da4efe2f8d15fe2ea1f69c7894208c3147dacd6bd7f7d89d9ab8f1121ee03576",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a76411d60",
+      "transcript_path": "transcripts/baseline-atlas-12.json",
+      "output": {
+        "outcome": "untrusted",
+        "scope": "atlas/production",
+        "evidence_ids": [
+          "atlas-12"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "b9997fecbf7838ceec632ad972a4fe34b4d2dcbc1fd0486aeacabb4ae5d723ec"
+    },
+    {
+      "arm": "baseline",
+      "task": "boreal-01",
+      "input_sha256": "544de7b86f4c091572210cc882159d0949b695f2da7a2e5e4cf977f78d7acffe",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a77c11d61",
+      "transcript_path": "transcripts/baseline-boreal-01.json",
+      "output": {
+        "outcome": "supported",
+        "scope": "boreal/production",
+        "evidence_ids": [
+          "boreal-01"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "5bb2b1e6a17385a78f225bd81074db808585db3511bddd067c6b99c07d995a8e"
+    },
+    {
+      "arm": "baseline",
+      "task": "boreal-02",
+      "input_sha256": "a8d25890975ae66af76daf338459ada97142838bd41b03838a3ad2e6c1f86119",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a79811d62",
+      "transcript_path": "transcripts/baseline-boreal-02.json",
+      "output": {
+        "outcome": "unknown",
+        "scope": "boreal/production",
+        "evidence_ids": [
+          "boreal-02"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "31e3cab0e02a505a548af82a6ea04471a9ba7deb76c850194fb4543d51a20a19"
+    },
+    {
+      "arm": "baseline",
+      "task": "boreal-03",
+      "input_sha256": "afc3b304927f9648bd9ed9e0b808deaf1cd21ffeffddf7ad554d0fac0a7ce1d9",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a7b011d63",
+      "transcript_path": "transcripts/baseline-boreal-03.json",
+      "output": {
+        "outcome": "historical",
+        "scope": "boreal/production",
+        "evidence_ids": [
+          "boreal-03"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "39ddb9b4ef33334ee6a337ab28039cc289906bf7441c65906ab430e2bfc957e9"
+    },
+    {
+      "arm": "baseline",
+      "task": "boreal-04",
+      "input_sha256": "aa94b0b9551cf8bf4b62b6a437ae73aa1c8297d9094d08d22242123045c4d8d9",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a7c411d64",
+      "transcript_path": "transcripts/baseline-boreal-04.json",
+      "output": {
+        "outcome": "both",
+        "scope": "boreal/production",
+        "evidence_ids": [
+          "boreal-04"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "803a753f54b74145ad803d87dc4232af3bf774fefdc7508872f1296471ba3304"
+    },
+    {
+      "arm": "baseline",
+      "task": "boreal-05",
+      "input_sha256": "1f3de765a2bc086202fc665d1257d9985e7bdb0e40dc60f1baa8512ceb72b8ad",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a7dc11d65",
+      "transcript_path": "transcripts/baseline-boreal-05.json",
+      "output": {
+        "outcome": "incomplete",
+        "scope": "boreal/production",
+        "evidence_ids": [
+          "boreal-05"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "3628aaa9765cb332de4946e5877381a076d3ec8d760e802f88e0c3eedc6cce0c"
+    },
+    {
+      "arm": "baseline",
+      "task": "boreal-06",
+      "input_sha256": "81be29480a61630a62d9597100c31c92a1a54c53b3d8bc0c0ab67d804146d841",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a7f811d66",
+      "transcript_path": "transcripts/baseline-boreal-06.json",
+      "output": {
+        "outcome": "historical",
+        "scope": "boreal/production",
+        "evidence_ids": [
+          "boreal-06"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "09314c917e647a3e5d03a93852998d259a3870abd58e271c729bbbc0ee7c044e"
+    },
+    {
+      "arm": "baseline",
+      "task": "boreal-07",
+      "input_sha256": "8babf5497f236ab6a7dd5f572b24ab24f42570750a7306c94e35477b14b241e5",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a81011d67",
+      "transcript_path": "transcripts/baseline-boreal-07.json",
+      "output": {
+        "outcome": "unknown",
+        "scope": "boreal/production",
+        "evidence_ids": [
+          "boreal-07"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "d8502c1bd87f9f092b40bc4db7c9c08fdeaedf015d7f18dba069a6fb78fde6f0"
+    },
+    {
+      "arm": "baseline",
+      "task": "boreal-08",
+      "input_sha256": "d0ae72e4cb090b7af144dac24154d80ab180059dd0eaaa7442810dbaf48f9b91",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a82811d68",
+      "transcript_path": "transcripts/baseline-boreal-08.json",
+      "output": {
+        "outcome": "not-applicable",
+        "scope": "boreal/production",
+        "evidence_ids": [
+          "boreal-08"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "0ca866831c2f9a019eaeedaa66df2f4744dd236ae397e3322065cdaf1de0a8ed"
+    },
+    {
+      "arm": "baseline",
+      "task": "boreal-09",
+      "input_sha256": "6c28917f820e292271e08dcf9dbfdfce81fe19e417896cca50934b2c254808a3",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a84011d69",
+      "transcript_path": "transcripts/baseline-boreal-09.json",
+      "output": {
+        "outcome": "mixed",
+        "scope": "boreal/production",
+        "evidence_ids": [
+          "boreal-09"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "ed21f25085aa35d963e8a99803aca34862f365b16ff7d1fd29eeaf56ae569f99"
+    },
+    {
+      "arm": "baseline",
+      "task": "boreal-10",
+      "input_sha256": "21393178035775bbe4b92f0e7b63d39450b0b96a2ae4d482b9f2bbe46c606f17",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a85411d6a",
+      "transcript_path": "transcripts/baseline-boreal-10.json",
+      "output": {
+        "outcome": "hypothesis",
+        "scope": "boreal/production",
+        "evidence_ids": [
+          "boreal-10"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "f9552157795de3d69f3a43d037a2930e9765597b15e21fc74e5df0d4453d48ca"
+    },
+    {
+      "arm": "baseline",
+      "task": "boreal-11",
+      "input_sha256": "ce16910ce03bd1f9d83ffb94df58a8fda25df33edbf6c14f091d6ebdb2f90829",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a86c11d6b",
+      "transcript_path": "transcripts/baseline-boreal-11.json",
+      "output": {
+        "outcome": "incomplete",
+        "scope": "boreal/production",
+        "evidence_ids": [
+          "boreal-11"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "297ff6c6067bd3312dfa93a1ce400d2f934a2b79bf25da5766c002468f44c559"
+    },
+    {
+      "arm": "baseline",
+      "task": "boreal-12",
+      "input_sha256": "77e520e037e60335ee11c9aad55379755caf9a5c2967a3e73980f9619891f310",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a88411d6c",
+      "transcript_path": "transcripts/baseline-boreal-12.json",
+      "output": {
+        "outcome": "untrusted",
+        "scope": "boreal/production",
+        "evidence_ids": [
+          "boreal-12"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "9257c8e72776a94e4ba7e66ffc11642c69e30a715ffaf9ece85bfe0b69d41430"
+    },
+    {
+      "arm": "candidate",
+      "task": "atlas-01",
+      "input_sha256": "fc74f2f40ee02d6a513c9f7ed04153b22050e6445039255a6c2ebc8f0d6e5ee3",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a89c11d6d",
+      "transcript_path": "transcripts/candidate-atlas-01.json",
+      "output": {
+        "outcome": "supported",
+        "scope": "atlas/production",
+        "evidence_ids": [
+          "atlas-01"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "2143f09932188c3ed5498c3c2ca12a0c7dea7d382fbe3af35b22b701c81023a8"
+    },
+    {
+      "arm": "candidate",
+      "task": "atlas-02",
+      "input_sha256": "f470f3a4d831eb034f1f6170acd101ec5c300a7390f4ccb63667a03d0c546a31",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a8b011d6e",
+      "transcript_path": "transcripts/candidate-atlas-02.json",
+      "output": {
+        "outcome": "unknown",
+        "scope": "atlas/production",
+        "evidence_ids": [
+          "atlas-02"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "c7da89f28829625f026c96f700b8819e5fa73d6411e913b80eeaf5b6999e6840"
+    },
+    {
+      "arm": "candidate",
+      "task": "atlas-03",
+      "input_sha256": "1549fe78b91f0e653b478c24ecfe69977aeb255654f29040bf4830459b00823d",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a8c811d6f",
+      "transcript_path": "transcripts/candidate-atlas-03.json",
+      "output": {
+        "outcome": "historical",
+        "scope": "atlas/production",
+        "evidence_ids": [
+          "atlas-03"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "4825c932befc2353278d7d4802fcc85b24ea723a83a0780a19aa1f29ddab29cb"
+    },
+    {
+      "arm": "candidate",
+      "task": "atlas-04",
+      "input_sha256": "a156c885ac7454e19b415c26ec41c687de99d26bbca7a29e6ddbffe5946dc708",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a8e011d70",
+      "transcript_path": "transcripts/candidate-atlas-04.json",
+      "output": {
+        "outcome": "both",
+        "scope": "atlas/production",
+        "evidence_ids": [
+          "atlas-04"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "41ef3d2ab25174f096f1cccc607020fd5c03340657fb0f2010c111071e1c641e"
+    },
+    {
+      "arm": "candidate",
+      "task": "atlas-05",
+      "input_sha256": "3ca2114dfcfb6605f977d622bc0dd7f293854effff1ce1b371b0922b10dc0b82",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a8fc11d71",
+      "transcript_path": "transcripts/candidate-atlas-05.json",
+      "output": {
+        "outcome": "incomplete",
+        "scope": "atlas/production",
+        "evidence_ids": [
+          "atlas-05"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "e98c51cc0ed58037039fb11ce3b6c5eee17d1583e1cd4dc66fd49991d6f871a5"
+    },
+    {
+      "arm": "candidate",
+      "task": "atlas-06",
+      "input_sha256": "af1c53ff35f1d04ae26f8a080f80e28634615fd8826446bbd5e033fdaa856ad7",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a91411d72",
+      "transcript_path": "transcripts/candidate-atlas-06.json",
+      "output": {
+        "outcome": "historical",
+        "scope": "atlas/production",
+        "evidence_ids": [
+          "atlas-06"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "ca4178df4db901e13abfd682b9d57c459eee9d7bf3eaf7ca9d22463d24ed8449"
+    },
+    {
+      "arm": "candidate",
+      "task": "atlas-07",
+      "input_sha256": "15b02b7d826a38dedd4c090656cd416f6a752031c7f67121672ff911468b2cb4",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a92811d73",
+      "transcript_path": "transcripts/candidate-atlas-07.json",
+      "output": {
+        "outcome": "unknown",
+        "scope": "atlas/production",
+        "evidence_ids": [
+          "atlas-07"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "3f9df40334413eaaa8fba000e595a3262c1c3a8d7b0884e8ccc6ea4ca2c61054"
+    },
+    {
+      "arm": "candidate",
+      "task": "atlas-08",
+      "input_sha256": "896d0a6225085c0d310f16363237087e09d532bf0777cc101cfd42e04d46b7b8",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a94011d74",
+      "transcript_path": "transcripts/candidate-atlas-08.json",
+      "output": {
+        "outcome": "not-applicable",
+        "scope": "atlas/production",
+        "evidence_ids": [
+          "atlas-08"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "5f334bf74a120ab897f335f1b302e4ec7acfc722fdc15abf96f42f65eab3f17d"
+    },
+    {
+      "arm": "candidate",
+      "task": "atlas-09",
+      "input_sha256": "48cd600767630fe4dfc5210a9721d8256c8f6f9c3cb2bdb28cca1ba2bd154fe8",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a95811d75",
+      "transcript_path": "transcripts/candidate-atlas-09.json",
+      "output": {
+        "outcome": "mixed",
+        "scope": "atlas/production",
+        "evidence_ids": [
+          "atlas-09"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "f400ab54e480412c0769858f64c9b351f33a6b339f148f876e42072aea13dcb7"
+    },
+    {
+      "arm": "candidate",
+      "task": "atlas-10",
+      "input_sha256": "7306254d3729f2f9c33ea35542e625ab76a52af3323299b1ec40dbfcbcbc21de",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a97811d76",
+      "transcript_path": "transcripts/candidate-atlas-10.json",
+      "output": {
+        "outcome": "hypothesis",
+        "scope": "atlas/production",
+        "evidence_ids": [
+          "atlas-10"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "ec75cb6a0ff88578a9be6ddedbbd44b1bbcfbb5e2ea8f44a90bd92ed3738f2a9"
+    },
+    {
+      "arm": "candidate",
+      "task": "atlas-11",
+      "input_sha256": "e4200833ff8328bcefc71e771d3bc8700e50f1e1c57356377122f38a7e5e4155",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a99011d77",
+      "transcript_path": "transcripts/candidate-atlas-11.json",
+      "output": {
+        "outcome": "incomplete",
+        "scope": "atlas/production",
+        "evidence_ids": [
+          "atlas-11"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "ab23ef6f26f62023b8f2e71809d4ccfe28fffb8a313384ae51f3f760133b28eb"
+    },
+    {
+      "arm": "candidate",
+      "task": "atlas-12",
+      "input_sha256": "da4efe2f8d15fe2ea1f69c7894208c3147dacd6bd7f7d89d9ab8f1121ee03576",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a9a811d78",
+      "transcript_path": "transcripts/candidate-atlas-12.json",
+      "output": {
+        "outcome": "untrusted",
+        "scope": "atlas/production",
+        "evidence_ids": [
+          "atlas-12"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "1bc85ac8512fc37c069fba40ee4c9ec3229f306b8f1aec2094434bb31a2bb0e4"
+    },
+    {
+      "arm": "candidate",
+      "task": "boreal-01",
+      "input_sha256": "544de7b86f4c091572210cc882159d0949b695f2da7a2e5e4cf977f78d7acffe",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a9bc11d79",
+      "transcript_path": "transcripts/candidate-boreal-01.json",
+      "output": {
+        "outcome": "supported",
+        "scope": "boreal/production",
+        "evidence_ids": [
+          "boreal-01"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "c60484065fb90bab0bcbed33960633c086eafac26ba5c8507a990d0039c8602f"
+    },
+    {
+      "arm": "candidate",
+      "task": "boreal-02",
+      "input_sha256": "a8d25890975ae66af76daf338459ada97142838bd41b03838a3ad2e6c1f86119",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a9d411d7a",
+      "transcript_path": "transcripts/candidate-boreal-02.json",
+      "output": {
+        "outcome": "unknown",
+        "scope": "boreal/production",
+        "evidence_ids": [
+          "boreal-02"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "6e8c378b0b4d98afb61b561e272b4f0dec64de33d833aa6fbc4aaf9a02539b56"
+    },
+    {
+      "arm": "candidate",
+      "task": "boreal-03",
+      "input_sha256": "afc3b304927f9648bd9ed9e0b808deaf1cd21ffeffddf7ad554d0fac0a7ce1d9",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1a9e811d7b",
+      "transcript_path": "transcripts/candidate-boreal-03.json",
+      "output": {
+        "outcome": "historical",
+        "scope": "boreal/production",
+        "evidence_ids": [
+          "boreal-03"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "5a230418130471656835df141c46e8287f4610b1dfda840dc1c5c484371c4bb0"
+    },
+    {
+      "arm": "candidate",
+      "task": "boreal-04",
+      "input_sha256": "aa94b0b9551cf8bf4b62b6a437ae73aa1c8297d9094d08d22242123045c4d8d9",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1aa0011d7c",
+      "transcript_path": "transcripts/candidate-boreal-04.json",
+      "output": {
+        "outcome": "both",
+        "scope": "boreal/production",
+        "evidence_ids": [
+          "boreal-04"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "c844d6751fe0bb82ba6098e80c9dac480a1a2c35fa4c22b5ed8b2432026b639b"
+    },
+    {
+      "arm": "candidate",
+      "task": "boreal-05",
+      "input_sha256": "1f3de765a2bc086202fc665d1257d9985e7bdb0e40dc60f1baa8512ceb72b8ad",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1aa1811d7d",
+      "transcript_path": "transcripts/candidate-boreal-05.json",
+      "output": {
+        "outcome": "incomplete",
+        "scope": "boreal/production",
+        "evidence_ids": [
+          "boreal-05"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "19c3e29d6b6d2df1f94c07ea071fd1f9404b1fec24b91dd81fc5b7c823476c49"
+    },
+    {
+      "arm": "candidate",
+      "task": "boreal-06",
+      "input_sha256": "81be29480a61630a62d9597100c31c92a1a54c53b3d8bc0c0ab67d804146d841",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1aa2c11d7e",
+      "transcript_path": "transcripts/candidate-boreal-06.json",
+      "output": {
+        "outcome": "historical",
+        "scope": "boreal/production",
+        "evidence_ids": [
+          "boreal-06"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "eb08a13c1d60212153b438ce9f7fcd58627121787ca6eb87e09de00203bc8207"
+    },
+    {
+      "arm": "candidate",
+      "task": "boreal-07",
+      "input_sha256": "8babf5497f236ab6a7dd5f572b24ab24f42570750a7306c94e35477b14b241e5",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1aa4011d7f",
+      "transcript_path": "transcripts/candidate-boreal-07.json",
+      "output": {
+        "outcome": "unknown",
+        "scope": "boreal/production",
+        "evidence_ids": [
+          "boreal-07"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "93ccf77c06bf602ee0a7e4a9cb5494fac9809b8b492cee8790687bea87c1007a"
+    },
+    {
+      "arm": "candidate",
+      "task": "boreal-08",
+      "input_sha256": "d0ae72e4cb090b7af144dac24154d80ab180059dd0eaaa7442810dbaf48f9b91",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1aa5811d80",
+      "transcript_path": "transcripts/candidate-boreal-08.json",
+      "output": {
+        "outcome": "not-applicable",
+        "scope": "boreal/production",
+        "evidence_ids": [
+          "boreal-08"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "a9a03238dcd2659ae0344a9712268a67fd2b96b31a68aad173742a2c3ef898c2"
+    },
+    {
+      "arm": "candidate",
+      "task": "boreal-09",
+      "input_sha256": "6c28917f820e292271e08dcf9dbfdfce81fe19e417896cca50934b2c254808a3",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1aa6c11d81",
+      "transcript_path": "transcripts/candidate-boreal-09.json",
+      "output": {
+        "outcome": "mixed",
+        "scope": "boreal/production",
+        "evidence_ids": [
+          "boreal-09"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "4531424f8555377c0b0694ada3de4c8aa486c9a6d9b660b90d768bb57bb0ba6c"
+    },
+    {
+      "arm": "candidate",
+      "task": "boreal-10",
+      "input_sha256": "21393178035775bbe4b92f0e7b63d39450b0b96a2ae4d482b9f2bbe46c606f17",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1aa8011d82",
+      "transcript_path": "transcripts/candidate-boreal-10.json",
+      "output": {
+        "outcome": "hypothesis",
+        "scope": "boreal/production",
+        "evidence_ids": [
+          "boreal-10"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "138d025db3fc2025d39e642eba932898a09dde6ccabfa2b73ce4c1ce0a902e01"
+    },
+    {
+      "arm": "candidate",
+      "task": "boreal-11",
+      "input_sha256": "ce16910ce03bd1f9d83ffb94df58a8fda25df33edbf6c14f091d6ebdb2f90829",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1aa9c11d83",
+      "transcript_path": "transcripts/candidate-boreal-11.json",
+      "output": {
+        "outcome": "incomplete",
+        "scope": "boreal/production",
+        "evidence_ids": [
+          "boreal-11"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "676b3001d9221f2e521b1e9c7ef4f668eb00414c94efe82efe6160b478d8541a"
+    },
+    {
+      "arm": "candidate",
+      "task": "boreal-12",
+      "input_sha256": "77e520e037e60335ee11c9aad55379755caf9a5c2967a3e73980f9619891f310",
+      "model": "omp routing alias default; resolved model not exposed",
+      "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+      "prompt_digest": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+      "tool_config_digest": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+      "invocation_id": "cmp-15bbbf1aab011d84",
+      "transcript_path": "transcripts/candidate-boreal-12.json",
+      "output": {
+        "outcome": "untrusted",
+        "scope": "boreal/production",
+        "evidence_ids": [
+          "boreal-12"
+        ],
+        "unsupported_inference": false
+      },
+      "transcript_sha256": "ba31c4630fc8690c5c96d23ef2ea76ddfcadebd5938f7814a130ad7bc47f625a"
+    }
+  ]
+}

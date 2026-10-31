@@ -1,0 +1,34 @@
+{
+  "id": "boreal-11",
+  "project": "boreal",
+  "category": "investigation",
+  "change_family": "incomplete-inventory",
+  "partition": "held-out",
+  "selected_time": 100,
+  "target_scope": "boreal/production",
+  "prompt": "Can an interrupted inventory establish absence?",
+  "target": "ticket:QUAL-BOREAL-11",
+  "source_kinds": [
+    "operation"
+  ],
+  "context_budget_bytes": 8192,
+  "context": [
+    {
+      "path": "evidence/boreal-11.md",
+      "content": "# Synthetic boreal-11\n\nInventory returned [] with outcome=truncated, continuation=page2. The required finite domain was not enumerated.\nScope: boreal/production. Observation time: 90.\nCode: code/old.py. Operational capture: operations/capture.json.\n⟦cite kind=ticket id=QUAL-BOREAL-11 seen=2026-10-30T00:00Z⟧\n",
+      "revision": "8c2775e4eb81b59433d37ed1920537f9af555fc8"
+    },
+    {
+      "path": "operations/capture.json",
+      "content": "{\"observed_at\": 80, \"ttl\": 10, \"cohorts\": {\"A\": true, \"B\": false}, \"acquisition\": \"ok\", \"scope\": \"boreal/production\"}",
+      "revision": "8c2775e4eb81b59433d37ed1920537f9af555fc8"
+    }
+  ],
+  "selected_revision": "8c2775e4eb81b59433d37ed1920537f9af555fc8",
+  "response_contract": {
+    "outcome": "string",
+    "scope": "string",
+    "evidence_ids": "list[string]",
+    "unsupported_inference": "boolean"
+  }
+}

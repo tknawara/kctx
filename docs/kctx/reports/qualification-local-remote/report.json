@@ -1,0 +1,1559 @@
+{
+  "cases": [
+    {
+      "evidence": null,
+      "first_command": 0,
+      "last_command_exclusive": 3,
+      "name": "prerequisites",
+      "scenarios": [],
+      "status": "passed"
+    },
+    {
+      "evidence": {
+        "clients": [
+          "/tmp/kctx-remote-bsrqftmq/local/a",
+          "/tmp/kctx-remote-bsrqftmq/local/b",
+          "/tmp/kctx-remote-bsrqftmq/local/dolt-a",
+          "/tmp/kctx-remote-bsrqftmq/local/dolt-b"
+        ],
+        "dolt_a": "fqcfoofvui0aamruhlbp81iuse2t78g3",
+        "dolt_b": "o2dfms9hr4hk14fqhksvg9u2pljhvuf7",
+        "dolt_historical": "q9iemrv4qggp0g88nigkh97dnoev509i",
+        "git_current": "814ebbfe497a1c115de06636e30ba13a325439ac",
+        "git_historical": "233549424f424ad400b67b828a59e52204ca1be8",
+        "retention": "native branch references; no claim about enterprise GC policy"
+      },
+      "first_command": 4,
+      "last_command_exclusive": 51,
+      "name": "local-independent-native-clients",
+      "scenarios": [
+        "Q61",
+        "Q62",
+        "D07",
+        "D28",
+        "D48"
+      ],
+      "status": "passed"
+    },
+    {
+      "evidence": {
+        "after_retry": "9cedb0f888ea266704a4c8ad4e1a487cd74512dd",
+        "before": "0274f4c3d88108ec99785c2f5e45216a61c9c71d",
+        "prior_release_survived": true
+      },
+      "first_command": 51,
+      "last_command_exclusive": 66,
+      "name": "local-interrupted-push",
+      "scenarios": [
+        "Q62",
+        "D08",
+        "D52"
+      ],
+      "status": "passed"
+    },
+    {
+      "evidence": {
+        "candidate": "oikscf4b6rgdp8j3uturdqbchkr5fdth",
+        "large_payload_bytes": 16777216,
+        "observed_before_retry": "fqcfoofvui0aamruhlbp81iuse2t78g3",
+        "payload_sha256": "a75abe1ca39a75e7f435b33dd98239b2600c8631f59121653baa9f96ef578f21",
+        "prior": "fqcfoofvui0aamruhlbp81iuse2t78g3",
+        "retried_after_independent_read": true
+      },
+      "first_command": 66,
+      "last_command_exclusive": 79,
+      "name": "local-interrupted-native-dolt-push",
+      "scenarios": [
+        "Q62",
+        "D08",
+        "D09"
+      ],
+      "status": "passed"
+    }
+  ],
+  "commands": [
+    {
+      "argv": [
+        "/usr/bin/git",
+        "-c",
+        "safe.directory=/work/kctx",
+        "--version"
+      ],
+      "cwd": "/work/kctx",
+      "duration_ns": 2271292,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "git version 2.43.0\n",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "/usr/local/bin/dolt",
+        "version"
+      ],
+      "cwd": "/work/kctx",
+      "duration_ns": 62846531,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "dolt version 2.6.1\n",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "git",
+        "-c",
+        "safe.directory=/work/kctx",
+        "rev-parse",
+        "HEAD"
+      ],
+      "cwd": "/work/kctx",
+      "duration_ns": 1715722,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "473f1610c0773cef87f6db956da16b90710fd241\n",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "git",
+        "-c",
+        "safe.directory=/work/kctx",
+        "init",
+        "--bare",
+        "/tmp/kctx-remote-bsrqftmq/git.git"
+      ],
+      "cwd": "/work/kctx",
+      "duration_ns": 6847087,
+      "returncode": 0,
+      "stderr": "hint: Using 'master' as the name for the initial branch. This default branch name\nhint: is subject to change. To configure the initial branch name to use in all\nhint: of your new repositories, which will suppress this warning, call:\nhint: \nhint: \tgit config --global init.defaultBranch <name>\nhint: \nhint: Names commonly chosen instead of 'master' are 'main', 'trunk' and\nhint: 'development'. The just-created branch can be renamed via this command:\nhint: \nhint: \tgit branch -m <name>\n",
+      "stdout": "Initialized empty Git repository in /tmp/kctx-remote-bsrqftmq/git.git/\n",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "git",
+        "-c",
+        "safe.directory=/work/kctx",
+        "init",
+        "-q",
+        "--initial-branch=main",
+        "/tmp/kctx-remote-bsrqftmq/local/a"
+      ],
+      "cwd": "/work/kctx",
+      "duration_ns": 6469466,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "git",
+        "config",
+        "user.name",
+        "kctx qualification"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/a",
+      "duration_ns": 1244741,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "git",
+        "config",
+        "user.email",
+        "qualification@invalid"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/a",
+      "duration_ns": 1191450,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "git",
+        "add",
+        "-A"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/a",
+      "duration_ns": 1866168,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "git",
+        "commit",
+        "-qm",
+        "qualification historical evidence"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/a",
+      "duration_ns": 6771464,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "git",
+        "rev-parse",
+        "HEAD"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/a",
+      "duration_ns": 1090701,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "233549424f424ad400b67b828a59e52204ca1be8\n",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "git",
+        "remote",
+        "add",
+        "origin",
+        "/tmp/kctx-remote-bsrqftmq/git.git"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/a",
+      "duration_ns": 1720139,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "git",
+        "push",
+        "origin",
+        "HEAD:refs/heads/kctx-qualification-local-a"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/a",
+      "duration_ns": 16739570,
+      "returncode": 0,
+      "stderr": "To /tmp/kctx-remote-bsrqftmq/git.git\n * [new branch]      HEAD -> kctx-qualification-local-a\n",
+      "stdout": "",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "git",
+        "-c",
+        "safe.directory=/work/kctx",
+        "clone",
+        "--branch",
+        "kctx-qualification-local-a",
+        "/tmp/kctx-remote-bsrqftmq/git.git",
+        "/tmp/kctx-remote-bsrqftmq/local/b"
+      ],
+      "cwd": "/work/kctx",
+      "duration_ns": 13489931,
+      "returncode": 0,
+      "stderr": "Cloning into '/tmp/kctx-remote-bsrqftmq/local/b'...\ndone.\n",
+      "stdout": "",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "git",
+        "config",
+        "user.name",
+        "qualification"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/b",
+      "duration_ns": 1176402,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "git",
+        "config",
+        "user.email",
+        "qualification@invalid"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/b",
+      "duration_ns": 1472217,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "init",
+        "--name",
+        "kctx qualification",
+        "--email",
+        "qualification@invalid"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/dolt-a",
+      "duration_ns": 129270262,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "Successfully initialized dolt data repository.\n",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "sql",
+        "-q",
+        "CREATE TABLE qualification (id INT PRIMARY KEY, evidence TEXT); INSERT INTO qualification VALUES (1, 'historical')"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/dolt-a",
+      "duration_ns": 177081169,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "add",
+        "-A"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/dolt-a",
+      "duration_ns": 106077272,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "commit",
+        "--author",
+        "kctx qualification <qualification@invalid>",
+        "-m",
+        "qualification historical evidence"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/dolt-a",
+      "duration_ns": 117353641,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "\u001b[33mcommit q9iemrv4qggp0g88nigkh97dnoev509i \u001b[0m\u001b[33m(\u001b[0m\u001b[36;1mHEAD -> \u001b[0m\u001b[33m\u001b[92mmain\u001b[0m) \u001b[0m\nAuthor: kctx qualification <qualification@invalid>\nDate:  Sat Oct 31 08:13:42 +0000 2026\n\n\tqualification historical evidence\n\n",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "sql",
+        "-r",
+        "json",
+        "-q",
+        "SELECT hashof('HEAD') AS h"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/dolt-a",
+      "duration_ns": 103565504,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "{\"rows\": [{\"h\":\"q9iemrv4qggp0g88nigkh97dnoev509i\"}]}\n",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "branch",
+        "kctx-qualification-local-a"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/dolt-a",
+      "duration_ns": 131667815,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "checkout",
+        "kctx-qualification-local-a"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/dolt-a",
+      "duration_ns": 117044053,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "Switched to branch 'kctx-qualification-local-a'\n",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "remote",
+        "add",
+        "origin",
+        "file:///tmp/kctx-remote-bsrqftmq/dolt-remote"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/dolt-a",
+      "duration_ns": 106873120,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "push",
+        "-u",
+        "origin",
+        "kctx-qualification-local-a"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/dolt-a",
+      "duration_ns": 162867318,
+      "returncode": 0,
+      "stderr": "- Uploading...",
+      "stdout": "- Uploading...To file:///tmp/kctx-remote-bsrqftmq/dolt-remote\n * [new branch]          kctx-qualification-local-a -> kctx-qualification-local-a\nbranch 'kctx-qualification-local-a' set up to track 'origin/kctx-qualification-local-a'.\n",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "clone",
+        "--branch",
+        "kctx-qualification-local-a",
+        "file:///tmp/kctx-remote-bsrqftmq/dolt-remote",
+        "/tmp/kctx-remote-bsrqftmq/local/dolt-b"
+      ],
+      "cwd": "/work/kctx",
+      "duration_ns": 180048367,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "cloning file:///tmp/kctx-remote-bsrqftmq/dolt-remote\nRetrieving remote information.\n\u001b[1A\u001b[J0 of 9 chunks complete. 0 chunks being downloaded currently.\n\u001b[1A\u001b[J0 of 9 chunks complete. 2 chunks being downloaded currently.\n\u001b[1A\u001b[J0 of 9 chunks complete. 9 chunks being downloaded currently.\n\u001b[1A\u001b[J2 of 9 chunks complete. 7 chunks being downloaded currently.\n\u001b[1A\u001b[J9 of 9 chunks complete. 0 chunks being downloaded currently.\n\u001b[1A\u001b[J9 of 9 chunks complete.\n",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "sql",
+        "-r",
+        "json",
+        "-q",
+        "SELECT * FROM qualification AS OF 'q9iemrv4qggp0g88nigkh97dnoev509i' ORDER BY id"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/dolt-b",
+      "duration_ns": 146126746,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "{\"rows\": [{\"evidence\":\"historical\",\"id\":1}]}\n",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "checkout",
+        "-b",
+        "kctx-qualification-local-b"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/dolt-b",
+      "duration_ns": 134070228,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "Switched to branch 'kctx-qualification-local-b'\n",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "sql",
+        "-q",
+        "INSERT INTO qualification VALUES (2, 'client-b')"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/dolt-b",
+      "duration_ns": 115591886,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "add",
+        "-A"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/dolt-b",
+      "duration_ns": 115768254,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "commit",
+        "--author",
+        "kctx qualification <qualification@invalid>",
+        "-m",
+        "independent b"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/dolt-b",
+      "duration_ns": 116910890,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "\u001b[33mcommit o2dfms9hr4hk14fqhksvg9u2pljhvuf7 \u001b[0m\u001b[33m(\u001b[0m\u001b[36;1mHEAD -> \u001b[0m\u001b[33m\u001b[92mkctx-qualification-local-b\u001b[0m) \u001b[0m\nAuthor: kctx qualification <qualification@invalid>\nDate:  Sat Oct 31 08:13:43 +0000 2026\n\n\tindependent b\n\n",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "sql",
+        "-r",
+        "json",
+        "-q",
+        "SELECT hashof('HEAD') AS h"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/dolt-b",
+      "duration_ns": 101045107,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "{\"rows\": [{\"h\":\"o2dfms9hr4hk14fqhksvg9u2pljhvuf7\"}]}\n",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "sql",
+        "-q",
+        "INSERT INTO qualification VALUES (3, 'client-a')"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/dolt-a",
+      "duration_ns": 113842611,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "add",
+        "-A"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/dolt-a",
+      "duration_ns": 112429685,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "commit",
+        "--author",
+        "kctx qualification <qualification@invalid>",
+        "-m",
+        "independent a"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/dolt-a",
+      "duration_ns": 118483243,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "\u001b[33mcommit fqcfoofvui0aamruhlbp81iuse2t78g3 \u001b[0m\u001b[33m(\u001b[0m\u001b[36;1mHEAD -> \u001b[0m\u001b[33m\u001b[92mkctx-qualification-local-a\u001b[0m) \u001b[0m\nAuthor: kctx qualification <qualification@invalid>\nDate:  Sat Oct 31 08:13:44 +0000 2026\n\n\tindependent a\n\n",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "sql",
+        "-r",
+        "json",
+        "-q",
+        "SELECT hashof('HEAD') AS h"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/dolt-a",
+      "duration_ns": 105879089,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "{\"rows\": [{\"h\":\"fqcfoofvui0aamruhlbp81iuse2t78g3\"}]}\n",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "push",
+        "-u",
+        "origin",
+        "kctx-qualification-local-a"
+      ],
+      "concurrent": true,
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/dolt-a",
+      "returncode": 0,
+      "stderr": "- Uploading...\\ Uploading...",
+      "stdout": "- Uploading...To file:///tmp/kctx-remote-bsrqftmq/dolt-remote\n   q9iemrv4qggp0g88nigkh97dnoev509i..fqcfoofvui0aamruhlbp81iuse2t78g3  kctx-qualification-local-a -> kctx-qualification-local-a\nbranch 'kctx-qualification-local-a' set up to track 'origin/kctx-qualification-local-a'.\n"
+    },
+    {
+      "argv": [
+        "dolt",
+        "push",
+        "-u",
+        "origin",
+        "kctx-qualification-local-b"
+      ],
+      "concurrent": true,
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/dolt-b",
+      "returncode": 0,
+      "stderr": "- Uploading...",
+      "stdout": "- Uploading...To file:///tmp/kctx-remote-bsrqftmq/dolt-remote\n * [new branch]          kctx-qualification-local-b -> kctx-qualification-local-b\nbranch 'kctx-qualification-local-b' set up to track 'origin/kctx-qualification-local-b'.\n"
+    },
+    {
+      "argv": [
+        "dolt",
+        "clone",
+        "--branch",
+        "kctx-qualification-local-a",
+        "file:///tmp/kctx-remote-bsrqftmq/dolt-remote",
+        "/tmp/kctx-remote-bsrqftmq/local/fresh"
+      ],
+      "cwd": "/work/kctx",
+      "duration_ns": 207598543,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "cloning file:///tmp/kctx-remote-bsrqftmq/dolt-remote\nRetrieving remote information.\n\u001b[1A\u001b[J0 of 21 chunks complete. 0 chunks being downloaded currently.\n\u001b[1A\u001b[J0 of 21 chunks complete. 2 chunks being downloaded currently.\n\u001b[1A\u001b[J0 of 21 chunks complete. 6 chunks being downloaded currently.\n\u001b[1A\u001b[J0 of 21 chunks complete. 8 chunks being downloaded currently.\n\u001b[1A\u001b[J2 of 21 chunks complete. 6 chunks being downloaded currently.\n\u001b[1A\u001b[J2 of 21 chunks complete. 10 chunks being downloaded currently.\n\u001b[1A\u001b[J6 of 21 chunks complete. 6 chunks being downloaded currently.\n\u001b[1A\u001b[J8 of 21 chunks complete. 4 chunks being downloaded currently.\n\u001b[1A\u001b[J8 of 21 chunks complete. 11 chunks being downloaded currently.\n\u001b[1A\u001b[J8 of 21 chunks complete. 13 chunks being downloaded currently.\n\u001b[1A\u001b[J12 of 21 chunks complete. 9 chunks being downloaded currently.\n\u001b[1A\u001b[J14 of 21 chunks complete. 7 chunks being downloaded currently.\n\u001b[1A\u001b[J21 of 21 chunks complete. 0 chunks being downloaded currently.\n\u001b[1A\u001b[J21 of 21 chunks complete.\n",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "fetch",
+        "origin"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/fresh",
+      "duration_ns": 164824409,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "- Fetching...",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "sql",
+        "-r",
+        "json",
+        "-q",
+        "SELECT * FROM qualification AS OF 'fqcfoofvui0aamruhlbp81iuse2t78g3' ORDER BY id"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/fresh",
+      "duration_ns": 97957182,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "{\"rows\": [{\"evidence\":\"historical\",\"id\":1},{\"evidence\":\"client-a\",\"id\":3}]}\n",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "sql",
+        "-r",
+        "json",
+        "-q",
+        "SELECT * FROM qualification AS OF 'o2dfms9hr4hk14fqhksvg9u2pljhvuf7' ORDER BY id"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/fresh",
+      "duration_ns": 97938117,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "{\"rows\": [{\"evidence\":\"historical\",\"id\":1},{\"evidence\":\"client-b\",\"id\":2}]}\n",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "sql",
+        "-r",
+        "json",
+        "-q",
+        "SELECT * FROM qualification AS OF 'q9iemrv4qggp0g88nigkh97dnoev509i' ORDER BY id"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/fresh",
+      "duration_ns": 102129925,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "{\"rows\": [{\"evidence\":\"historical\",\"id\":1}]}\n",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "sql",
+        "-q",
+        "INSERT INTO qualification VALUES (4, 'uncommitted')"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/dolt-a",
+      "duration_ns": 116857589,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "sql",
+        "-r",
+        "json",
+        "-q",
+        "SELECT * FROM qualification AS OF 'fqcfoofvui0aamruhlbp81iuse2t78g3' ORDER BY id"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/dolt-a",
+      "duration_ns": 101743040,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "{\"rows\": [{\"evidence\":\"historical\",\"id\":1},{\"evidence\":\"client-a\",\"id\":3}]}\n",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "git",
+        "fetch",
+        "origin"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/b",
+      "duration_ns": 7245825,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "git",
+        "add",
+        "-A"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/a",
+      "duration_ns": 2143482,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "git",
+        "commit",
+        "-qm",
+        "advance published fixture"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/a",
+      "duration_ns": 4916909,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "git",
+        "rev-parse",
+        "HEAD"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/a",
+      "duration_ns": 1207113,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "814ebbfe497a1c115de06636e30ba13a325439ac\n",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "git",
+        "push",
+        "origin",
+        "HEAD:refs/heads/kctx-qualification-local-a"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/a",
+      "duration_ns": 15773701,
+      "returncode": 0,
+      "stderr": "To /tmp/kctx-remote-bsrqftmq/git.git\n   2335494..814ebbf  HEAD -> kctx-qualification-local-a\n",
+      "stdout": "",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "git",
+        "push",
+        "origin",
+        "233549424f424ad400b67b828a59e52204ca1be8:refs/heads/kctx-qualification-local-a"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/b",
+      "duration_ns": 3775162,
+      "returncode": 1,
+      "stderr": "To /tmp/kctx-remote-bsrqftmq/git.git\n ! [rejected]        233549424f424ad400b67b828a59e52204ca1be8 -> kctx-qualification-local-a (fetch first)\nerror: failed to push some refs to '/tmp/kctx-remote-bsrqftmq/git.git'\nhint: Updates were rejected because the remote contains work that you do not\nhint: have locally. This is usually caused by another repository pushing to\nhint: the same ref. If you want to integrate the remote changes, use\nhint: 'git pull' before pushing again.\nhint: See the 'Note about fast-forwards' in 'git push --help' for details.\n",
+      "stdout": "",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "git",
+        "show",
+        "233549424f424ad400b67b828a59e52204ca1be8:evidence.txt"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/b",
+      "duration_ns": 1410642,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "retained operational evidence v1\n",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "git",
+        "-c",
+        "safe.directory=/work/kctx",
+        "init",
+        "--bare",
+        "/tmp/kctx-remote-bsrqftmq/interrupt.git"
+      ],
+      "cwd": "/work/kctx",
+      "duration_ns": 6264808,
+      "returncode": 0,
+      "stderr": "hint: Using 'master' as the name for the initial branch. This default branch name\nhint: is subject to change. To configure the initial branch name to use in all\nhint: of your new repositories, which will suppress this warning, call:\nhint: \nhint: \tgit config --global init.defaultBranch <name>\nhint: \nhint: Names commonly chosen instead of 'master' are 'main', 'trunk' and\nhint: 'development'. The just-created branch can be renamed via this command:\nhint: \nhint: \tgit branch -m <name>\n",
+      "stdout": "Initialized empty Git repository in /tmp/kctx-remote-bsrqftmq/interrupt.git/\n",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "git",
+        "-c",
+        "safe.directory=/work/kctx",
+        "init",
+        "-q",
+        "--initial-branch=main",
+        "/tmp/kctx-remote-bsrqftmq/interrupt-client"
+      ],
+      "cwd": "/work/kctx",
+      "duration_ns": 6258304,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "git",
+        "config",
+        "user.name",
+        "kctx qualification"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/interrupt-client",
+      "duration_ns": 1344144,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "git",
+        "config",
+        "user.email",
+        "qualification@invalid"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/interrupt-client",
+      "duration_ns": 1236658,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "git",
+        "add",
+        "-A"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/interrupt-client",
+      "duration_ns": 1869538,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "git",
+        "commit",
+        "-qm",
+        "old"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/interrupt-client",
+      "duration_ns": 5870989,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "git",
+        "rev-parse",
+        "HEAD"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/interrupt-client",
+      "duration_ns": 1171048,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "0274f4c3d88108ec99785c2f5e45216a61c9c71d\n",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "git",
+        "push",
+        "/tmp/kctx-remote-bsrqftmq/interrupt.git",
+        "HEAD:refs/heads/main"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/interrupt-client",
+      "duration_ns": 14747897,
+      "returncode": 0,
+      "stderr": "To /tmp/kctx-remote-bsrqftmq/interrupt.git\n * [new branch]      HEAD -> main\n",
+      "stdout": "",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "git",
+        "add",
+        "-A"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/interrupt-client",
+      "duration_ns": 1991937,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "git",
+        "commit",
+        "-qm",
+        "new"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/interrupt-client",
+      "duration_ns": 4162415,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "git",
+        "rev-parse",
+        "HEAD"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/interrupt-client",
+      "duration_ns": 1135013,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "9cedb0f888ea266704a4c8ad4e1a487cd74512dd\n",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "git",
+        "push",
+        "/tmp/kctx-remote-bsrqftmq/interrupt.git",
+        "HEAD:refs/heads/main"
+      ],
+      "interruption": "SIGKILL process group after real pre-receive hook entry",
+      "returncode": -9,
+      "stderr": "",
+      "stdout": ""
+    },
+    {
+      "argv": [
+        "git",
+        "-c",
+        "safe.directory=/work/kctx",
+        "ls-remote",
+        "/tmp/kctx-remote-bsrqftmq/interrupt.git",
+        "refs/heads/main"
+      ],
+      "cwd": "/work/kctx",
+      "duration_ns": 3072288,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "0274f4c3d88108ec99785c2f5e45216a61c9c71d\trefs/heads/main\n",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "git",
+        "push",
+        "/tmp/kctx-remote-bsrqftmq/interrupt.git",
+        "HEAD:refs/heads/main"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/interrupt-client",
+      "duration_ns": 13520881,
+      "returncode": 0,
+      "stderr": "To /tmp/kctx-remote-bsrqftmq/interrupt.git\n   0274f4c..9cedb0f  HEAD -> main\n",
+      "stdout": "",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "git",
+        "-c",
+        "safe.directory=/work/kctx",
+        "ls-remote",
+        "/tmp/kctx-remote-bsrqftmq/interrupt.git",
+        "refs/heads/main"
+      ],
+      "cwd": "/work/kctx",
+      "duration_ns": 3425701,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "9cedb0f888ea266704a4c8ad4e1a487cd74512dd\trefs/heads/main\n",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "sql",
+        "-r",
+        "json",
+        "-q",
+        "SELECT hashof('HEAD') AS h"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/dolt-a",
+      "duration_ns": 104803520,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "{\"rows\": [{\"h\":\"fqcfoofvui0aamruhlbp81iuse2t78g3\"}]}\n",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "sql",
+        "-q",
+        "ALTER TABLE qualification MODIFY evidence LONGTEXT"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/dolt-a",
+      "duration_ns": 114728866,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "sql"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/dolt-a",
+      "duration_ns": 830415853,
+      "returncode": 0,
+      "stderr": "",
+      "stdin_bytes": 16777256,
+      "stdin_sha256": "08e2354e2212515e9669575c28d45e06a90c78352f8646348da1494210b39b6d",
+      "stdout": "",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "add",
+        "-A"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/dolt-a",
+      "duration_ns": 122108566,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "commit",
+        "--author",
+        "kctx qualification <qualification@invalid>",
+        "-m",
+        "large interrupted candidate"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/dolt-a",
+      "duration_ns": 127766749,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "\u001b[33mcommit oikscf4b6rgdp8j3uturdqbchkr5fdth \u001b[0m\u001b[33m(\u001b[0m\u001b[36;1mHEAD -> \u001b[0m\u001b[33m\u001b[92mkctx-qualification-local-a\u001b[0m) \u001b[0m\nAuthor: kctx qualification <qualification@invalid>\nDate:  Sat Oct 31 08:13:47 +0000 2026\n\n\tlarge interrupted candidate\n\n",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "sql",
+        "-r",
+        "json",
+        "-q",
+        "SELECT hashof('HEAD') AS h"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/dolt-a",
+      "duration_ns": 107012910,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "{\"rows\": [{\"h\":\"oikscf4b6rgdp8j3uturdqbchkr5fdth\"}]}\n",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "push",
+        "origin",
+        "kctx-qualification-local-a"
+      ],
+      "interruption": "SIGKILL native client 20ms after launch; transfer phase not asserted",
+      "returncode": -9,
+      "stderr": "",
+      "stdout": ""
+    },
+    {
+      "argv": [
+        "dolt",
+        "clone",
+        "--branch",
+        "kctx-qualification-local-a",
+        "file:///tmp/kctx-remote-bsrqftmq/dolt-remote",
+        "/tmp/kctx-remote-bsrqftmq/after-interruption"
+      ],
+      "cwd": "/work/kctx",
+      "duration_ns": 208864962,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "cloning file:///tmp/kctx-remote-bsrqftmq/dolt-remote\nRetrieving remote information.\n\u001b[1A\u001b[J0 of 21 chunks complete. 0 chunks being downloaded currently.\n\u001b[1A\u001b[J0 of 21 chunks complete. 2 chunks being downloaded currently.\n\u001b[1A\u001b[J0 of 21 chunks complete. 4 chunks being downloaded currently.\n\u001b[1A\u001b[J0 of 21 chunks complete. 8 chunks being downloaded currently.\n\u001b[1A\u001b[J2 of 21 chunks complete. 6 chunks being downloaded currently.\n\u001b[1A\u001b[J2 of 21 chunks complete. 10 chunks being downloaded currently.\n\u001b[1A\u001b[J4 of 21 chunks complete. 8 chunks being downloaded currently.\n\u001b[1A\u001b[J8 of 21 chunks complete. 4 chunks being downloaded currently.\n\u001b[1A\u001b[J8 of 21 chunks complete. 6 chunks being downloaded currently.\n\u001b[1A\u001b[J8 of 21 chunks complete. 13 chunks being downloaded currently.\n\u001b[1A\u001b[J12 of 21 chunks complete. 9 chunks being downloaded currently.\n\u001b[1A\u001b[J19 of 21 chunks complete. 2 chunks being downloaded currently.\n\u001b[1A\u001b[J21 of 21 chunks complete. 0 chunks being downloaded currently.\n\u001b[1A\u001b[J21 of 21 chunks complete.\n",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "sql",
+        "-r",
+        "json",
+        "-q",
+        "SELECT hashof('HEAD') AS h"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/after-interruption",
+      "duration_ns": 149992069,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "{\"rows\": [{\"h\":\"fqcfoofvui0aamruhlbp81iuse2t78g3\"}]}\n",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "sql",
+        "-r",
+        "json",
+        "-q",
+        "SELECT * FROM qualification AS OF 'fqcfoofvui0aamruhlbp81iuse2t78g3' ORDER BY id"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/after-interruption",
+      "duration_ns": 102274883,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "{\"rows\": [{\"evidence\":\"historical\",\"id\":1},{\"evidence\":\"client-a\",\"id\":3}]}\n",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "push",
+        "origin",
+        "kctx-qualification-local-a"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/local/dolt-a",
+      "duration_ns": 828609743,
+      "returncode": 0,
+      "stderr": "- Uploading...\\ Uploading...\\ Uploading...| Uploading...| Uploading.../ Uploading.../ Uploading...- Uploading...- Uploading...\\ Uploading...\\ Uploading...| Uploading...| Uploading.../ Uploading...",
+      "stdout": "- Uploading...To file:///tmp/kctx-remote-bsrqftmq/dolt-remote\n   fqcfoofvui0aamruhlbp81iuse2t78g3..oikscf4b6rgdp8j3uturdqbchkr5fdth  kctx-qualification-local-a -> kctx-qualification-local-a\n",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "fetch",
+        "origin"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/after-interruption",
+      "duration_ns": 401836944,
+      "returncode": 0,
+      "stderr": "- Fetching...\\ Fetching...\\ Fetching...| Fetching...| Fetching...",
+      "stdout": "- Fetching...",
+      "timeout_seconds": 120
+    },
+    {
+      "argv": [
+        "dolt",
+        "sql",
+        "-r",
+        "json",
+        "-q",
+        "SELECT LENGTH(evidence) AS n, SHA2(evidence,256) AS digest FROM qualification AS OF 'oikscf4b6rgdp8j3uturdqbchkr5fdth' WHERE id=5"
+      ],
+      "cwd": "/tmp/kctx-remote-bsrqftmq/after-interruption",
+      "duration_ns": 177112872,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "{\"rows\": [{\"digest\":\"a75abe1ca39a75e7f435b33dd98239b2600c8631f59121653baa9f96ef578f21\",\"n\":16777216}]}\n",
+      "timeout_seconds": 120
+    }
+  ],
+  "dolt": {
+    "path": "/usr/local/bin/dolt",
+    "sha256": "ea866d85a8d38fad303268589b56a4766e05e72c9869556c0da60a0f819726b2",
+    "version": "dolt version 2.6.1"
+  },
+  "enterprise": "not requested; local transport is not G13 enterprise qualification",
+  "executed_cases_passed": true,
+  "execution_checkout": "/work/kctx",
+  "finished_ns": 1793434428602230417,
+  "fixture_files": {
+    "evaluation-v1.json": "37110f972c6f49a9995ebd0f34393aba8465f8414f941f991fb61da40f7c2ff6",
+    "protocol-lock.json": "3eb4180873ca29ea0684cf2a3799ecb942017fedd540621d9ea02eb41c4b37ea",
+    "scenario-map.json": "28cb1f8982805177aa8ae9fe1c1323edf3b569dcac878787d6ee94b1b4e08324"
+  },
+  "gate_pass": false,
+  "git": {
+    "path": "/usr/bin/git",
+    "sha256": "eb54b535467e0975c1284d4c4d08eea779aeb248a5d34b02e2ee171382e22201",
+    "version": "git version 2.43.0"
+  },
+  "harness_files": {
+    ".dolt_repro.py": "618b0aed25864e9a7f573d59b110b43aeef86739fb7263a18dcda0775e243a96",
+    ".parity_repro.py": "37bebb5e96cfcfcc905a76b9e758a5d579186649d212a2a74748866d9516071f",
+    "check_contracts.py": "0e9b71b70417758d9cde3a7178947e14b2d3f3978d7afd942b0689be8cd68da9",
+    "check_type_contracts.py": "5cfec8ce333a43e116ca86ad370434b594932ee4903408edfdd2843dc49eaea3",
+    "conformance_check.py": "b1e4d0ff9d736d64e0f5b369e44bad3513f31e0642fe0a5ba0c53c9e2e041628",
+    "dolt_smoke.py": "f9b3f5f58a41cacc3c5126d2f2cfccf98c2a1282aa5005b91109df393167ebf3",
+    "evaluate_kctx.py": "55ddcd8d143c46c4d565a8132bc20391446044e7af8bf5482dc15d974ef9de8c",
+    "qualification_common.py": "e00e4dfcd0335dfb18f06c73b0dd19936b9caa2bdbe3bfcd4342d04db6f79cc1",
+    "qualification_knowledge.py": "aa06b99f7e5a52ecee66a6bf58e79b7ea42494e19321e6d32b487ac1bc1a0cc9",
+    "qualify_remote.py": "c89c1d54086a7ed45fea41766e1a59541151d714d78686f940b138fa29193df1",
+    "qualify_storage.py": "22a3c0c6640b8d05f7ba4a07d88a56c2e608c664e7b8df85f3ffbfe89b0fd6f8",
+    "run_tests.py": "06418df8bdd773b15a9bfe2c7ef76bba57279ca8b2fde0f19fb79068c7396153",
+    "runtime_smoke.py": "6400bb6c903fd3aa3c0c629a5e5811780cf57f6e580c8559368dc948df6cafa3",
+    "semantic_cases.py": "5e70844865e8bd5da388ceff093931aad954a2c796fd6e3d52af0496eb0adc5c",
+    "semantic_mutations.py": "604c54e3345900ffc84d90db13575fb9a8b8d53545b6ac37e4915d33470901b9"
+  },
+  "host": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "kind": "remote",
+  "python_version": "3.12.3",
+  "schema_version": 1,
+  "source_files": {
+    "kctx/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "kctx/__main__.py": "ba365945d364207bbd524092e65a824878c77a6f873682231fe74a3b809b43d8",
+    "kctx/adapters/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "kctx/adapters/dolt/__init__.py": "db6a1579c2874258e9b776bbe4908e3fa80fc3ab86ca96e70d88ba9298846721",
+    "kctx/adapters/dolt/knowledge.py": "88aae3a2198bc6b8371fb4aa86ba89ca320f1114687742515c44b561c0d2a176",
+    "kctx/adapters/dolt/native.py": "37d1aed4b59b2792ea45ffe04428e256f03ffef8ddc612efd14017d3d96b6366",
+    "kctx/adapters/dolt/read_session.py": "7d7bf580efa39a616be187c77e5f898c81f18def44df7dd06c58c0aff3bf4c68",
+    "kctx/adapters/files/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "kctx/adapters/files/knowledge.py": "0a83180467b7ce3471e553de02cc64719731a28814c4012e48afd1b283dffeec",
+    "kctx/adapters/files/mutations.py": "6b618ea42dffca60c4debd94ff9374387ce92060deb458fec19d7b4cbfaffa00",
+    "kctx/adapters/files/roots.py": "839427bded8bab946faa3e63cf0bce2ea6c398e9e319fda3bc86de23e08be0ee",
+    "kctx/adapters/files/storage.py": "0e5fdca1a1f5a81069cbc735a5b5823e8b9756c5d0e649ca1afae07ea674337d",
+    "kctx/adapters/git/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "kctx/adapters/git/citations.py": "dca7e94725d13874c316925876f06653ee778e823c67b36c7bd8b8b227f6656f",
+    "kctx/adapters/git/inspection.py": "40ddd9f55043e9fca76f6f46d0204dd6e1809c7d4a12ad72e753464c09c3e2d9",
+    "kctx/adapters/git/knowledge.py": "4876b9a57b9b468be9e66bb195fd41d2ba9c2d82d79e6fffa524092d1f5da2c1",
+    "kctx/citations/__init__.py": "79c9e7f2df6fdf0e2cd07e12588b3e6a79340742016a7b393ca7f26fbd5e4e42",
+    "kctx/citations/__main__.py": "d15c95e25d24673bd739e72c3ff5cd9d0d3b285ca200f22f1370a374a4cff217",
+    "kctx/citations/classification.py": "b4234573aa1b8b7a2d405b0449707b067cf4784dea5ad6bcf98b161f774c5a9b",
+    "kctx/citations/cli.py": "b2fd2756780b4ee4449ce0bccbe26233b695cdebe3894756bea07fb67e611c55",
+    "kctx/citations/code.py": "ea95e942c2074dc5a0422ebbe41adfa22ff2c615599168ff91edb434eaa0ea33",
+    "kctx/citations/construction.py": "2ba8600e04ca3990a4f8a30bf15e4fa653f5268eb4378a9e604767cbaac85250",
+    "kctx/citations/models.py": "4d980db4deb11a14517018f3c9b1a2ffd501d8e8dfc71b553dc01da14ba2b816",
+    "kctx/citations/records.py": "6719dc90f129e78734e99d38a66651a17ed69dd2aeb25b0a42d7fb3bfc989a96",
+    "kctx/citations/rendering.py": "75c0f2ef4df10fbcad7142aaf3a673b3fe4edfe87112ee0e289015df12bce0b3",
+    "kctx/citations/scan.py": "25fb9f5060f6386cc54d2d85ff3d2c24b1f89db7e8fc8b3ca9f1c38c79077894",
+    "kctx/citations/syntax.py": "ab2dc0b7483c71ab581baa29efd6f303a0be5b72e66d069ca041df417fa91f09",
+    "kctx/citations/time.py": "6d03c730c1a1da9447d20f7a3412fb144b0adc7e81dccc87d92c21d4063743eb",
+    "kctx/cli/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "kctx/cli/app.py": "bfec587934a9a3314d744db16ee9cc3af688763033a4b847395f591d5f687461",
+    "kctx/cli/arguments.py": "6cc4700ef43e9445688b7658c49b14a6d4834937d78d3bb04390ea53806cc337",
+    "kctx/cli/dispatch.py": "01c94138b553227b8226b9e2f76539476bb504f63a7c94183c88955062fdbc35",
+    "kctx/cli/incidents.py": "1b552462c1d865848bf3b9b38de24a403f65407e83dc29c7291c1e639256960f",
+    "kctx/cli/inventory.py": "a46fa7f9bd693ab9813bd8933cfd89f004fb65d7702d4d246be7c10efa5265c5",
+    "kctx/cli/knowledge.py": "5db2f75ee7a49500f1f73990c92bdbb8af3b5885557b2febec9c988c38783126",
+    "kctx/cli/proposals.py": "5f4b1e3d432566e1c34d2de486530c8ba3181e4e48d5aad92f49bdc400cfc6df",
+    "kctx/cli/registration.py": "03999b60f1c8755ee013198cff21129d4ad43d1f47f482fe08e4048b75138ae6",
+    "kctx/cli/rendering.py": "60110d3af3b410a94bd2f6d60c24321e33439d366b0da13f77fc754415a30767",
+    "kctx/cli/result.py": "54ed3c954d66558839b7ea5b7a8309ea7569f8fca5603cae9820719445c26979",
+    "kctx/cli/runs.py": "c6036b6c44727b39a537ff57dfaf9963ae3cf3873c8246c762606b7c6c9339c1",
+    "kctx/codecs/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "kctx/codecs/capture.py": "8a4a1dd10d006f2044ea637288b5ed81abc6d1e56e9b0fa8d736a7aa6dad9d45",
+    "kctx/codecs/documents.py": "76ce61bb203d64ffc80912e6037b8ebd7dfba2f18bb719f435d4916d30286a7d",
+    "kctx/codecs/frontmatter.py": "197bbcda3c34b4684de57a9559bfde398a43067230a7d934f9a455ade079a6ae",
+    "kctx/codecs/gates.py": "b0df5a1b6d640043f815724e2eaa21848ac711a0c135da97d2b73451ab01115e",
+    "kctx/codecs/proposals.py": "5925f6daa695859a7533e3454e83ec52e094234c3c380571721cd2c15689dd41",
+    "kctx/codecs/records.py": "2c89e2b1d324217633d53e085c46a0f36400f124a42e5e1dd202d224e1b1aa50",
+    "kctx/codecs/validation.py": "a4585cd24c5af13edffe8d4186baa62abf713b4b3579b888ede40410a3940eca",
+    "kctx/config.py": "f274f86a86818ce6af17474326f1d42d4061a0784b27819572d88f199b36a88b",
+    "kctx/domain/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "kctx/domain/capture.py": "9eb91f0d2d765e61c81e9b4e08f5ea97fdeb891dfd5ab87f39df948c7b5493c1",
+    "kctx/domain/corrections.py": "a112a160183da23112343bb51f1f52b6e12c9fba55971e750d67c7f5222fbcd9",
+    "kctx/domain/ids.py": "183ffac3a677855699ea3d45c65d36b68684ec7bf96a12f77a4917837f5b224b",
+    "kctx/domain/incidents.py": "d9779d37de83335bc50ceb10d04fe2c87a037004a3a4f47adcdb59631b5fd0cb",
+    "kctx/domain/json.py": "c4c466dba5fe1307ce566b218037afa800f01aee4593d509da51a758fdf18e24",
+    "kctx/domain/proposals.py": "72372da76c59154cb41625c04a810ba2b0e9bc86faf9fd2e417670c02def22eb",
+    "kctx/domain/records.py": "2113959dad118f7eaed7f43c9a50ac6ab177691be445c73595d252db4384db05",
+    "kctx/domain/targets.py": "de78c5274f8720a0164f9f6fe473ec7e038302f9b71aeb23f65213e8855cbcea",
+    "kctx/domain/time.py": "9859aa65447b3b79c1ee26398dca73cb14c1fea6fc8a533caf2612c35e5fe6a8",
+    "kctx/domain/vocabulary.py": "135f21ba4858f467b89db714f0dc87747689f6ca14e985def7bc5c891fac48c6",
+    "kctx/errors.py": "ff5930430a0bbfe2cbc78d13883af28a1daccba008ef6d07a3cf74c5a851f1ed",
+    "kctx/graph/__init__.py": "7281776deffb40c44f17c98c36414340b57aff7d6f14663f94540f7a058cd438",
+    "kctx/graph/cli_graph.py": "a3dea6a0c22065efb99d6c62351a9540ecaf5dd7f5bd812a48bb3a6978a3a1c9",
+    "kctx/graph/dolt_store.py": "297075d118b71257caa2e005ac2def23325567f378283f53b164c211eb25b375",
+    "kctx/graph/extract.py": "fe5f662c6e18208f113b666dbbb04b2b552130dbb46247cea8971112876de6cf",
+    "kctx/graph/generation.py": "1ae5f0fbf7d5d4efb63a647e05ed0c2356543338f9d771fe9155de9218bfb597",
+    "kctx/graph/identity.py": "e56a98be732a1d5743cea6dac465f994636bde769aab93c1be309690dbd3fcf5",
+    "kctx/graph/inputs.py": "18dc1829be8db64f896c1d4111a0d5168dbb6df1cfbf5a9da756837e2500662c",
+    "kctx/graph/models.py": "719879ab74bf7aece52747f56edd5cff0f536a0c82078fd1c914a8be93454ac9",
+    "kctx/graph/operations.py": "5838018a1e0823122a62cb03d4aa88a5923c88131c673608f787e38c1901a0ba",
+    "kctx/graph/parity.py": "203d543987b56e2601cc8ec940fd0baba0706c5adca196e9d297961333a362f4",
+    "kctx/graph/queries.py": "4bf48bbe3d44e80cf670e6b26154e0e0d4367818dd01f514c8af21d64cf5603d",
+    "kctx/graph/query_session.py": "025d882dd0dd5fdbf54ffa6cb7b05cd1a4e4ee9e2265f383aee169a76fb3c3c3",
+    "kctx/graph/quoting.py": "89ce409503d75d5d0ccd94c29151def6ae4f9152cbf45bd6bd01d61cedaccaa2",
+    "kctx/graph/render.py": "e7149c17ef1fa7d5f9cd4f6fdf4b416533ed2fe5b55277bed1a18132dc15a3f1",
+    "kctx/graph/source_tokens.py": "229e9cac1d9013ec67d8d2234afb852239bae9e64c5e5625fae27fa3e4efbe74",
+    "kctx/graph/sync.py": "b386a4a2575734248b3a1f0e3f02f74608e6025d99fbf4072bf4ffef2deea3e7",
+    "kctx/observability.py": "9bd3660347785b4c2dc39d386a0251811812b73592c73ec281a71b67fde9863a",
+    "kctx/semantics/__init__.py": "17f4a0169828ddc2958dd896e55cd14d357aada288e4156d7df6ab107b7d74e6",
+    "kctx/semantics/checker.py": "86d9d15b037cad3db0b9b747f49a97a5601a359cac4c9ea9bf5b965302274f20",
+    "kctx/semantics/model.py": "a8a3963cb7b5f9891b16441b2609033a9fc715109505ea991e1eee7f5c58ef0d",
+    "kctx/semantics/time.py": "eea9776469088e289be1c7536107d3a9822d418bfff5c45fbcc752cb4346669e",
+    "kctx/semantics/wellformed.py": "0557bbef62a0e52c201a5b8c2e5d8b521c7d660164cd2fd9d1d0dae6643c7a93",
+    "kctx/semantics/wire.py": "f86dfd16b370ad5759ac83670e716060f0f7cdede71813a7ee9dc66211a9310c",
+    "kctx/semantics/workflow.py": "b2c856b63e5cf99be4818d4528f33ba0a8bc846d65636f1e96c8d9ed5980bf2d",
+    "kctx/services/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "kctx/services/admission_changes.py": "c04d2337e87499049fa3067a23a50b3881b1d70cf7169274dc361344cbb57dcc",
+    "kctx/services/admission_judgments.py": "01ce6ac8c433392a1216044db4d8719d2ab1734256747df9829c17e6ad1a650e",
+    "kctx/services/admission_state.py": "99d17d826302b15a0a201e3094e890b180787dba8d3390a4361f607491ebe86f",
+    "kctx/services/admit.py": "656523f16109e7ecb6a85f7317ca736416797d67d69b522e9c77f7e8136aa2ee",
+    "kctx/services/backlinks.py": "e079920a05bcfd62e91b1e7ef25b46c3ade5d87317f81fee7c80175e0d22afa4",
+    "kctx/services/citation_refresh.py": "3cd9e13dc81bde11b5f41778d00c02b888bb5db6b6ea94abd72c1b1e911a8d6d",
+    "kctx/services/context.py": "05ad583767e1fb86c24879832832871e7f411a7c662d3f4cb67ecda04da82d8d",
+    "kctx/services/corrections.py": "150d741a545f7c055c91b803a31b3880a5b54163e631faaebdc1ab773f681ac9",
+    "kctx/services/discovery.py": "b04f68c0aa6f25e911cd53370fb43bfb047b3260ccc7f0ec152473f7fd4c72de",
+    "kctx/services/dossiers.py": "f06979a161829f1cab0637763d84854ba5347a65eee3a5e342629865728d2c34",
+    "kctx/services/freshness.py": "1da4662a046d80f07fb04efca4d4b51ff819a7da66ffd2698102a4dd812145f8",
+    "kctx/services/gates.py": "af5bd2d79ada7d6e65ef5fb51004731ed88d6de7a396342ab5035923727935f5",
+    "kctx/services/inventory.py": "ed62165991f3b7f30fb0d8ba850c0cf5a21a9fc715a0a2373447238141915a03",
+    "kctx/services/investigations.py": "3b65eebe8cac226113fb0d2a8544c95e088542560d4afccc359d1dc5de2b95a8",
+    "kctx/services/knowledge.py": "56e06c06eaa09c96df9a0ae01b0c0324c10226193dc258a8426409fb440af1d6",
+    "kctx/services/knowledge_migration.py": "4e0ccbeac647d94b01d441a5e73eb6ef9bcc00bdb85d5e42f39279d5d2dbf976",
+    "kctx/services/knowledge_models.py": "c3662cb307e851a6ab38c83f95affdfa4b92710b6b733c4c3fc2afc3c026e138",
+    "kctx/services/ktlo.py": "468b12538a4e48b3a67673363f4c5901ee3cb206373151bd9c94a5a48ccb8ddc",
+    "kctx/services/proposal_mutation.py": "9aa5cc98b51e286a5907c3579915b32756bfb0245b1db15388315e8086616f3d",
+    "kctx/services/proposal_targets.py": "d459c2b79742b73df1806fa3e87be773bcef0fd18f20e1a09a098e70d70ca38a",
+    "kctx/services/proposals.py": "fe993ab556254313d86faaba141a84218575dfa1cc90accb7b741367b3bf99fe",
+    "kctx/services/run_inputs.py": "2e020adb2c5225df3ccbc1899362d53d324671ddc819aaf8594998adc9598cec",
+    "kctx/services/run_provenance.py": "e04cfed112301ee185aa6a64f44b19e82cedbc1e87adceaa0ebe527c35e72bcb",
+    "kctx/services/runs.py": "fe34f2af2107de9ba6d865c542c5e68b80429068612eab4dd6b4946f3d24de5a",
+    "kctx/services/signatures.py": "2dabf6774661108663f364dd53a8183c7342ba8106366d77699942b1cf927269",
+    "kctx/services/validate.py": "26217bdd4bc95c7db3415a7dae444e03e960ce8e9fade13e437e6dd7b627f007",
+    "kctx/services/validation_common.py": "bda74d31492f4daf27f979984ad7d6e35cf858d46905bd1d13f20733f35e9ed2",
+    "kctx/services/validation_corrections.py": "a12921cf5079474d38a813218229cdd5c350569666a08aa7ed0a82baf47d555f",
+    "kctx/services/validation_documents.py": "f858be0e2ff32760f46e6af3079110de7a92ef8a13d32259285f5b3e1b4e3021",
+    "kctx/services/validation_incidents.py": "6cc6c58c04c2920e8ea5733e87f20a3cef3163130a29ff77e35a2c83991a9dd1",
+    "kctx/services/validation_inventory.py": "828b78bc865de2ca583f42d7e79f666960ea99c1c92052c2c36b263e1b831b60",
+    "kctx/services/validation_proposals.py": "a8f96471831186efccbdeccb960daa7148decf8097cdbabf388afc690a284ce8"
+  },
+  "source_files_final": {
+    "kctx/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "kctx/__main__.py": "ba365945d364207bbd524092e65a824878c77a6f873682231fe74a3b809b43d8",
+    "kctx/adapters/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "kctx/adapters/dolt/__init__.py": "db6a1579c2874258e9b776bbe4908e3fa80fc3ab86ca96e70d88ba9298846721",
+    "kctx/adapters/dolt/knowledge.py": "88aae3a2198bc6b8371fb4aa86ba89ca320f1114687742515c44b561c0d2a176",
+    "kctx/adapters/dolt/native.py": "37d1aed4b59b2792ea45ffe04428e256f03ffef8ddc612efd14017d3d96b6366",
+    "kctx/adapters/dolt/read_session.py": "7d7bf580efa39a616be187c77e5f898c81f18def44df7dd06c58c0aff3bf4c68",
+    "kctx/adapters/files/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "kctx/adapters/files/knowledge.py": "0a83180467b7ce3471e553de02cc64719731a28814c4012e48afd1b283dffeec",
+    "kctx/adapters/files/mutations.py": "6b618ea42dffca60c4debd94ff9374387ce92060deb458fec19d7b4cbfaffa00",
+    "kctx/adapters/files/roots.py": "839427bded8bab946faa3e63cf0bce2ea6c398e9e319fda3bc86de23e08be0ee",
+    "kctx/adapters/files/storage.py": "0e5fdca1a1f5a81069cbc735a5b5823e8b9756c5d0e649ca1afae07ea674337d",
+    "kctx/adapters/git/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "kctx/adapters/git/citations.py": "dca7e94725d13874c316925876f06653ee778e823c67b36c7bd8b8b227f6656f",
+    "kctx/adapters/git/inspection.py": "40ddd9f55043e9fca76f6f46d0204dd6e1809c7d4a12ad72e753464c09c3e2d9",
+    "kctx/adapters/git/knowledge.py": "4876b9a57b9b468be9e66bb195fd41d2ba9c2d82d79e6fffa524092d1f5da2c1",
+    "kctx/citations/__init__.py": "79c9e7f2df6fdf0e2cd07e12588b3e6a79340742016a7b393ca7f26fbd5e4e42",
+    "kctx/citations/__main__.py": "d15c95e25d24673bd739e72c3ff5cd9d0d3b285ca200f22f1370a374a4cff217",
+    "kctx/citations/classification.py": "b4234573aa1b8b7a2d405b0449707b067cf4784dea5ad6bcf98b161f774c5a9b",
+    "kctx/citations/cli.py": "b2fd2756780b4ee4449ce0bccbe26233b695cdebe3894756bea07fb67e611c55",
+    "kctx/citations/code.py": "ea95e942c2074dc5a0422ebbe41adfa22ff2c615599168ff91edb434eaa0ea33",
+    "kctx/citations/construction.py": "2ba8600e04ca3990a4f8a30bf15e4fa653f5268eb4378a9e604767cbaac85250",
+    "kctx/citations/models.py": "4d980db4deb11a14517018f3c9b1a2ffd501d8e8dfc71b553dc01da14ba2b816",
+    "kctx/citations/records.py": "6719dc90f129e78734e99d38a66651a17ed69dd2aeb25b0a42d7fb3bfc989a96",
+    "kctx/citations/rendering.py": "75c0f2ef4df10fbcad7142aaf3a673b3fe4edfe87112ee0e289015df12bce0b3",
+    "kctx/citations/scan.py": "25fb9f5060f6386cc54d2d85ff3d2c24b1f89db7e8fc8b3ca9f1c38c79077894",
+    "kctx/citations/syntax.py": "ab2dc0b7483c71ab581baa29efd6f303a0be5b72e66d069ca041df417fa91f09",
+    "kctx/citations/time.py": "6d03c730c1a1da9447d20f7a3412fb144b0adc7e81dccc87d92c21d4063743eb",
+    "kctx/cli/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "kctx/cli/app.py": "bfec587934a9a3314d744db16ee9cc3af688763033a4b847395f591d5f687461",
+    "kctx/cli/arguments.py": "6cc4700ef43e9445688b7658c49b14a6d4834937d78d3bb04390ea53806cc337",
+    "kctx/cli/dispatch.py": "01c94138b553227b8226b9e2f76539476bb504f63a7c94183c88955062fdbc35",
+    "kctx/cli/incidents.py": "1b552462c1d865848bf3b9b38de24a403f65407e83dc29c7291c1e639256960f",
+    "kctx/cli/inventory.py": "a46fa7f9bd693ab9813bd8933cfd89f004fb65d7702d4d246be7c10efa5265c5",
+    "kctx/cli/knowledge.py": "5db2f75ee7a49500f1f73990c92bdbb8af3b5885557b2febec9c988c38783126",
+    "kctx/cli/proposals.py": "5f4b1e3d432566e1c34d2de486530c8ba3181e4e48d5aad92f49bdc400cfc6df",
+    "kctx/cli/registration.py": "03999b60f1c8755ee013198cff21129d4ad43d1f47f482fe08e4048b75138ae6",
+    "kctx/cli/rendering.py": "60110d3af3b410a94bd2f6d60c24321e33439d366b0da13f77fc754415a30767",
+    "kctx/cli/result.py": "54ed3c954d66558839b7ea5b7a8309ea7569f8fca5603cae9820719445c26979",
+    "kctx/cli/runs.py": "c6036b6c44727b39a537ff57dfaf9963ae3cf3873c8246c762606b7c6c9339c1",
+    "kctx/codecs/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "kctx/codecs/capture.py": "8a4a1dd10d006f2044ea637288b5ed81abc6d1e56e9b0fa8d736a7aa6dad9d45",
+    "kctx/codecs/documents.py": "76ce61bb203d64ffc80912e6037b8ebd7dfba2f18bb719f435d4916d30286a7d",
+    "kctx/codecs/frontmatter.py": "197bbcda3c34b4684de57a9559bfde398a43067230a7d934f9a455ade079a6ae",
+    "kctx/codecs/gates.py": "b0df5a1b6d640043f815724e2eaa21848ac711a0c135da97d2b73451ab01115e",
+    "kctx/codecs/proposals.py": "5925f6daa695859a7533e3454e83ec52e094234c3c380571721cd2c15689dd41",
+    "kctx/codecs/records.py": "2c89e2b1d324217633d53e085c46a0f36400f124a42e5e1dd202d224e1b1aa50",
+    "kctx/codecs/validation.py": "a4585cd24c5af13edffe8d4186baa62abf713b4b3579b888ede40410a3940eca",
+    "kctx/config.py": "f274f86a86818ce6af17474326f1d42d4061a0784b27819572d88f199b36a88b",
+    "kctx/domain/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "kctx/domain/capture.py": "9eb91f0d2d765e61c81e9b4e08f5ea97fdeb891dfd5ab87f39df948c7b5493c1",
+    "kctx/domain/corrections.py": "a112a160183da23112343bb51f1f52b6e12c9fba55971e750d67c7f5222fbcd9",
+    "kctx/domain/ids.py": "183ffac3a677855699ea3d45c65d36b68684ec7bf96a12f77a4917837f5b224b",
+    "kctx/domain/incidents.py": "d9779d37de83335bc50ceb10d04fe2c87a037004a3a4f47adcdb59631b5fd0cb",
+    "kctx/domain/json.py": "c4c466dba5fe1307ce566b218037afa800f01aee4593d509da51a758fdf18e24",
+    "kctx/domain/proposals.py": "72372da76c59154cb41625c04a810ba2b0e9bc86faf9fd2e417670c02def22eb",
+    "kctx/domain/records.py": "2113959dad118f7eaed7f43c9a50ac6ab177691be445c73595d252db4384db05",
+    "kctx/domain/targets.py": "de78c5274f8720a0164f9f6fe473ec7e038302f9b71aeb23f65213e8855cbcea",
+    "kctx/domain/time.py": "9859aa65447b3b79c1ee26398dca73cb14c1fea6fc8a533caf2612c35e5fe6a8",
+    "kctx/domain/vocabulary.py": "135f21ba4858f467b89db714f0dc87747689f6ca14e985def7bc5c891fac48c6",
+    "kctx/errors.py": "ff5930430a0bbfe2cbc78d13883af28a1daccba008ef6d07a3cf74c5a851f1ed",
+    "kctx/graph/__init__.py": "7281776deffb40c44f17c98c36414340b57aff7d6f14663f94540f7a058cd438",
+    "kctx/graph/cli_graph.py": "a3dea6a0c22065efb99d6c62351a9540ecaf5dd7f5bd812a48bb3a6978a3a1c9",
+    "kctx/graph/dolt_store.py": "297075d118b71257caa2e005ac2def23325567f378283f53b164c211eb25b375",
+    "kctx/graph/extract.py": "fe5f662c6e18208f113b666dbbb04b2b552130dbb46247cea8971112876de6cf",
+    "kctx/graph/generation.py": "1ae5f0fbf7d5d4efb63a647e05ed0c2356543338f9d771fe9155de9218bfb597",
+    "kctx/graph/identity.py": "e56a98be732a1d5743cea6dac465f994636bde769aab93c1be309690dbd3fcf5",
+    "kctx/graph/inputs.py": "18dc1829be8db64f896c1d4111a0d5168dbb6df1cfbf5a9da756837e2500662c",
+    "kctx/graph/models.py": "719879ab74bf7aece52747f56edd5cff0f536a0c82078fd1c914a8be93454ac9",
+    "kctx/graph/operations.py": "5838018a1e0823122a62cb03d4aa88a5923c88131c673608f787e38c1901a0ba",
+    "kctx/graph/parity.py": "203d543987b56e2601cc8ec940fd0baba0706c5adca196e9d297961333a362f4",
+    "kctx/graph/queries.py": "4bf48bbe3d44e80cf670e6b26154e0e0d4367818dd01f514c8af21d64cf5603d",
+    "kctx/graph/query_session.py": "025d882dd0dd5fdbf54ffa6cb7b05cd1a4e4ee9e2265f383aee169a76fb3c3c3",
+    "kctx/graph/quoting.py": "89ce409503d75d5d0ccd94c29151def6ae4f9152cbf45bd6bd01d61cedaccaa2",
+    "kctx/graph/render.py": "e7149c17ef1fa7d5f9cd4f6fdf4b416533ed2fe5b55277bed1a18132dc15a3f1",
+    "kctx/graph/source_tokens.py": "229e9cac1d9013ec67d8d2234afb852239bae9e64c5e5625fae27fa3e4efbe74",
+    "kctx/graph/sync.py": "b386a4a2575734248b3a1f0e3f02f74608e6025d99fbf4072bf4ffef2deea3e7",
+    "kctx/observability.py": "9bd3660347785b4c2dc39d386a0251811812b73592c73ec281a71b67fde9863a",
+    "kctx/semantics/__init__.py": "17f4a0169828ddc2958dd896e55cd14d357aada288e4156d7df6ab107b7d74e6",
+    "kctx/semantics/checker.py": "86d9d15b037cad3db0b9b747f49a97a5601a359cac4c9ea9bf5b965302274f20",
+    "kctx/semantics/model.py": "a8a3963cb7b5f9891b16441b2609033a9fc715109505ea991e1eee7f5c58ef0d",
+    "kctx/semantics/time.py": "eea9776469088e289be1c7536107d3a9822d418bfff5c45fbcc752cb4346669e",
+    "kctx/semantics/wellformed.py": "0557bbef62a0e52c201a5b8c2e5d8b521c7d660164cd2fd9d1d0dae6643c7a93",
+    "kctx/semantics/wire.py": "f86dfd16b370ad5759ac83670e716060f0f7cdede71813a7ee9dc66211a9310c",
+    "kctx/semantics/workflow.py": "b2c856b63e5cf99be4818d4528f33ba0a8bc846d65636f1e96c8d9ed5980bf2d",
+    "kctx/services/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "kctx/services/admission_changes.py": "c04d2337e87499049fa3067a23a50b3881b1d70cf7169274dc361344cbb57dcc",
+    "kctx/services/admission_judgments.py": "01ce6ac8c433392a1216044db4d8719d2ab1734256747df9829c17e6ad1a650e",
+    "kctx/services/admission_state.py": "99d17d826302b15a0a201e3094e890b180787dba8d3390a4361f607491ebe86f",
+    "kctx/services/admit.py": "656523f16109e7ecb6a85f7317ca736416797d67d69b522e9c77f7e8136aa2ee",
+    "kctx/services/backlinks.py": "e079920a05bcfd62e91b1e7ef25b46c3ade5d87317f81fee7c80175e0d22afa4",
+    "kctx/services/citation_refresh.py": "3cd9e13dc81bde11b5f41778d00c02b888bb5db6b6ea94abd72c1b1e911a8d6d",
+    "kctx/services/context.py": "05ad583767e1fb86c24879832832871e7f411a7c662d3f4cb67ecda04da82d8d",
+    "kctx/services/corrections.py": "150d741a545f7c055c91b803a31b3880a5b54163e631faaebdc1ab773f681ac9",
+    "kctx/services/discovery.py": "b04f68c0aa6f25e911cd53370fb43bfb047b3260ccc7f0ec152473f7fd4c72de",
+    "kctx/services/dossiers.py": "f06979a161829f1cab0637763d84854ba5347a65eee3a5e342629865728d2c34",
+    "kctx/services/freshness.py": "1da4662a046d80f07fb04efca4d4b51ff819a7da66ffd2698102a4dd812145f8",
+    "kctx/services/gates.py": "af5bd2d79ada7d6e65ef5fb51004731ed88d6de7a396342ab5035923727935f5",
+    "kctx/services/inventory.py": "ed62165991f3b7f30fb0d8ba850c0cf5a21a9fc715a0a2373447238141915a03",
+    "kctx/services/investigations.py": "3b65eebe8cac226113fb0d2a8544c95e088542560d4afccc359d1dc5de2b95a8",
+    "kctx/services/knowledge.py": "56e06c06eaa09c96df9a0ae01b0c0324c10226193dc258a8426409fb440af1d6",
+    "kctx/services/knowledge_migration.py": "4e0ccbeac647d94b01d441a5e73eb6ef9bcc00bdb85d5e42f39279d5d2dbf976",
+    "kctx/services/knowledge_models.py": "c3662cb307e851a6ab38c83f95affdfa4b92710b6b733c4c3fc2afc3c026e138",
+    "kctx/services/ktlo.py": "468b12538a4e48b3a67673363f4c5901ee3cb206373151bd9c94a5a48ccb8ddc",
+    "kctx/services/proposal_mutation.py": "9aa5cc98b51e286a5907c3579915b32756bfb0245b1db15388315e8086616f3d",
+    "kctx/services/proposal_targets.py": "d459c2b79742b73df1806fa3e87be773bcef0fd18f20e1a09a098e70d70ca38a",
+    "kctx/services/proposals.py": "fe993ab556254313d86faaba141a84218575dfa1cc90accb7b741367b3bf99fe",
+    "kctx/services/run_inputs.py": "2e020adb2c5225df3ccbc1899362d53d324671ddc819aaf8594998adc9598cec",
+    "kctx/services/run_provenance.py": "e04cfed112301ee185aa6a64f44b19e82cedbc1e87adceaa0ebe527c35e72bcb",
+    "kctx/services/runs.py": "fe34f2af2107de9ba6d865c542c5e68b80429068612eab4dd6b4946f3d24de5a",
+    "kctx/services/signatures.py": "2dabf6774661108663f364dd53a8183c7342ba8106366d77699942b1cf927269",
+    "kctx/services/validate.py": "26217bdd4bc95c7db3415a7dae444e03e960ce8e9fade13e437e6dd7b627f007",
+    "kctx/services/validation_common.py": "bda74d31492f4daf27f979984ad7d6e35cf858d46905bd1d13f20733f35e9ed2",
+    "kctx/services/validation_corrections.py": "a12921cf5079474d38a813218229cdd5c350569666a08aa7ed0a82baf47d555f",
+    "kctx/services/validation_documents.py": "f858be0e2ff32760f46e6af3079110de7a92ef8a13d32259285f5b3e1b4e3021",
+    "kctx/services/validation_incidents.py": "6cc6c58c04c2920e8ea5733e87f20a3cef3163130a29ff77e35a2c83991a9dd1",
+    "kctx/services/validation_inventory.py": "828b78bc865de2ca583f42d7e79f666960ea99c1c92052c2c36b263e1b831b60",
+    "kctx/services/validation_proposals.py": "a8f96471831186efccbdeccb960daa7148decf8097cdbabf388afc690a284ce8"
+  },
+  "source_snapshot_manifest": null,
+  "source_stable_during_run": true,
+  "started_ns": 1793434420776924147,
+  "test_files": {
+    "_base.py": "5030df3b6e09105453d1b1144959b4a7e01abec468b45b3eee3c49f9dd5f90bf",
+    "_config_state.py": "eefa9f8f09ff0d023c1b52a92e87bef4c3bde1e356d7412688dcbd73baa96550",
+    "conformance/cases.jsonl": "0a4955c3738942607469374f4bc805afc2080f68cfb1c39646b6a16b65342cad",
+    "semantics/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "semantics/examples.py": "471758a3d412b92e31e527322bfbd602b6b474cf32d12facba63416226189def",
+    "semantics/test_conformance_runner.py": "013aa1e4388563aa71adf2734d3d972aed7d61f972997da615cb11c3e1dee1c1",
+    "semantics/test_core.py": "57fceb179fe26e56beb11b99ef5170e610161d2bf62da96ae38c4e6b38f2d8cd",
+    "test_admit.py": "f3fb142b7359f2d057dd89568255011f8ad82e736df5bda939feca810fe50653",
+    "test_citation_rendering.py": "ca3f609baf99af10a4855f445b3d8a22e3b1214ae52ccab51fa4484ee1b58069",
+    "test_citation_scan.py": "d254e4f7dc3462844db68988578025643a0e595af08d1c3e7f8455dbc83b3866",
+    "test_citation_sources.py": "07091f25cffa241f60d653e04c1c8b004ebcd6457d63b8f1f18bee1c0e7e2a03",
+    "test_citation_syntax.py": "ae1e9745c1d5d08b4c08ad713d0d7a7bc9058f5328576c57446ed2e7432a76ce",
+    "test_cli_commands.py": "a5a7d110d2897cac4187cde20755fa06b26ec0288b320b66fb1890caa88219cb",
+    "test_config.py": "0874f0ceaf74a2a7b890b7c4335cc29e5e1f89fff5e67dd14f84e54d4b5191c3",
+    "test_corrections.py": "d345530b149983389f0128d3bf04c37a4797e008134ef7217572f264b2c9f985",
+    "test_documents.py": "c5c73d2a23e25cfb655f92485d0c3bf971bf7bedb156bd937ec9cbff5674994a",
+    "test_dolt_read_session.py": "7258c68089b155ef3272177fa64fa303043d27e3c727345c84214d7d308a81ba",
+    "test_domain_ids.py": "08fbbaaabc929ba3973a40b748e2c81a0396e068f225e94f26297b0fc507d240",
+    "test_domain_targets.py": "316edbe07b23ae530a64223abfc81d2a739341985177445da8c93f5571c43d94",
+    "test_dossiers.py": "06760c054ef28ebaca14a3c94b73af4ced91bc322ab8d7fc12619ccbac4f7117",
+    "test_gates.py": "26475a3abfe63939c483059b98e92131a4c980766717598d6ffa919f9b451842",
+    "test_gates_rev.py": "595599b4185699e9654c36c4a12cb53ddddadad0c878552dfc42edf24fd17eff",
+    "test_graph_dolt_store.py": "a3c50ff3a08562bab82400ff4b8b75312874329bfc96d02d1b7aa734a444d671",
+    "test_graph_extract.py": "55eb1d506c381d0f66a58d705affb4ebf22381863f6b02b3dc5f6c8e12b59bbc",
+    "test_graph_identity.py": "5c470bfdfaac59912755690df83fcd21284d9322f26d5797c4b858ac4a79c965",
+    "test_graph_inputs.py": "2c68422128756693244ddd74cb19607ca9259c46aec92f326773e3ad47471fc4",
+    "test_graph_integration.py": "b531d3885422d25a63068736c9593856766ff070d8e1515289e91acd73105764",
+    "test_graph_models.py": "221992c9a6860cd99bda03afae4ecf016fc5d74845a3c4669512072d2df79bf8",
+    "test_graph_parity.py": "ebf78008871c8abbf875bbf13b5f6ae42b3822cd33b7b10790e77b1453f9dd49",
+    "test_graph_query_session.py": "a834bbf759c216283d748b042fc4b6b95357471c71e1fa4040a147c515e66b74",
+    "test_graph_quoting.py": "e6ee1e2f410091caa3fa0a6c90971255c6cc33f43f763bd97068487baeaf5e5c",
+    "test_graph_recovery.py": "c818f9bf12f5da84eaa5d0ce73d70498d5b79f95b5192404ec657dc4d3dc95e8",
+    "test_graph_render.py": "d48309ec4e0a4ff15a44d75d882ec99d9a3b2fbd4ca3ee2aec8f43118e50e342",
+    "test_inventory.py": "f3b54c0bc9e2dc3fdf533e8e59772552018397eba8e4748f0a2ec2e6f67d2e7e",
+    "test_investigations.py": "5c87322c79b701d17e43f651a1124fbb49de7023d18b715ca66f74807fb4a765",
+    "test_knowledge.py": "8c1d6bb5d9aaa6a16bd3848e090f33d0c18a35d2e861ef6fdb0b6c015d105632",
+    "test_ktlo.py": "17e650312b371b2e884e254f7d216f4a0eb2a09f2aae2cd9c1e830fd4abf1d79",
+    "test_nav.py": "f8465a52a77916c8825e0f281ef3deaf1d88271af2f7ccc349a3af6e9f51a778",
+    "test_observation_quality.py": "7a7b62d9a05ec447444cc01dca728800b64e5ff69bd1d6f821a9fd992172a76b",
+    "test_proposal_boundaries.py": "b27c61ff7b071a9649306cd3b6f80f6ac294f8c4d9384f11e5f1a2116d4ba4b8",
+    "test_proposal_targets.py": "66379066786fa1aeb06dd5505a88e218fe12fd53a6f8043416fff7792addfd0a",
+    "test_proposals.py": "f8ed0f329aa2c78cd18123fc6fa90fc9fcee6c49ed0334029ac7851bb83cd150",
+    "test_qualification_protocol.py": "0c4d2810b74dd21bba57df8077fefd6c4b68b25e76a488ba252b0ffffcbaadf9",
+    "test_record_codecs.py": "6584e8d64c3b56937c52c36ad459ead8e89a5dbf3bb168be2137216af979d2fa",
+    "test_runs.py": "d69e088af0e51d2850f10cb4879fb3ab90cd377f6398e9e92667bc245139dfdf",
+    "test_signatures.py": "fd88f9da63171cd0d6cc734a6c3d30e69c1f7ca21ad1ed940086154e2c3b8517",
+    "test_storage_publication.py": "8cee49a26f23b2c5eb4cc58c4ce445e9f6ddfa38e0d63bc3106d2f33130b7743",
+    "test_storage_ttl.py": "aa67084247234069610e4ebaf843b6ab38e0cd8d5c5a736a437a1552f6f53da9",
+    "test_validate.py": "d3d672ebc8042f3c0814f38dac819cfc1ee20461ec16be73fb7dbced771c8237",
+    "typing/invalid_ids.py": "43e2c352d9b2bacaf4c2e7d9b5ab551668b048b76b0dc736ff6584895b6312f1",
+    "typing/valid_ids.py": "594471924223f2ba97e35fd9f2bf8e2bb055814b342d8f446b7b6ddb73b69629"
+  }
+}

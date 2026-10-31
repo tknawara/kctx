@@ -5,12 +5,15 @@
 The first proposal treated the port as file moves. That does not satisfy
 handover §§6–7 or G02: the moved records still contain string IDs, string
 state fields, mutable collections, permissive constructor filtering, and
-`Any`-shaped service contracts. The current move is unfinished; this plan
-supersedes the mechanical-only proposal before further implementation.
+`Any`-shaped service contracts. This proposal replaced that mechanical-only
+approach; the typed package cutover is now implemented. See `PORTING.md` for
+owners and `gates.md` for executed evidence and qualification limits.
 
 The deliverable is a coherent typed Python implementation, not renamed
-monster modules. Preserve authored formats, CLI behavior, Lean wire ordering,
-and the existing semantic decisions. Reject malformed input before mutation.
+monster modules. Authored formats and established CLI JSON shapes are preserved.
+The later authorized calculus audit replaces unsound v1 decisions and positional
+wire with strict v2 objects; `calculus-revision.md` records that separate decision.
+Malformed input is rejected before mutation.
 No root-module aliases, permissive ID/string equality, unused nominal types,
 or type-checker blanket suppressions count as completion.
 
@@ -38,13 +41,15 @@ locates that file; the superseded root/env precedence must not return.
    `ClaimRevision`, `CitationId`, `RuleVersion`, `OperationId`, `SnapshotId`,
    `DerivationId`, `RunId`, `GateId`, `TicketId`. Constructors take one `str`,
    expose immutable `.val`, and never accept another ID object. The bounded
-   semantic `RuleId` remains the existing closed rule enum. Centralize legacy
-   record enums in `domain/vocabulary.py`. Separate record encoding/decoding
+   rule identity is the closed witness-constructor sum in semantic v2, with a
+   nominal ruleset version. Centralize legacy record enums in
+   `domain/vocabulary.py`. Separate record encoding/decoding
    into `codecs/records.py`; migrate inventory, observations and coverage.
 2. **Proved semantic host.** Use the same identities in claims, revisions,
    observations, derivations, snapshots and lookup signatures; make tagged
-   values exhaustive. Preserve Lean's positional wire format and rejection
-   order. Migrate every semantic caller, grid and conformance fixture.
+   values exhaustive. The executed v2 cutover uses strict versioned object codecs,
+   updated golden expectations and complete-response correspondence. Every
+   semantic caller, grid and conformance fixture migrates together.
 3. **Authored workflows.** Proposal/gate and incident/signature/KTLO/dossier/
    correction records gain explicit types. Move shared Markdown parsing and
    lossless editing to `codecs/documents.py`; keep readiness and durable
@@ -54,9 +59,10 @@ locates that file; the superseded root/env precedence must not return.
    backlinks and freshness responsibilities; split admit into cursor state,
    citation refresh and orchestration. Reuse reference variants and typed
    provider contracts. No old navigation module re-export shim.
-5. **Integration.** Finish the CLI package with separate registration,
-   dispatch and rendering. Remove stale import bootstraps and file/package
-   collisions; migrate storage/config/graph consumers and all test imports.
+5. **Integration.** Native Click command groups call typed services directly;
+   Rich owns human output and structlog retains JSONL logs. The namespace/parser
+   compatibility layer is removed. Storage/config/graph consumers and tests use
+   package imports; stale bootstraps and file/package collisions are removed.
    Split validation into domain checks plus orchestration. Consume configured
    `dolt_bin` at the actual subprocess boundary.
 6. **Executable gates.** Pin quality tools in the container/lock; strict
@@ -107,4 +113,22 @@ The public token grammar and retained citations remain compatible. Current
 classification/refresh does not establish historical resolution or semantic
 truth; diagrams and gate reports must expose this distinction. Integration
 of the parser is not a repair of the independently identified calculus gaps.
+
+## Executed application-surface extension
+
+The user's later CLI request is implemented as one `kctx` application:
+`cite` is a native command group and a set of methods in `kctx serve`, not a
+second executable. The stdio boundary is negotiated JSON-RPC 2.0 over bounded
+JSONL frames. It exposes citation, authored navigation, graph and knowledge
+operations without invoking the CLI recursively. Operator-held private signing
+and filesystem migration/backup/restore remain explicit CLI operations.
+
+Human rendering is separate from encoded results. Expected errors have stable
+codes/categories, optional labelled locations and actionable help; warnings use
+stderr. Color is per-stream and respects automatic/always/never choice and
+`NO_COLOR`. Untrusted terminal controls and markup stay literal. Machine output
+does not pass through Rich, including parse and protocol-startup failures.
+Real installed-runtime TTY and stdio evidence is retained in
+`reports/runtime-ui.json`; this contract is also carried into Rust gate R13.
+
 

@@ -1,0 +1,40 @@
+{
+  "id": "atlas-04",
+  "project": "atlas",
+  "category": "review",
+  "change_family": "conflicting-evidence",
+  "partition": "held-out",
+  "selected_time": 100,
+  "target_scope": "atlas/production",
+  "prompt": "Review positive and contradictory captures without erasing either.",
+  "target": "ticket:QUAL-ATLAS-04",
+  "source_kinds": [
+    "code",
+    "operation"
+  ],
+  "context_budget_bytes": 8192,
+  "context": [
+    {
+      "path": "evidence/atlas-04.md",
+      "content": "# Synthetic atlas-04\n\nIndependent same-scope captures say enabled=true and enabled=false at time 99. Neither is retracted.\nScope: atlas/production. Observation time: 90.\nCode: code/old.py. Operational capture: operations/capture.json.\n⟦cite kind=ticket id=QUAL-ATLAS-04 seen=2026-10-30T00:00Z⟧\n",
+      "revision": "786799ff8c064712b2dc5cf828af61525013d54e"
+    },
+    {
+      "path": "code/current.py",
+      "content": "TIMEOUT = 30\ndef enabled():\n    return False\n",
+      "revision": "786799ff8c064712b2dc5cf828af61525013d54e"
+    },
+    {
+      "path": "operations/capture.json",
+      "content": "{\"observed_at\": 80, \"ttl\": 10, \"cohorts\": {\"A\": true, \"B\": false}, \"acquisition\": \"ok\", \"scope\": \"atlas/production\"}",
+      "revision": "786799ff8c064712b2dc5cf828af61525013d54e"
+    }
+  ],
+  "selected_revision": "786799ff8c064712b2dc5cf828af61525013d54e",
+  "response_contract": {
+    "outcome": "string",
+    "scope": "string",
+    "evidence_ids": "list[string]",
+    "unsupported_inference": "boolean"
+  }
+}

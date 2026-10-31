@@ -1,0 +1,16 @@
+{
+  "argv": [
+    "python3",
+    "-m",
+    "unittest",
+    "discover",
+    "-s",
+    "tests",
+    "-p",
+    "test_qualification_protocol.py",
+    "-v"
+  ],
+  "returncode": 0,
+  "stdout": "{\"report\": \"/tmp/tmp53d0bmzh/report.json\", \"executed_cases_passed\": false}\n{\"report\": \"/tmp/tmp4qqoqr_c/report.json\", \"executed_cases_passed\": true}\n",
+  "stderr": "test_blocked_case_is_nonzero_and_no_gate_pass (test_qualification_protocol.QualificationProtocolTests.test_blocked_case_is_nonzero_and_no_gate_pass) ... ok\ntest_credential_diagnostics_are_redacted (test_qualification_protocol.QualificationProtocolTests.test_credential_diagnostics_are_redacted) ... ok\ntest_executed_success_is_not_whole_gate_pass (test_qualification_protocol.QualificationProtocolTests.test_executed_success_is_not_whole_gate_pass) ... ok\ntest_frozen_balanced_protocol (test_qualification_protocol.QualificationProtocolTests.test_frozen_balanced_protocol) ... ok\ntest_historical_context_excludes_future_information (test_qualification_protocol.QualificationProtocolTests.test_historical_context_excludes_future_information) ... ok\ntest_missing_model_trials_cannot_be_imported_as_success (test_qualification_protocol.QualificationProtocolTests.test_missing_model_trials_cannot_be_imported_as_success) ... ok\ntest_prepatch_corpus_cannot_supply_blind_model_trials (test_qualification_protocol.QualificationProtocolTests.test_prepatch_corpus_cannot_supply_blind_model_trials) ... ok\n\n----------------------------------------------------------------------\nRan 7 tests in 0.056s\n\nOK\n"
+}

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import ExitStack
 import copy
 import hashlib
 import json
@@ -247,15 +248,15 @@ def competing(q: Qualification,root: Path) -> dict[str,object]:
     fixture.call('prepare',name='right')
     page=fixture.call('context',name='initial',limit=1)
     assert page['continuation'] is not None and page['omitted']==2
-    processes=[]
-    for name in ('left','right'):
-        argv=fixture.command('admit',name=name)
-        processes.append((argv,subprocess.Popen(argv,env=fixture.env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)))
-    codes=[]
-    for argv,process in processes:
-        stdout,stderr=process.communicate(timeout=180)
-        q.commands.append({'argv':argv,'returncode':process.returncode,'stdout':stdout,'stderr':stderr,'concurrent':True})
-        codes.append(process.returncode)
+    codes = []
+    with ExitStack() as captures:
+        processes = []
+        for name in ('left', 'right'):
+            argv = fixture.command('admit', name=name)
+            processes.append(captures.enter_context(
+                q.capture(argv, env=fixture.env, role=f'knowledge-writer-{name}')))
+        for process, _stdout, _stderr in processes:
+            codes.append(process.wait(timeout=180))
     assert sorted(codes)==[0,1],codes
     following=fixture.call('context',name='initial',limit=1,continuation=page['continuation'])
     assert following['release']==page['release'] and following['records'][0]!=page['records'][0]

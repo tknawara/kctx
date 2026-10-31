@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+from contextlib import contextmanager
 from importlib.metadata import version
 import json
 import os
@@ -9,6 +10,9 @@ from pathlib import Path
 import platform
 import re
 import shutil
+import signal
+import tempfile
+from typing import Iterator, TextIO
 import subprocess
 import time
 from collections.abc import Callable
@@ -103,6 +107,48 @@ class Qualification:
         finally:
             entry['duration_ns'] = time.monotonic_ns() - start
             self.save()
+
+    @contextmanager
+    def capture(
+        self, argv: list[str], *, env: dict[str, str] | None = None,
+        cwd: Path | None = None, role: str,
+    ) -> Iterator[tuple[subprocess.Popen[str], TextIO, TextIO]]:
+        """Capture concurrent workers without bounded, undrained pipe buffers."""
+        started = time.monotonic_ns()
+        entry: dict[str, object] = {
+            "argv": argv, "cwd": str(cwd or ROOT), "concurrent": True, "role": role,
+            "capture": "independent temporary files; no pipe backpressure",
+        }
+        if "--worker" in argv:
+            request = Path(argv[argv.index("--worker") + 1])
+            entry["worker_request"] = json.loads(request.read_text())
+            entry["worker_request_sha256"] = digest(request)
+        self.commands.append(entry)
+        with tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace") as stdout, \
+             tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace") as stderr:
+            process = subprocess.Popen(
+                argv, cwd=cwd or ROOT, env=env, stdout=stdout, stderr=stderr,
+                text=True, start_new_session=True,
+            )
+            try:
+                yield process, stdout, stderr
+            except subprocess.TimeoutExpired:
+                entry["interrupted"] = "timeout; process group killed and reaped"
+                raise
+            finally:
+                if process.poll() is None:
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass  # The owned process group exited between poll and kill.
+                process.wait(timeout=30)
+                stdout.seek(0)
+                stderr.seek(0)
+                entry.update(
+                    returncode=process.returncode, stdout=stdout.read(), stderr=stderr.read(),
+                    duration_ns=time.monotonic_ns() - started,
+                )
+                self.save()
 
     def case(self, name: str, scenarios: list[str], action: Callable[[], object]) -> None:
         entry: dict[str, object] = {'name': name, 'scenarios': scenarios,

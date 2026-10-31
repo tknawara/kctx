@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "source_root": "src",
+  "qualified_source_checkpoint": "921437a",
+  "native_reports": [
+    "qualification-final/storage/report.json",
+    "qualification-final/concurrency-repair/report.json",
+    "qualification-final/remote/report.json"
+  ],
+  "evaluation_reports": [
+    "qualification-final/evaluation/report.json",
+    "model-trials-1.0.2/validation/report.json",
+    "evaluation-assessment.json"
+  ],
+  "source_files_match_across_native_and_evaluation_reports": true,
+  "presentation_only_delta": {
+    "kctx/cli/app.py": {
+      "qualified": "9bf6cee9dcf09b2ef43a20392ff2729e585ddc5998d3aef68a4265d9b4fff7b2",
+      "current": "66dfcd65246a6e64968021a9cb74760baaa73ee8761e4c2b80fcea9ae066fd3d"
+    },
+    "kctx/cli/help.py": {
+      "qualified": "3407dc88eb0b817c522ffaec1e754eaea2c8b5ee01cb1be59ed5c237a6936c89",
+      "current": "144eb0790dd872b7472851d36be6737d8baa85bdbc823ef28c9ba452cc3fc943"
+    }
+  },
+  "delta_reason": "Make the native Click color option eager, propagate its selected color to Click, and stop Rich from reapplying NO_COLOR after explicit always mode. No semantic core, persistence, stdio transport, citation parser, query or qualification-input source changed.",
+  "verification": "Final package quality suite and rebuilt installed-runtime presentation smoke cover this last human-help correction; backend/evaluation reports retain their original source fingerprints.",
+  "final_tests_passed": 663,
+  "final_source_fixture_sha256": "0373e4de96b181be97bc3e31c94402f57adb62e22afc75db1ab16ef00739bdc2",
+  "final_runtime_smoke": "runtime-ui-final.json"
+}

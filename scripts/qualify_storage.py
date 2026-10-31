@@ -7,7 +7,7 @@ all writes leading to the selected boundary are production calls to native Dolt.
 from __future__ import annotations
 
 import argparse
-from contextlib import redirect_stdout
+from contextlib import ExitStack, redirect_stdout
 import io
 import json
 import os
@@ -205,35 +205,40 @@ def graph_crash(q: Qualification, root: Path, phase: str) -> dict[str,object]:
 
 
 def concurrent_graph(q: Qualification, root: Path) -> dict[str,object]:
-    fixture=StorageFixture(q,root/'concurrent')
+    fixture = StorageFixture(q, root / 'concurrent')
     fixture.change()
-    marker=fixture.root/'pinned'
-    stop=fixture.root/'stop'
-    argv,_=fixture.request('pinned-reader',marker=str(marker),stop=str(stop))
-    reader=subprocess.Popen(argv,env=fixture.env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
-    deadline=time.monotonic()+30
-    while not marker.exists() and reader.poll() is None and time.monotonic()<deadline:
-        time.sleep(.01)
-    assert marker.exists(),'reader failed to select native snapshot'
-    writers=[]
-    for _ in range(2):
-        command,_=fixture.request('sync')
-        writers.append((command,subprocess.Popen(command,env=fixture.env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)))
-    results=[]
-    try:
-        for command,process in writers:
-            stdout,stderr=process.communicate(timeout=180)
-            q.commands.append({'argv':command,'returncode':process.returncode,'stdout':stdout,'stderr':stderr,'concurrent':True})
-            assert process.returncode==0,stderr
-            results.append(json.loads(stdout))
-    finally:
-        stop.write_text('done')
-    stdout,stderr=reader.communicate(timeout=120)
-    q.commands.append({'argv':argv,'returncode':reader.returncode,'stdout':stdout,'stderr':stderr,'concurrent_reader':True})
-    assert reader.returncode==0,stderr
-    assert sorted(r['status'] for r in results)==['synced','up-to-date']
-    assert json.loads(stdout)['pinned']==fixture.before['data']
-    return {'writers':results,'reader':json.loads(stdout)}
+    marker, stop = fixture.root / 'pinned', fixture.root / 'stop'
+    argv, _ = fixture.request('pinned-reader', marker=str(marker), stop=str(stop))
+    with ExitStack() as captures:
+        reader, reader_out, reader_err = captures.enter_context(
+            q.capture(argv, env=fixture.env, role='pinned-reader'))
+        deadline = time.monotonic() + 30
+        while not marker.exists() and reader.poll() is None and time.monotonic() < deadline:
+            time.sleep(.01)
+        assert marker.exists(), 'reader failed to select native snapshot'
+        writers = []
+        for index in range(2):
+            command, _ = fixture.request('sync')
+            writers.append(captures.enter_context(
+                q.capture(command, env=fixture.env, role=f'graph-writer-{index}')))
+        results = []
+        try:
+            for process, stdout, stderr in writers:
+                process.wait(timeout=180)
+                stdout.seek(0)
+                stderr.seek(0)
+                assert process.returncode == 0, stderr.read()
+                results.append(json.loads(stdout.read()))
+        finally:
+            stop.write_text('done')
+        reader.wait(timeout=120)
+        reader_out.seek(0)
+        reader_err.seek(0)
+        assert reader.returncode == 0, reader_err.read()
+        selected = json.loads(reader_out.read())
+        assert sorted(result['status'] for result in results) == ['synced', 'up-to-date']
+        assert selected['pinned'] == fixture.before['data']
+        return {'writers': results, 'reader': selected}
 
 
 def graph_restore(q: Qualification, root: Path) -> dict[str,object]:
@@ -288,17 +293,16 @@ def immutable_files(q: Qualification, root: Path) -> dict[str,object]:
         else:
             assert json.loads(destination.read_text())['payload']=='x'*100000
     destination=root/'race.json'
-    processes=[]
-    for writer in ('one','two'):
-        request=root/(writer+'.json')
-        request.write_text(json.dumps({'action':'immutable','path':str(destination),'writer':writer}))
-        argv=[sys.executable,str(Path(__file__).resolve()),'--worker',str(request)]
-        processes.append((argv,subprocess.Popen(argv,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)))
-    codes=[]
-    for argv,process in processes:
-        stdout,stderr=process.communicate(timeout=30)
-        codes.append(process.returncode)
-        q.commands.append({'argv':argv,'returncode':process.returncode,'stdout':stdout,'stderr':stderr,'concurrent':True})
+    codes = []
+    with ExitStack() as captures:
+        processes = []
+        for writer in ('one', 'two'):
+            request = root / (writer + '.json')
+            request.write_text(json.dumps({'action': 'immutable', 'path': str(destination), 'writer': writer}))
+            argv = [sys.executable, str(Path(__file__).resolve()), '--worker', str(request)]
+            processes.append(captures.enter_context(q.capture(argv, role=f'creator-{writer}')))
+        for process, _stdout, _stderr in processes:
+            codes.append(process.wait(timeout=30))
     assert sorted(codes)==[0,1]
     assert json.loads(destination.read_text())['writer'] in ('one','two')
     return {'boundaries':['before hard-link','after hard-link'],'competing_creators':codes}
@@ -329,19 +333,26 @@ def main() -> int:
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output',required=False,type=Path)
     parser.add_argument('--worker',type=Path,help=argparse.SUPPRESS)
-    parser.add_argument('--section',choices=['all','graph','files','knowledge'],default='all')
+    parser.add_argument('--section',choices=['all','graph','files','knowledge','concurrency'],default='all')
     args=parser.parse_args()
     if args.worker:
         return worker(args.worker)
     if args.output is None:
         parser.error('--output is required')
     q=Qualification('storage',args.output)
+    q.report['selected_section'] = args.section
     q.report['failure_injection']='sys.settrace/profile observes real production boundaries; os._exit(86), no mocked storage calls'
     q.case('prerequisites',[],q.prerequisites)
     if q.cases[-1]['status']!='passed':
         return q.finish()
     with tempfile.TemporaryDirectory(prefix='kctx-storage-') as directory:
         root=Path(directory)
+        if args.section == 'concurrency':
+            from qualification_knowledge import competing
+            q.case('immutable-filesystem-publication', ['Q45','Q46'], lambda: immutable_files(q,root))
+            q.case('competing-writers-pinned-reader', ['Q47','Q57','D27','D42','D45'], lambda: concurrent_graph(q,root))
+            q.case('knowledge-competing-and-tampered-input', [], lambda: competing(q,root))
+            return q.finish()
         if args.section in ('all','files'):
             q.case('immutable-filesystem-publication',['Q45','Q46'],lambda:immutable_files(q,root))
         if args.section in ('all','graph'):

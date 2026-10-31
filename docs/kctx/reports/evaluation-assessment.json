@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "scope": "Reviewed frozen local candidate profile; not a claim that the baseline model is perfect or that production workloads were evaluated",
+  "criteria_source": [
+    "docs/kctx/handover.md \u00a714: no correctness regression and no new unresolved candidate failures",
+    "fixtures/qualification/evaluation-v1.json thresholds, unchanged"
+  ],
+  "protocol_sha256": "37110f972c6f49a9995ebd0f34393aba8465f8414f941f991fb61da40f7c2ff6",
+  "corpus_version": "1.0.2",
+  "measurement_report_sha256": "5861a15289278ae9d40df60fee6970b45b84216bc73f9164c8f92cd6f318a67e",
+  "model_validation_report_sha256": "65348be8abd1e4d638e0d20b141ff9b32f347f57b3f8961ca8e5021364b570cb",
+  "model_validation_report_passed": false,
+  "baseline": {
+    "correct": 23,
+    "total": 24,
+    "failed_tasks": [
+      "atlas-07"
+    ]
+  },
+  "candidate": {
+    "correct": 24,
+    "total": 24,
+    "failed_tasks": []
+  },
+  "correctness_regressions": [],
+  "cost_ratios": {
+    "context_bytes_proxy": 1.0,
+    "latency_p95_ns": 0.5018209952452851,
+    "source_bytes_read_proxy": 0.09639345426147457
+  },
+  "decision": "candidate meets the frozen local correctness and cost criteria",
+  "strict_importer_disposition": "Nonzero is retained: the checker requires perfect labels in both arms; baseline atlas-07 answered incomplete instead of unknown. No candidate failure, label edit, threshold change, prompt change, or model retry was used to remove it.",
+  "limits": [
+    "Synthetic corpus; 24 tasks across two projects; one independent call per arm/task",
+    "Model routing alias default recorded; resolved provider model and actual token usage not exposed",
+    "Cold startup and native memory costs remain in the measurement report; Dolt is not faster than the warm existing index"
+  ]
+}

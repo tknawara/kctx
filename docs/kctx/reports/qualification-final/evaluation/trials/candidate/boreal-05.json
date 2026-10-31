@@ -1,0 +1,34 @@
+{
+  "id": "boreal-05",
+  "project": "boreal",
+  "category": "review",
+  "change_family": "new-caller",
+  "partition": "held-out",
+  "selected_time": 100,
+  "target_scope": "boreal/production",
+  "prompt": "Can the former complete caller list justify all-callers coverage after a new consumer?",
+  "target": "ticket:QUAL-BOREAL-05",
+  "source_kinds": [
+    "code"
+  ],
+  "context_budget_bytes": 8192,
+  "context": [
+    {
+      "path": "evidence/boreal-05.md",
+      "content": "---\nevidence_id: boreal-05\n---\n# Synthetic boreal-05\n\nCaller receipt enumerated [api] at revision r1. Revision r2 adds out-of-project consumer batch. No batch check exists.\nScope: boreal/production. Observation time: 90.\nCode: code/old.py. Operational capture: operations/capture.json.\n⟦cite kind=ticket id=QUAL-BOREAL-05 seen=2026-10-30T00:00Z⟧\n",
+      "revision": "f2032399266e3898e13b2251e8bbf4b0f3e53f45"
+    },
+    {
+      "path": "code/current.py",
+      "content": "TIMEOUT = 30\ndef enabled():\n    return False\n",
+      "revision": "f2032399266e3898e13b2251e8bbf4b0f3e53f45"
+    }
+  ],
+  "selected_revision": "f2032399266e3898e13b2251e8bbf4b0f3e53f45",
+  "response_contract": {
+    "outcome": "string",
+    "scope": "string",
+    "evidence_ids": "list[string]",
+    "unsupported_inference": "boolean"
+  }
+}

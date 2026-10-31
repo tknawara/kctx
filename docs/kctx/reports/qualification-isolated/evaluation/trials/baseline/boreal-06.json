@@ -1,0 +1,39 @@
+{
+  "id": "boreal-06",
+  "project": "boreal",
+  "category": "review",
+  "change_family": "renamed-file",
+  "partition": "held-out",
+  "selected_time": 100,
+  "target_scope": "boreal/production",
+  "prompt": "Resolve the original citation and separately identify the current file location.",
+  "target": "ticket:QUAL-BOREAL-06",
+  "source_kinds": [
+    "code"
+  ],
+  "context_budget_bytes": 8192,
+  "context": [
+    {
+      "path": "evidence/boreal-06.md",
+      "content": "# Synthetic boreal-06\n\nOriginal citation binds old.py at original commit. The current revision renames it to current.py without changing historical bytes.\nScope: boreal/production. Observation time: 90.\nCode: code/old.py. Operational capture: operations/capture.json.\n⟦cite kind=ticket id=QUAL-BOREAL-06 seen=2026-10-30T00:00Z⟧\n",
+      "revision": "32aa9dbdb1b046f77f6b28b645b83dc4f1141c63"
+    },
+    {
+      "path": "code/current.py",
+      "content": "TIMEOUT = 30\ndef enabled():\n    return False\n",
+      "revision": "32aa9dbdb1b046f77f6b28b645b83dc4f1141c63"
+    },
+    {
+      "path": "code/old.py",
+      "content": "TIMEOUT = 30\ndef enabled():\n    return False\n",
+      "revision": "d7d58d3ce01c261d556d597a7299a750444c5a83"
+    }
+  ],
+  "selected_revision": "32aa9dbdb1b046f77f6b28b645b83dc4f1141c63",
+  "response_contract": {
+    "outcome": "string",
+    "scope": "string",
+    "evidence_ids": "list[string]",
+    "unsupported_inference": "boolean"
+  }
+}

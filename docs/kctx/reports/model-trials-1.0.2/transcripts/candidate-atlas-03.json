@@ -1,0 +1,18 @@
+{
+  "invocation_id": "cmp-15bbbf1a8c811d6f",
+  "input_sha256": "1549fe78b91f0e653b478c24ecfe69977aeb255654f29040bf4830459b00823d",
+  "model": "omp routing alias default; resolved model not exposed",
+  "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+  "output": {
+    "outcome": "historical",
+    "scope": "atlas/production",
+    "evidence_ids": [
+      "atlas-03"
+    ],
+    "unsupported_inference": false
+  },
+  "input_path": "docs/kctx/reports/qualification-final/evaluation/trials/candidate/atlas-03.json",
+  "system_prompt_sha256": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+  "tool_config_sha256": "9bbffb578a1e9aa823ac8e00c18cb9d7c8336f64dab08a4c9255b8a25670fa47",
+  "execution": "actual omp completion call; unchanged system prompt and schema; no tools or history"
+}

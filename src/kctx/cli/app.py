@@ -20,6 +20,7 @@ def _json_option(ctx: click.Context, _parameter: click.Parameter, value: bool) -
 
 def _color_option(ctx: click.Context, _parameter: click.Parameter, value: str) -> str:
     ctx.ensure_object(CliState).color = {"auto": None, "always": True, "never": False}[value]
+    ctx.color = ctx.ensure_object(CliState).color
     return value
 
 
@@ -41,6 +42,7 @@ def _color_option(ctx: click.Context, _parameter: click.Parameter, value: str) -
     "--color",
     type=click.Choice(["auto", "always", "never"]),
     default="auto",
+    is_eager=True,
     callback=_color_option,
     help="Human output colors. Auto honors NO_COLOR and each stream's TTY.",
 )

@@ -12,11 +12,14 @@ local native transports do not stand in for it.
 
 ## Verified checkpoint
 
-The complete Compose `verify` job exited zero and printed `VERIFY_ALL_OK`:
+The complete Compose `verify` job exited zero and printed `VERIFY_ALL_OK`.
+A final human-help color correction was then checked with the full Python
+quality job and rebuilt installed-runtime smoke; backend and formal sources
+were unchanged.
 
 - Ruff lint/format and strict Pyright: **127 files, zero diagnostics**.
 - Python boundary contracts: valid consumer accepted; **10 ID/enum misuse sites rejected**.
-- Behavioral suite: **662 passed, zero failures/errors/skips** (`test-report.json`).
+- Final behavioral suite: **663 passed, zero failures/errors/skips** (`test-report.json`).
 - Clean Lean 4.21.0 build: T01–T22 mapped, **194 registered declarations audited**,
   no open obligations or unapproved axioms (`formal/proof-report.json`).
 - Six Lean namespace/nonempty misuse fixtures rejected.
@@ -26,14 +29,19 @@ The complete Compose `verify` job exited zero and printed `VERIFY_ALL_OK`:
 - Nagini/Viper: two annotated leaves verified; twin-body guards pass; production
   equivalence grids pass **100 freshness cases and 128 policy inputs**, no skipped corners.
 - Installed runtime without Lean/Lake/Elan/Docker/formal files passes the ordinary
-  CLI smoke and real TTY/JSON/JSON-RPC stream probes. Evidence: [runtime-ui.json](reports/runtime-ui.json).
+  CLI smoke and real TTY/JSON/JSON-RPC stream probes. Final evidence: [runtime-ui-final.json](reports/runtime-ui-final.json).
 
 Execution reports record the checkout parent revision plus source/fixture digests;
 those digests identify the tested working tree, not the parent revision alone.
 The behavioral source/fixture SHA256 is
-`75cf3b480d8f500c2537280989f5f0372266a7a8e84c080d6c826868fe06f71b`.
+`0373e4de96b181be97bc3e31c94402f57adb62e22afc75db1ab16ef00739bdc2`.
 The clean formal source SHA256 is
 `50e7b86725191aed583861a33aa73a2aba28aa5d6d0d4b7a8d043a154ad82b68`.
+The native/evaluation campaigns share the `921437a` runtime source snapshot.
+Only `cli/app.py` and `cli/help.py` changed afterward, to apply explicit color
+before Click's eager help and honor that choice in both renderers.
+[Exact source-delta linkage](reports/qualification-linkage.json) records both
+hashes and the final verification; old reports keep their original identities.
 
 ## G00–G18 disposition
 
@@ -45,19 +53,41 @@ The clean formal source SHA256 is
 | G03 Language | Pass for declared v2 vocabulary | [Calculus](calculus.md), [revision decisions](calculus-revision.md), independent derivability/interpretation, exact inventory certificates, four-valued support and inhabited negative examples. No source/provider/Dolt primitives in the kernel. |
 | G04 Proofs | Pass for registered bounded contracts | Clean registry-driven proof report. [Theorem registry](../../formal/theorems.json) states each meaning and assumption; it does not claim Python, signatures or durable storage are kernel-proved. |
 | G05 Correspondence | Pass | `conformance-report.json`: full response/cardinality/identity checking, reviewed/generated/stateful fixtures, mutation campaign; separate Nagini leaf assurance. |
-| G06 Workflows | Pass for implemented operations | Real proposal/gate/landed-ref, investigation, correction, run/provenance and authenticated knowledge tests in the 662-case suite; services use shared semantic predicates. Acquisition, structural completion, admission and usability remain separate. |
+| G06 Workflows | Pass for implemented operations | Real proposal/gate/landed-ref, investigation, correction, run/provenance and authenticated knowledge tests in the final suite; services use shared semantic predicates. Acquisition, structural completion, admission and usability remain separate. |
 | G07 Compatibility | Pass with documented intentional changes | Built-in citation grammar replaces supplied external script; lossless Markdown/CRLF/unknown-section edits, legacy layouts and explicit schema refusal exercised. v1 semantic wire is replaced by strict v2; old citation executable and argparse shims are removed. Native Click global options precede commands. |
-| G08 Persistence | Final process qualification running | Real concurrent publication and failure/recovery regressions pass in the suite; final source-bound fault campaign is `reports/qualification-final/storage/report.json`. POSIX/cooperating-writer scope, not a cross-store transaction or hostile-writer filesystem proof. |
+| G08 Persistence | Pass for local POSIX process-failure scope | Full native fault campaign plus corrected concurrency capture; immutable files, competing publishers, pinned readers and replay are exercised. See the source-bound storage/repair reports below. Not a cross-store transaction or hostile-writer/hardware-power-loss proof. |
 | G09 CLI/agent use | Pass for current CLI and protocol | Installed Click commands and JSON-RPC initialize/citation/signed admission/retrieval/graph-refresh/EOF paths exercised. Structured errors, bounded contexts, honest completeness, explicit config roots, terminal escaping and clean machine streams. |
-| G10 Migration | Final process qualification running | Implemented account/quarantine/stage/apply/repeat/restore and retained selection; representative synthetic legacy-copy campaign is part of final storage qualification, not a claim that the user's production KB was migrated. |
-| G11 Graph snapshots | Pass regressions; final fault campaign running | Complete installed-package fingerprints, config/schema/engine/repository identity, isolated candidates, pinned reads, exact binding parity, real native recovery tests. Module-shortlist omission reproduced and repaired. |
-| G12 Dolt backend | Pass native integration; final campaign running | Native Dolt 2.6.1, normalized typed rows, immutable commits, managed read-only SQL sessions and publication checks. No mock SQL/storage semantics counted as native qualification. |
+| G10 Migration | Pass on representative synthetic copies | Account/quarantine/stage/apply/repeat/restore and retained-selection cases passed. Exact bytes and IDs are checked; no claim that the user's production KB was migrated. |
+| G11 Graph snapshots | Pass for local native generations | Complete package fingerprints, config/schema/engine/repository identity, isolated candidates, exact binding parity, 14 graph process-death boundaries, competing writers and pinned reads exercised. |
+| G12 Dolt backend | Pass for pinned local Dolt 2.6.1 | Normalized typed rows, immutable commits, read-only SQL sessions, real SQL errors and historical publication checks. Native tests are not replaced with mock SQL/storage semantics. |
 | G13 Remote | Local transports passed; enterprise user-owned | Final local report exercises independent Git/native-Dolt clients and interrupted pushes. Actual enterprise authentication/policy/retention remains with the work agent by explicit user decision; no enterprise-pass claim. |
-| G14 Restore/history | Final process qualification running | Independent native restore, retained historical objects and authorized rollback/rollforward are exercised by the final storage campaign. Missing objects fail explicitly; normal Git clone alone is not a complete restore. |
-| G15 Cost/usefulness | Corrected-corpus final evaluation pending | Frozen task protocol retained. Prior mechanical thresholds passed; first real model trials exposed ambiguous evidence identity metadata. The corrected corpus is frozen as 1.0.2 before new measurements/calls; original failures are retained, never relabelled. |
+| G14 Restore/history | Pass for local native restore profile | Independent restore after source removal, retained objects after native GC, explicit missing-store failure and authorized rollback/rollforward passed. Normal Git clone alone is not a complete restore; enterprise retention policy remains separate. |
+| G15 Cost/usefulness | Candidate meets frozen local profile; baseline failure retained | Mechanical cost thresholds pass. Candidate answers match every frozen label with no regressions. The strict both-arm importer remains nonzero for one baseline-only label mismatch; it is not relabelled or retried away. See measured results and the explicit profile limits below. |
 | G16 Runtime separation | Pass on installed Linux artifact | Runtime contains Python/Git/Dolt/gh, not Lean/Docker/formal files. Installed and module CLI paths, citation RPC and human/machine output probes pass. |
-| G17 Cutover | Local capability qualification being finalized | Authored files remain authoritative for authored records; native structured knowledge is authoritative only through authenticated completed releases. No two independent writers for a field, no silent legacy adapter fallback. Remote deployment is not promoted by local evidence. |
-| G18 Delivery | Verified implementation checkpoint; final receipts pending | Source, current operator/design docs, proof/conformance results and runtime evidence are being committed together. Final process/evaluation receipts will complete the gate table. |
+| G17 Cutover | Qualified for implemented local capabilities | Authored files remain authoritative for authored records; native structured knowledge is authoritative only through authenticated completed releases. No two independent writers for a field or silent legacy fallback. Enterprise deployment and production-corpus qualification are not inferred from local fixtures. |
+| G18 Delivery | Complete implementation and evidence | Verified source checkpoint `921437a`; current operator/design docs, proof/conformance results and retained qualification receipts are delivered in this Git tree. Failed attempts and scope limits remain visible. |
+
+## Native process evidence
+
+The [full storage campaign](reports/qualification-final/storage/report.json)
+retains **31 passed case rows and one timeout**. The timeout exposed a harness
+hazard: it collected concurrent workers' pipes sequentially. A later writer could
+fill stderr while holding the writer lock, while collection waited for the first.
+
+The [concurrency repair campaign](reports/qualification-final/concurrency-repair/report.json)
+uses independent temporary capture files and supervised process cleanup; all four
+case rows pass, including prerequisites. It repeats immutable-file creators,
+graph writers with a pinned reader, and competing signed knowledge publication.
+The graph reader made 76 unchanged historical reads; the writers returned
+`synced` and `up-to-date`. The retained captures include 92,664 reader stderr bytes
+and 71,037 publishing-writer stderr bytes, without pipe backpressure.
+Production storage semantics and timeout thresholds were not weakened.
+
+Together these reports cover every case in the full campaign. The original
+nonzero report is not rewritten into a pass. Runtime source fingerprints match;
+the capture-harness revision is recorded separately. The final
+[local transport report](reports/qualification-final/remote/report.json) also
+passes after using the corrected capture primitive.
 
 ## Material findings retained
 
@@ -94,6 +124,50 @@ system prompt/schema. The correction and generator digest are frozen in
 The completion harness exposes its `default` routing alias and invocation IDs,
 not a resolved provider-model identity; this limitation is recorded, not invented.
 Byte/IO/context proxies are labelled as proxies, never actual model-token usage.
+
+## Measured local results
+
+[Mechanical report](reports/qualification-final/evaluation/report.json):
+432 matched retrieval measurements, two projects, frozen task protocol, source
+stable throughout. Warm totals aggregate five repetitions per task.
+
+| Measurement | File baseline | Existing index | Native Dolt session |
+| --- | ---: | ---: | ---: |
+| Cold p95, ms | 238.53 | 326.89 | 1499.49 |
+| Warm p95, ms | 12.58 | 4.12 | 6.31 |
+| Warm source bytes read, proxy | 563420 | 71222 | 54310 |
+| Warm subprocess count | 650 | 302 | 290 |
+| Warm context bytes, proxy | 87320 | 87320 | 87320 |
+
+The candidate meets the predeclared file-baseline limits for warm latency,
+context size and repeated source reads. It does **not** beat the warm existing
+index, and its native startup cost remains material. Memory, native private
+storage, refresh/setup costs and history growth are retained in the report;
+worker/child RSS samples are not summed into fictitious simultaneous peak memory.
+The benefit is persistent, pinned relational/history queries with reduced repeated
+source reads, not a claim that Dolt wins every latency comparison.
+
+[Actual model receipts](reports/model-trials-1.0.2/receipts.json) and
+[strict validation](reports/model-trials-1.0.2/validation/report.json):
+
+| Arm | Exact labelled answers | Tasks |
+| --- | ---: | ---: |
+| File baseline | 23 | 24 |
+| Dolt candidate | 24 | 24 |
+
+All paired retrieved payloads are byte-identical. The one baseline answer used
+`incomplete` rather than `unknown` for `atlas-07`; it retained the correct evidence
+ID/scope and made no unsupported positive inference. This difference is not
+attributed to the database or presented as improved model reasoning.
+
+The unmodified strict importer requires perfect answers in both arms, so its
+nonzero result is retained. The handover's candidate acceptance criterion is no
+correctness regression or new unresolved candidate failure; the candidate meets
+that criterion without changing any label, threshold, prompt, schema or model
+answer. [Reviewed assessment](reports/evaluation-assessment.json) binds those
+decisions to the raw report hashes. These are synthetic, stateless matched
+judgment tasks under the recorded routing configuration—not production-corpus
+generalization, autonomous tool-use quality, or a resolved-provider-model pin.
 
 ## Reproduce
 

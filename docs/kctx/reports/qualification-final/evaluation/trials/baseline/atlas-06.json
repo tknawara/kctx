@@ -1,0 +1,39 @@
+{
+  "id": "atlas-06",
+  "project": "atlas",
+  "category": "review",
+  "change_family": "renamed-file",
+  "partition": "held-out",
+  "selected_time": 100,
+  "target_scope": "atlas/production",
+  "prompt": "Resolve the original citation and separately identify the current file location.",
+  "target": "ticket:QUAL-ATLAS-06",
+  "source_kinds": [
+    "code"
+  ],
+  "context_budget_bytes": 8192,
+  "context": [
+    {
+      "path": "evidence/atlas-06.md",
+      "content": "---\nevidence_id: atlas-06\n---\n# Synthetic atlas-06\n\nOriginal citation binds old.py at original commit. The current revision renames it to current.py without changing historical bytes.\nScope: atlas/production. Observation time: 90.\nCode: code/old.py. Operational capture: operations/capture.json.\n⟦cite kind=ticket id=QUAL-ATLAS-06 seen=2026-10-30T00:00Z⟧\n",
+      "revision": "4054cb646d3b83336d901b8355bffac0969a66d2"
+    },
+    {
+      "path": "code/current.py",
+      "content": "TIMEOUT = 30\ndef enabled():\n    return False\n",
+      "revision": "4054cb646d3b83336d901b8355bffac0969a66d2"
+    },
+    {
+      "path": "code/old.py",
+      "content": "TIMEOUT = 30\ndef enabled():\n    return False\n",
+      "revision": "98d7ba16701f107ac4651f18059c770f3c0d5c91"
+    }
+  ],
+  "selected_revision": "4054cb646d3b83336d901b8355bffac0969a66d2",
+  "response_contract": {
+    "outcome": "string",
+    "scope": "string",
+    "evidence_ids": "list[string]",
+    "unsupported_inference": "boolean"
+  }
+}

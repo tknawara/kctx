@@ -1,0 +1,40 @@
+{
+  "id": "boreal-03",
+  "project": "boreal",
+  "category": "factual",
+  "change_family": "old-release",
+  "partition": "held-out",
+  "selected_time": 100,
+  "target_scope": "boreal/production",
+  "prompt": "Answer only from the selected old release; later corrections are unavailable.",
+  "target": "ticket:QUAL-BOREAL-03",
+  "source_kinds": [
+    "code",
+    "operation"
+  ],
+  "context_budget_bytes": 8192,
+  "context": [
+    {
+      "path": "evidence/boreal-03.md",
+      "content": "# Synthetic boreal-03\n\nSelected release records enabled=false. A later release at time 110 corrects enabled=true; it was not available at selected time 100.\nScope: boreal/production. Observation time: 90.\nCode: code/old.py. Operational capture: operations/capture.json.\n⟦cite kind=ticket id=QUAL-BOREAL-03 seen=2026-10-30T00:00Z⟧\n",
+      "revision": "7d4e2a0f0eb77d09f1f083ff260cb25532de8aba"
+    },
+    {
+      "path": "code/old.py",
+      "content": "TIMEOUT = 30\ndef enabled():\n    return False\n",
+      "revision": "7d4e2a0f0eb77d09f1f083ff260cb25532de8aba"
+    },
+    {
+      "path": "operations/capture.json",
+      "content": "{\"observed_at\": 80, \"ttl\": 10, \"cohorts\": {\"A\": true, \"B\": false}, \"acquisition\": \"ok\", \"scope\": \"boreal/production\"}",
+      "revision": "7d4e2a0f0eb77d09f1f083ff260cb25532de8aba"
+    }
+  ],
+  "selected_revision": "7d4e2a0f0eb77d09f1f083ff260cb25532de8aba",
+  "response_contract": {
+    "outcome": "string",
+    "scope": "string",
+    "evidence_ids": "list[string]",
+    "unsupported_inference": "boolean"
+  }
+}

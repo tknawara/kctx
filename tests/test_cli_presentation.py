@@ -16,6 +16,15 @@ class PresentationBoundaryTests(KctxTestCase):
             code = main(arguments)
         return code, stdout.getvalue(), stderr.getvalue()
 
+    def test_explicit_help_color_is_applied_before_eager_help(self):
+        with patch.dict("os.environ", {"NO_COLOR": "1"}):
+            for choice in ("always", "never", "auto"):
+                with self.subTest(color=choice):
+                    code, stdout, stderr = self.invoke("--color", choice, "--help")
+                    self.assertEqual(code, 0)
+                    self.assertEqual("\x1b[" in stdout, choice == "always")
+                    self.assertEqual(stderr, "")
+
     def test_machine_parse_errors_are_json_and_nonzero(self):
         for arguments in (("--json", "missing-command"), ("--json", "--missing-option"),
                           ("--json", "asset", "add", "--kind", "service")):

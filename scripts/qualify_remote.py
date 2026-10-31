@@ -7,6 +7,7 @@ An enterprise config is never inferred from origin or replaced with a local URL.
 from __future__ import annotations
 
 import argparse
+from contextlib import ExitStack
 import hashlib
 import json
 import os
@@ -55,15 +56,16 @@ def exercise(q: Qualification, root: Path, git_url: str, dolt_url: str, prefix: 
     q.run(['dolt', 'sql', '-q', "INSERT INTO qualification VALUES (3, 'client-a')"], cwd=da)
     a_dolt = dolt_commit(q, da, 'independent a')
     # Concurrent native processes, separate checkouts; no monkeypatched transport.
-    processes = []
-    for path, branch in ((da, prefix + '-a'), (db, prefix + '-b')):
-        argv = ['dolt', 'push', '-u', 'origin', branch]
-        processes.append((argv, path, subprocess.Popen(argv, cwd=path, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)))
-    for argv, path, process in processes:
-        stdout, stderr = process.communicate(timeout=120)
-        q.commands.append({'argv': argv, 'cwd': str(path), 'returncode': process.returncode,
-                           'stdout': stdout, 'stderr': stderr, 'concurrent': True})
-        assert process.returncode == 0, stderr
+    with ExitStack() as captures:
+        processes = []
+        for path, branch in ((da, prefix + '-a'), (db, prefix + '-b')):
+            argv = ['dolt', 'push', '-u', 'origin', branch]
+            processes.append(captures.enter_context(
+                q.capture(argv, cwd=path, role=f'native-push-{branch}')))
+        for process, _stdout, stderr in processes:
+            process.wait(timeout=120)
+            stderr.seek(0)
+            assert process.returncode == 0, stderr.read()
     fresh = root / 'fresh'
     q.run(['dolt', 'clone', '--branch', prefix + '-a', dolt_url, str(fresh)])
     q.run(['dolt', 'fetch', 'origin'], cwd=fresh)

@@ -1,13 +1,49 @@
+# House pattern: everything runs in compose, nothing on the host.
+#
+#   docker compose --profile verify run --build --rm verify
+#     -> python test suite + contracts check + Lean build + axiom audit +
+#        Lean<->Python conformance, one command, exit code tells the story.
+#
+#   docker compose --profile verify run --build --rm proofs
+#     -> proof job only (build + axiom audit + proof-report.json + smoke).
+#
+#   docker compose --profile nagini run --build --rm nagini
+#     -> Nagini/Viper contracts on the time semantics + equivalence grid
+#        against the production core (implementation-verification upgrade
+#        path from "conformance checked"; see formal/nagini/).
 services:
-  # Dev/CI-only proof service (profile `formal`). Production kctx is
-  # Python-only and never requires Docker or Lean (G16).
   proofs:
     build:
       context: ./formal
       dockerfile: Dockerfile
     image: kctx-formal:lean-4.21.0
-    profiles: ["formal"]
+    profiles: ["formal", "verify"]
     volumes:
       - ./formal:/work/kctx/formal
     working_dir: /work/kctx/formal
     command: ["./scripts/proof_check.sh"]
+
+  # Full stack in one command. Same image as `proofs` (Lean + python3):
+  # the Python suite and conformance harness are stdlib-only by design, so
+  # one pinned image runs everything (G01, G16).
+  verify:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.verify
+    image: kctx-verify:lean-4.21.0-dolt
+    profiles: ["verify"]
+    volumes:
+      - ./:/work/kctx
+    working_dir: /work/kctx
+    command: ["./scripts/verify_all.sh"]
+
+  nagini:
+    build:
+      context: ./formal/nagini
+      dockerfile: Dockerfile
+    image: kctx-nagini:viper
+    profiles: ["nagini"]
+    volumes:
+      - ./:/work/kctx
+    working_dir: /work/kctx
+    command: ["./formal/nagini/scripts/nagini_check.sh"]

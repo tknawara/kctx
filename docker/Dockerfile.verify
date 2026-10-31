@@ -1,0 +1,38 @@
+# One-command verification stack (compose `verify` service).
+# Self-contained: Lean (elan, pinned), pinned python deps for the graph
+# package, and the pinned Dolt CLI so the shadow-graph integration tests run
+# for real. Nothing on the host but docker.
+FROM ubuntu:24.04
+
+ARG DOLT_VERSION=v2.6.1
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      curl ca-certificates git python3 python3-pip unzip && \
+    rm -rf /var/lib/apt/lists/*
+
+# Lean 4.21.0 via elan (same pin as formal/lean-toolchain; elan's bundled
+# clang links the reference evaluator).
+ENV ELAN_HOME=/opt/elan
+RUN curl -sSfL https://elan.lean-lang.org/elan-init.sh | sh -s -- -y \
+      --default-toolchain leanprover/lean4:v4.21.0 --no-modify-path \
+      --prefix /opt/elan && \
+    /opt/elan/bin/lean --version
+
+# Graph-package deps, pinned exactly as pyproject.toml pins them.
+RUN pip install --no-cache-dir --break-system-packages \
+      "pydantic==2.14.1" "structlog==26.1.0"
+
+# Dolt CLI, pinned. Not a database or a backing repo — the tool only; the
+# KB's data stays the user's. Integration tests build throwaway databases
+# under per-test temp dirs.
+RUN curl -sSfL -o /tmp/dolt.zip \
+      "https://github.com/dolthub/dolt/releases/download/${DOLT_VERSION}/dolt-linux-amd64.zip" && \
+    unzip -j /tmp/dolt.zip -d /usr/local/bin "dolt-linux-amd64/bin/dolt" && \
+    chmod +x /usr/local/bin/dolt && rm /tmp/dolt.zip && \
+    dolt version && \
+    git config --system user.email kctx-verify@example.invalid && \
+    git config --system user.name "kctx verify"
+
+ENV PATH="/opt/elan/bin:${PATH}"
+WORKDIR /work/kctx

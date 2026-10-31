@@ -181,57 +181,23 @@ def is_past_ttl(
 
 
 def read_frontmatter(text: str) -> dict:
-    """Parse a flat `key: value` frontmatter block delimited by `---` lines,
-    without interpreting any value's syntax (a bracketed list stays a raw
-    string; pair with split_list_value for that). Returns {} when the text
-    doesn't open with a frontmatter block at all -- callers treat that as
-    nothing to check, not malformed."""
-    lines = text.splitlines()
-    if not lines or lines[0].strip() != "---":
-        return {}
-    fm: dict = {}
-    for line in lines[1:]:
-        if line.strip() == "---":
-            break
-        if ":" in line:
-            k, _, v = line.partition(":")
-            fm[k.strip()] = v.strip()
-    return fm
+    """Moved to kctx.codecs.frontmatter (duplicate-key diagnostics live
+    there via parse_frontmatter); re-exported during the port."""
+    from kctx.codecs.frontmatter import read_frontmatter as _read_fm
+
+    return _read_fm(text)
 
 
 def split_commas_respecting_brackets(raw: str) -> List[str]:
-    """Split on top-level commas, treating a `⟦...⟧` durable citation or a
-    double-quoted span as opaque -- a comma inside either (e.g. a cite's
-    `sym="a, b"`) doesn't start a new list item. If the raw value has an odd
-    number of quote characters, quotes are not tracked (to prevent a stray
-    quote from swallowing commas); only ⟦...⟧ are respected in that case."""
-    items: List[str] = []
-    buf: List[str] = []
-    depth = 0
-    # Check for balanced quotes: if odd number, don't track quotes.
-    quote_count = raw.count('"')
-    in_quotes = False if quote_count % 2 == 0 else None
-    for ch in raw:
-        if ch == '"' and in_quotes is not None:
-            in_quotes = not in_quotes
-            buf.append(ch)
-        elif ch == "⟦" and (in_quotes is None or not in_quotes):
-            depth += 1
-            buf.append(ch)
-        elif ch == "⟧" and (in_quotes is None or not in_quotes):
-            depth = max(0, depth - 1)
-            buf.append(ch)
-        elif ch == "," and depth == 0 and (in_quotes is None or not in_quotes):
-            items.append("".join(buf))
-            buf = []
-        else:
-            buf.append(ch)
-    items.append("".join(buf))
-    return [x.strip() for x in items if x.strip()]
+    """Moved to kctx.codecs.frontmatter (one owner per parser); this
+    re-export keeps every current import working during the port."""
+    from kctx.codecs.frontmatter import split_commas_respecting_brackets as _split
+
+    return _split(raw)
 
 
 def split_list_value(raw: str) -> List[str]:
-    raw = raw.strip()
-    if raw.startswith("[") and raw.endswith("]"):
-        raw = raw[1:-1]
-    return split_commas_respecting_brackets(raw)
+    """Moved to kctx.codecs.frontmatter; re-exported during the port."""
+    from kctx.codecs.frontmatter import split_list_value as _split_list
+
+    return _split_list(raw)

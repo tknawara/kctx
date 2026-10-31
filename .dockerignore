@@ -1,0 +1,7 @@
+.git
+formal/.lake
+formal/build
+**/__pycache__
+**/*.pyc
+.venv
+target

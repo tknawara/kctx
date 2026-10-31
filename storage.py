@@ -6,10 +6,19 @@ import hashlib
 import json
 import os
 import re
+import sys
 import tempfile
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import List, Optional
+
+# M5 cutover slice: is_past_ttl routes through the proved semantics core
+# (kctx.semantics.time mirrors formal/Kctx/Time.lean, T11). The public
+# contract (signature, inclusive boundary, missing TTL = never stale) is
+# unchanged; see tests/test_storage_ttl.py for boundary fixtures.
+_SRC = Path(__file__).resolve().parent / "src"
+if str(_SRC) not in sys.path:
+    sys.path.insert(0, str(_SRC))
 
 from errors import KctxError
 
@@ -160,7 +169,15 @@ def is_past_ttl(
     if secs is None:
         return False
     now = now or datetime.now(timezone.utc)
-    return (now - parse_flexible_timestamp(verified_at)).total_seconds() > secs
+    from kctx.semantics.model import Ttl
+    from kctx.semantics.time import Freshness, assess_fresh
+
+    verdict = assess_fresh(
+        Ttl("expireAfter", secs),
+        int(parse_flexible_timestamp(verified_at).timestamp()),
+        int(now.timestamp()),
+    )
+    return verdict is Freshness.STALE
 
 
 def read_frontmatter(text: str) -> dict:

@@ -11,12 +11,18 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 
 
-def body_tokens(path: Path) -> list:
+PAIRS = [
+    ("assess_fresh_tagged", "assess_fresh_contracts.py", "twin_runtime.py"),
+    ("usable_for_tagged", "usable_for_contracts.py", "usable_for_runtime.py"),
+]
+
+
+def body_tokens(path: Path, fn_name: str) -> list:
     tree = ast.parse(path.read_text(encoding="utf-8"))
     fn = next(
         n
         for n in ast.walk(tree)
-        if isinstance(n, ast.FunctionDef) and n.name == "assess_fresh_tagged"
+        if isinstance(n, ast.FunctionDef) and n.name == fn_name
     )
     # drop contract call statements (Requires/Ensures) and comments; keep logic
     def is_noise(st) -> bool:
@@ -37,12 +43,17 @@ def body_tokens(path: Path) -> list:
     return [ast.dump(st) for st in fn.body if not is_noise(st)]
 
 
-a = body_tokens(HERE / "assess_fresh_contracts.py")
-b = body_tokens(HERE / "twin_runtime.py")
-if a != b:
-    print("DRIFT: annotated twin body != runtime twin body")
-    for i, (x, y) in enumerate(zip(a, b)):
-        if x != y:
-            print(f"  stmt {i}: annotated={x[:80]} runtime={y[:80]}")
+ok = True
+for fn_name, annotated, runtime in PAIRS:
+    a = body_tokens(HERE / annotated, fn_name)
+    b = body_tokens(HERE / runtime, fn_name)
+    if a != b:
+        ok = False
+        print(f"DRIFT: {fn_name} ({annotated} != {runtime})")
+        for i, (x, y) in enumerate(zip(a, b)):
+            if x != y:
+                print(f"  stmt {i}: annotated={x[:80]} runtime={y[:80]}")
+    else:
+        print(f"twin drift check: PASS {fn_name} ({len(a)} statements identical)")
+if not ok:
     sys.exit(1)
-print(f"twin drift check: PASS ({len(a)} statements identical)")

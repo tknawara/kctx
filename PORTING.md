@@ -50,5 +50,10 @@ corrections ordering, cursor semantics, gate binding — all landed earlier).
   ("Verification successful"), `twin_drift_check.py` asserts the executed
   runtime twin is token-identical to the verified body, and
   `equivalence_grid.py` runs 100 cases against production `assess_fresh`.
-  Extending to further leaves (checker guards, usable_for) follows the same
-  twin+guard+grid pattern; whole-core refinement remains out of scope.
+  Extended to `usable_for` (T17): Viper-verified contracts (supported=0 →
+  never usable; all-mandatory-met → usable; each required-unmet condition
+  blocks), drift-guarded runtime twin, 80/128 realizable-case grid. The grid
+  surfaced a real modeling fact worth keeping in the trace: contested is not
+  independent of supported in production (corrections reject the derivation
+  itself), and evidence-only support is freshness-guarded. Further leaves
+  follow the same pattern; whole-core refinement remains out of scope.

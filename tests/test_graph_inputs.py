@@ -36,9 +36,13 @@ class GenerationInputsTest(KctxTestCase):
         self.resolve_dolt = resolve.start()
         self.addCleanup(resolve.stop)
         version = patch.object(
-            inputs, "run_logged",
+            inputs,
+            "run_logged",
             return_value=subprocess.CompletedProcess(
-                [str(self.dolt_bin), "version"], 0, "dolt version test-release\n", "",
+                [str(self.dolt_bin), "version"],
+                0,
+                "dolt version test-release\n",
+                "",
             ),
         )
         self.dolt_version = version.start()
@@ -48,7 +52,11 @@ class GenerationInputsTest(KctxTestCase):
         captured = generation_inputs(self.kb_root)
         wire = captured.to_wire()
         encoded = json.dumps(
-            wire, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False,
+            wire,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
         ).encode("utf-8")
         self.assertEqual(captured.digest, hashlib.sha256(encoded).hexdigest())
         self.assertEqual(manifest_digest(wire), captured.digest)
@@ -61,8 +69,29 @@ class GenerationInputsTest(KctxTestCase):
         versions = object_value(wire["distribution_versions"])
         self.assertEqual(versions["kctx"], importlib.metadata.version("kctx"))
         self.assertEqual(
-            wire["schema_sha256"], hashlib.sha256(dolt_store.SCHEMA_SQL.encode("utf-8")).hexdigest(),
+            wire["schema_sha256"],
+            hashlib.sha256(dolt_store.SCHEMA_SQL.encode("utf-8")).hexdigest(),
         )
+
+    def test_upgrade_check_warning_does_not_change_generation_identity(self) -> None:
+        """Dolt's advisory upgrade warning shares stdout and appears only on
+        some invocations of a non-latest engine; it must not turn a sync's own
+        candidate into an apparent input change before publication."""
+        quiet = generation_inputs(self.kb_root)
+        with patch.object(
+            inputs,
+            "run_logged",
+            return_value=subprocess.CompletedProcess(
+                [str(self.dolt_bin), "version"],
+                0,
+                "dolt version test-release\n"
+                "Warning: you are on an old version of Dolt. The newest version is 2.6.2.\n",
+                "",
+            ),
+        ):
+            warned = generation_inputs(self.kb_root)
+        self.assertEqual(warned.dolt_version, "dolt version test-release")
+        self.assertEqual(quiet.digest, warned.digest)
 
     def test_persisted_manifest_digest_does_not_read_live_inputs(self) -> None:
         captured = generation_inputs(self.kb_root)
@@ -107,7 +136,9 @@ class GenerationInputsTest(KctxTestCase):
     @unittest.skipUnless(shutil.which("dolt"), "native Dolt required")
     def test_installed_decoder_and_new_module_change_generation_identity(self) -> None:
         package = self.root / "installed" / "kctx"
-        shutil.copytree(Path(kctx.__file__).parent, package, ignore=shutil.ignore_patterns("__pycache__"))
+        shutil.copytree(
+            Path(kctx.__file__).parent, package, ignore=shutil.ignore_patterns("__pycache__")
+        )
         environment = {**os.environ, "PYTHONPATH": str(package.parent)}
         program = (
             "import sys; from pathlib import Path; "
@@ -115,17 +146,22 @@ class GenerationInputsTest(KctxTestCase):
             "from kctx.graph.inputs import generation_inputs; "
             "init_logging(machine=True); print(generation_inputs(Path(sys.argv[1])).digest)"
         )
+
         def identity() -> str:
             return subprocess.check_output(
                 [sys.executable, "-c", program, str(self.kb_root)],
-                env=environment, text=True,
+                env=environment,
+                text=True,
             ).strip()
+
         before = identity()
         decoder = package / "adapters" / "files" / "storage.py"
         decoder.write_bytes(decoder.read_bytes() + b"\n# changed installed decoder artifact\n")
         changed = identity()
         self.assertNotEqual(before, changed)
-        (package / "new_catalog.py").write_text("raise RuntimeError('fingerprinting must not import this module')\n")
+        (package / "new_catalog.py").write_text(
+            "raise RuntimeError('fingerprinting must not import this module')\n"
+        )
         self.assertNotEqual(changed, identity())
 
     def test_sources_are_located_in_installed_modules_not_checkout(self) -> None:
@@ -143,7 +179,9 @@ class GenerationInputsTest(KctxTestCase):
 
     def test_schema_sql_changes_identity_without_source_version_change(self) -> None:
         before = generation_inputs(self.kb_root)
-        with patch.object(dolt_store, "SCHEMA_SQL", dolt_store.SCHEMA_SQL + "\n-- changed schema\n"):
+        with patch.object(
+            dolt_store, "SCHEMA_SQL", dolt_store.SCHEMA_SQL + "\n-- changed schema\n"
+        ):
             after = generation_inputs(self.kb_root)
         self.assertNotEqual(before.digest, after.digest)
         self.assertNotEqual(before.schema_sha256, after.schema_sha256)
@@ -183,7 +221,9 @@ class GenerationInputsTest(KctxTestCase):
                 self.assertNotEqual(before.digest, generation_inputs(self.kb_root).digest)
         self.set_config(github_host="file-config.test")
         self.assertNotEqual(before.digest, generation_inputs(self.kb_root).digest)
-        self.assertEqual(object_value(before.to_wire()["config"])["github_host"], baseline_config.github_host)
+        self.assertEqual(
+            object_value(before.to_wire()["config"])["github_host"], baseline_config.github_host
+        )
 
     def test_resolved_root_changes_identity(self) -> None:
         before = generation_inputs(self.kb_root)
@@ -197,17 +237,26 @@ class GenerationInputsTest(KctxTestCase):
 
     def test_origin_changes_digest_and_frozen_normalization_survives_change(self) -> None:
         before = generation_inputs(self.kb_root)
-        self.run_git(self.kb_root, "remote", "set-url", "origin", "https://example.test/other/kb.git")
+        self.run_git(
+            self.kb_root, "remote", "set-url", "origin", "https://example.test/other/kb.git"
+        )
         after = generation_inputs(self.kb_root)
         self.assertNotEqual(before.digest, after.digest)
         self.assertEqual(before.kb_sha, after.kb_sha)
-        self.assertEqual(canonical_repo(self.kb_root.name, None, before.repository_identity), "acme/kb")
-        self.assertEqual(canonical_repo(self.kb_root.name, None, after.repository_identity), "other/kb")
+        self.assertEqual(
+            canonical_repo(self.kb_root.name, None, before.repository_identity), "acme/kb"
+        )
+        self.assertEqual(
+            canonical_repo(self.kb_root.name, None, after.repository_identity), "other/kb"
+        )
         identity = object_value(before.to_wire()["repository_identity"])
-        self.assertEqual(identity, {
-            "checkout_name": self.kb_root.name,
-            "origin_url": "https://example.test/acme/kb.git",
-        })
+        self.assertEqual(
+            identity,
+            {
+                "checkout_name": self.kb_root.name,
+                "origin_url": "https://example.test/acme/kb.git",
+            },
+        )
 
     def test_missing_origin_is_an_explicit_input(self) -> None:
         before = generation_inputs(self.kb_root)
@@ -228,7 +277,9 @@ class GenerationInputsTest(KctxTestCase):
         before = generation_inputs(self.kb_root)
         self.commit_file(self.kb_root, "changed.md", "a new committed document\n")
         self.assertNotEqual(before.digest, generation_inputs(self.kb_root).digest)
-        self.assertEqual(before.digest, generation_inputs(self.kb_root, kb_sha=before.kb_sha).digest)
+        self.assertEqual(
+            before.digest, generation_inputs(self.kb_root, kb_sha=before.kb_sha).digest
+        )
         with patch.object(inputs, "git_rev_parse") as resolve:
             generation_inputs(self.kb_root, kb_sha=before.kb_sha)
         resolve.assert_not_called()
@@ -249,7 +300,9 @@ class GenerationInputsTest(KctxTestCase):
         source = self.root / "parser.py"
         source.write_bytes(b"# actual installed parser\n")
         module.__file__ = importlib.util.cache_from_source(str(source))
-        self.assertEqual(inputs._source_digest(module), hashlib.sha256(source.read_bytes()).hexdigest())
+        self.assertEqual(
+            inputs._source_digest(module), hashlib.sha256(source.read_bytes()).hexdigest()
+        )
         source.unlink()
         with self.assertRaises(KctxError):
             inputs._source_digest(module)
@@ -257,13 +310,18 @@ class GenerationInputsTest(KctxTestCase):
     def test_native_engine_version_changes_identity(self) -> None:
         before = generation_inputs(self.kb_root)
         self.dolt_version.return_value = subprocess.CompletedProcess(
-            [str(self.dolt_bin), "version"], 0, "dolt version newer-release\n", "",
+            [str(self.dolt_bin), "version"],
+            0,
+            "dolt version newer-release\n",
+            "",
         )
         after = generation_inputs(self.kb_root)
         self.assertNotEqual(before.digest, after.digest)
         self.assertEqual(after.dolt_version, "dolt version newer-release")
         self.dolt_version.assert_called_with(
-            [str(self.dolt_bin), "version"], check=True, timeout=15,
+            [str(self.dolt_bin), "version"],
+            check=True,
+            timeout=15,
         )
 
     def test_resolved_native_binary_changes_identity(self) -> None:
@@ -291,7 +349,9 @@ class GenerationInputsTest(KctxTestCase):
 
     def test_missing_distribution_metadata_fails_closed(self) -> None:
         with patch.object(
-            importlib.metadata, "version", side_effect=importlib.metadata.PackageNotFoundError("kctx"),
+            importlib.metadata,
+            "version",
+            side_effect=importlib.metadata.PackageNotFoundError("kctx"),
         ):
             with self.assertRaises(KctxError):
                 generation_inputs(self.kb_root)

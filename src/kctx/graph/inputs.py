@@ -14,6 +14,7 @@ import importlib
 import importlib.metadata
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -30,6 +31,7 @@ from kctx.observability import run_logged
 from kctx.semantics import model as semantic_model
 
 MANIFEST_VERSION = 1
+_DOLT_VERSION_RE = re.compile(r"^dolt version \S+", re.MULTILINE)
 
 
 def _source_path(module: ModuleType) -> Path:
@@ -173,13 +175,19 @@ def generation_inputs(kb_root: Path, *, kb_sha: str | None = None) -> Generation
     config = Config.load()
     dolt_bin = Path(dolt_store.resolve_dolt_bin(config=config)).expanduser().resolve()
     try:
-        dolt_version = run_logged([str(dolt_bin), "version"], check=True, timeout=15).stdout.strip()
+        version_output = run_logged([str(dolt_bin), "version"], check=True, timeout=15).stdout
     except (OSError, subprocess.SubprocessError, UnicodeError) as error:
         raise KctxError(
             "not-found", f"cannot identify graph Dolt engine {dolt_bin}: {error}"
         ) from error
-    if not dolt_version:
+    # Advisory upgrade-check warnings share stdout and appear only on some
+    # invocations of a non-latest engine; only the version line may enter a
+    # generation's identity, or the recompute before publication would see
+    # different "inputs" and refuse to publish its own candidate.
+    version_line = _DOLT_VERSION_RE.search(version_output)
+    if version_line is None:
         raise KctxError("not-found", f"graph Dolt engine returned no version: {dolt_bin}")
+    dolt_version = version_line.group(0)
     config_values: tuple[tuple[str, str | int | None], ...] = (
         ("root", _resolved_path(config.root)),
         ("graph_dir", _resolved_path(config.graph_dir)),

@@ -20,22 +20,21 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 from kctx.semantics.model import Ttl  # noqa: E402
 from kctx.semantics.time import Freshness, assess_fresh  # noqa: E402
 
-# import the verified twin by path: the contracts module is only importable
-# inside the Nagini image, and cwd differs between host and container.
+# Execute the RUNTIME twin (plain algorithm). The nagini job separately
+# asserts this body is token-identical to the Viper-verified annotated twin.
 import importlib.util  # noqa: E402
 
 _spec = importlib.util.spec_from_file_location(
-    "assess_fresh_contracts",
-    Path(__file__).resolve().parent / "assess_fresh_contracts.py",
+    "twin_runtime",
+    Path(__file__).resolve().parent / "twin_runtime.py",
 )
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 assess_fresh_tagged = _mod.assess_fresh_tagged
 
-# twin <-> production encodings
-POLICIES = [(-1, 5, Ttl("expireAfter", 5)), (-1, 50, Ttl("expireAfter", 50)),
-            (-1, 0, Ttl("expireAfter", 0)), (0, 0, Ttl("noExpiry")),
-            (1, 0, Ttl("missing"))]
+POLICIES = [(0, 5, Ttl("expireAfter", 5)), (0, 50, Ttl("expireAfter", 50)),
+            (0, 0, Ttl("expireAfter", 0)), (1, 0, Ttl("noExpiry")),
+            (2, 0, Ttl("missing"))]
 RESULTS = {0: Freshness.FRESH, 1: Freshness.STALE, 2: Freshness.UNKNOWN}
 
 BASE = 1_000_000
@@ -48,9 +47,7 @@ def main() -> int:
     for (kind, secs, ttl), offset in itertools.product(POLICIES, OFFSETS):
         observed = BASE
         now = BASE + offset
-        twin = assess_fresh_tagged(
-            0 if kind == -1 else 1, secs if kind == -1 else 0, observed, now
-        )
+        twin = assess_fresh_tagged(kind, secs, observed, now)
         prod = assess_fresh(ttl, observed, now)
         cases += 1
         if RESULTS[twin] is not prod:
@@ -60,9 +57,7 @@ def main() -> int:
             )
     # future observations
     for (kind, secs, ttl) in POLICIES:
-        twin = assess_fresh_tagged(
-            0 if kind == -1 else 1, secs if kind == -1 else 0, BASE + 7, BASE
-        )
+        twin = assess_fresh_tagged(kind, secs, BASE + 7, BASE)
         prod = assess_fresh(ttl, BASE + 7, BASE)
         cases += 1
         if RESULTS[twin] is not prod:

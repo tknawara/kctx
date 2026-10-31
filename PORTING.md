@@ -45,6 +45,10 @@ corrections ordering, cursor semantics, gate binding — all landed earlier).
 - Tests are the contract: any red test stops the slice.
 - The conformance harness (`scripts/conformance_check.py`) and contracts
   check (`scripts/check_contracts.py`) run at every checkpoint.
-- Nagini/Viper verification of `kctx.semantics` contracts is the recorded
-  upgrade path from "conformance checked" toward implementation verification;
-  blocked here on the JVM/Viper toolchain, not forgotten.
+- Nagini/Viper: **landed for the freshness leaf** — compose profile `nagini`
+  (JVM + Viper + nagini 1.3.1, python 3.12) verifies `assess_fresh_contracts.py`
+  ("Verification successful"), `twin_drift_check.py` asserts the executed
+  runtime twin is token-identical to the verified body, and
+  `equivalence_grid.py` runs 100 cases against production `assess_fresh`.
+  Extending to further leaves (checker guards, usable_for) follows the same
+  twin+guard+grid pattern; whole-core refinement remains out of scope.

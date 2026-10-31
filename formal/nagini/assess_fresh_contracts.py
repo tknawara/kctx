@@ -61,3 +61,4 @@ def assess_fresh_tagged(
     if now <= observed_at + ttl_secs:
         return 0
     return 1
+

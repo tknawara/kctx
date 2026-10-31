@@ -1,51 +1,60 @@
-
 set_option autoImplicit false
 
-/-! Nominal identifiers.
-
-Phantom-kinded wrappers: an `Ident IdKind.asset` and an `Ident IdKind.proposal`
-with the same string are different types and cannot be interchanged. The
-Python production core mirrors this with distinct frozen dataclasses. -/
-
+/-! Distinct nominal identifier namespaces. Wire text is accessed only explicitly
+through `.val`; there are no coercions to/from String or between namespaces. -/
 namespace Kctx
 
 inductive IdKind where
-  | asset
-  | claim
-  | claimRev
-  | citation
-  | observation
-  | proposal
-  | investigation
-  | signature
-  | rule
-  | operation
-  | snapshot
-deriving DecidableEq, Repr, Inhabited
+  | asset | project | claim | claimRev | citation | observation | attestation
+  | enumeration | derivation | correction | receipt | proposal | proposalRev
+  | investigation | signature | rule | ruleVersion | operation | snapshot
+  | policy | checker | source | sourceRev | content | actor | gate | targetRev
+  deriving DecidableEq, Repr, Inhabited
 
-structure Ident (k : IdKind) where
+structure Ident (kind : IdKind) where
   val : String
-deriving DecidableEq, Repr, Inhabited
+  nonempty : val ≠ ""
+  deriving DecidableEq, Repr
 
-instance {k : IdKind} : ToString (Ident k) where
-  toString i := i.val
+instance {kind : IdKind} : Inhabited (Ident kind) :=
+  ⟨⟨"_", by decide⟩⟩
 
-abbrev AssetId := Ident IdKind.asset
-abbrev ClaimId := Ident IdKind.claim
-abbrev ObservationId := Ident IdKind.observation
-abbrev ProposalId := Ident IdKind.proposal
+instance {kind : IdKind} : BEq (Ident kind) := ⟨fun a b => decide (a = b)⟩
+instance {kind : IdKind} : LawfulBEq (Ident kind) where
+  eq_of_beq := of_decide_eq_true
+  rfl := by intro a; exact decide_eq_true rfl
 
-/-- A claim reference: logical id + immutable revision. The id alone cannot
-identify the historical proposition (handover §4). -/
-structure ClaimRef where
-  id : ClaimId
-  rev : String
-deriving DecidableEq, Repr, Inhabited
+abbrev AssetId := Ident .asset
+abbrev ProjectId := Ident .project
+abbrev ClaimId := Ident .claim
+abbrev ClaimRevision := Ident .claimRev
+abbrev CitationId := Ident .citation
+abbrev ObservationId := Ident .observation
+abbrev AttestationId := Ident .attestation
+abbrev EnumerationId := Ident .enumeration
+abbrev DerivationId := Ident .derivation
+abbrev CorrectionId := Ident .correction
+abbrev ReceiptId := Ident .receipt
+abbrev ProposalId := Ident .proposal
+abbrev ProposalRevision := Ident .proposalRev
+abbrev InvestigationId := Ident .investigation
+abbrev SignatureId := Ident .signature
+abbrev RuleId := Ident .rule
+abbrev RuleVersion := Ident .ruleVersion
+abbrev OperationId := Ident .operation
+abbrev SnapshotId := Ident .snapshot
+abbrev PolicyId := Ident .policy
+abbrev CheckerId := Ident .checker
+abbrev SourceId := Ident .source
+abbrev SourceRevision := Ident .sourceRev
+abbrev ContentId := Ident .content
+abbrev ActorId := Ident .actor
+abbrev GateId := Ident .gate
+abbrev TargetRevision := Ident .targetRev
 
-/-! Core has no `deriving BEq` handler; these explicit instances are
-decide-based so `simp` can reason through them uniformly. -/
-instance {k : IdKind} : BEq (Ident k) := ⟨fun a b => decide (a = b)⟩
-instance : BEq IdKind := ⟨fun a b => decide (a = b)⟩
-instance : BEq ClaimRef := ⟨fun a b => decide (a = b)⟩
+/-- A generic lookup never erases the key's namespace. -/
+def lookup {kind : IdKind} {α : Type} (key : α → Ident kind)
+    (records : List α) (id : Ident kind) : Option α :=
+  records.find? (fun record => key record == id)
 
 end Kctx

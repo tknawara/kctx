@@ -1,219 +1,388 @@
 {
-  "schema_version": 1,
-  "semantic_version": "1.0.0",
+  "schema_version": 2,
+  "semantic_version": "2.0.0",
   "lean_toolchain": "leanprover/lean4:v4.21.0",
+  "nominal_identifiers": {
+    "source": "formal/Kctx/Ids.lean",
+    "invariant": "Ident kind stores nonempty text with a kernel-checked proof; namespaces cannot coerce to String or to each other. Unknown optional roles, checker constraints and authored revisions use Option Ident, not empty valid IDs.",
+    "compilefail_fixtures": "formal/compilefail/*.lean",
+    "executed_evidence": "formal/nominal-compilefail-report.json"
+  },
   "theorems": {
     "T01": {
       "theorem": [
-        "Kctx.T01_observation",
-        "Kctx.T01_claim",
-        "Kctx.T01_binding",
-        "Kctx.T01_correction",
-        "Kctx.T01_derivation"
+        "Kctx.T01_decoder_admission",
+        "Kctx.admitKB_sound"
       ],
-      "meaning": "Decoding/admission success produces a well-formed internal value.",
-      "assumptions": "Input is the positional-array JSON wire format; the decoders run recordWf* before returning.",
-      "executable": "Kctx.decObservation / decClaim / decBinding / decCorrection / decDerivation",
-      "fixtures": "tests/conformance/*"
+      "meaning": "Successful whole-KB decoding and structural admission imply global wellFormed (unique identities, exact bindings, references, finite witnesses, supersession-cycle rejection).",
+      "assumptions": "Strict versioned object transport; raw parseKB is structural parsing only, not admission.",
+      "executable": "Kctx.decKB / admitKB",
+      "fixtures": "tests/conformance/v2*; docs/kctx/reports/semantic-audit-cases.jsonl"
     },
     "T02": {
       "theorem": [
-        "Kctx.T02_observation",
-        "Kctx.T02_claim",
-        "Kctx.T02_binding",
-        "Kctx.T02_correction",
-        "Kctx.T02_derivation",
-        "Kctx.T02_evalCtx"
+        "Kctx.T02_full_state_roundtrip",
+        "Kctx.T02_canonicalization_preserves",
+        "Kctx.T02_formula_roundtrip",
+        "Kctx.T02_witness_roundtrip",
+        "Kctx.roundtripTtlPolicy",
+        "Kctx.roundtripAuthority",
+        "Kctx.roundtripPlan",
+        "Kctx.roundtripJournalEntry",
+        "Kctx.roundtripVerifiedApproval",
+        "Kctx.roundtripProposal",
+        "Kctx.roundtripHypothesis",
+        "Kctx.roundtripInvestigation",
+        "Kctx.roundtripChecked",
+        "Kctx.roundtripAssessment",
+        "Kctx.roundtripApplyResult",
+        "Kctx.roundtripSequenceResult",
+        "Kctx.roundtripSelectionState",
+        "Kctx.roundtripSelectionPlan",
+        "Kctx.roundtripVerifiedSelectionApproval",
+        "Kctx.roundtripSelectionJournalEntry",
+        "Kctx.roundtripSelectionResult",
+        "Kctx.roundtripAuthoredStatus",
+        "Kctx.roundtripProfile",
+        "Kctx.roundtripGatePhase",
+        "Kctx.roundtripGateOutcome",
+        "Kctx.roundtripGateDefinition",
+        "Kctx.roundtripGateResult",
+        "Kctx.roundtripAuthoredReplacement",
+        "Kctx.roundtripAuthoredLanded",
+        "Kctx.roundtripAuthoredProposal",
+        "Kctx.T02_scope_canonicalization",
+        "Kctx.T02_formula_canonicalization",
+        "Kctx.T02_witness_canonicalization",
+        "Kctx.T02_statement_canonicalization",
+        "Kctx.T02_ref_canonicalization",
+        "Kctx.T02_claim_canonicalization",
+        "Kctx.T02_observation_canonicalization",
+        "Kctx.T02_attestation_canonicalization",
+        "Kctx.T02_enumeration_canonicalization",
+        "Kctx.T02_derivation_canonicalization",
+        "Kctx.T02_correction_canonicalization",
+        "Kctx.T02_policy_canonicalization",
+        "Kctx.T02_context_canonicalization",
+        "Kctx.T02_dependency_canonicalization",
+        "Kctx.T02_receipt_canonicalization",
+        "Kctx.T02_kb_canonicalization",
+        "Kctx.T02_source_selection_canonicalization",
+        "Kctx.T02_polarity_canonicalization",
+        "Kctx.T02_outcome_canonicalization",
+        "Kctx.T02_correction_kind_canonicalization",
+        "Kctx.T02_proposal_status_canonicalization",
+        "Kctx.T02_hypothesis_status_canonicalization",
+        "Kctx.T02_fresh_canonicalization",
+        "Kctx.T02_support_canonicalization",
+        "Kctx.T02_apply_outcome_canonicalization",
+        "Kctx.T02_ttl_policy_canonicalization",
+        "Kctx.T02_authored_status_canonicalization",
+        "Kctx.T02_profile_canonicalization",
+        "Kctx.T02_gate_phase_canonicalization",
+        "Kctx.T02_gate_outcome_canonicalization",
+        "Kctx.T02_authority_canonicalization",
+        "Kctx.T02_plan_canonicalization",
+        "Kctx.T02_journal_entry_canonicalization",
+        "Kctx.T02_verified_approval_canonicalization",
+        "Kctx.T02_proposal_canonicalization",
+        "Kctx.T02_hypothesis_canonicalization",
+        "Kctx.T02_investigation_canonicalization",
+        "Kctx.T02_checked_canonicalization",
+        "Kctx.T02_assessment_canonicalization",
+        "Kctx.T02_apply_result_canonicalization",
+        "Kctx.T02_sequence_result_canonicalization",
+        "Kctx.T02_selection_state_canonicalization",
+        "Kctx.T02_selection_plan_canonicalization",
+        "Kctx.T02_verified_selection_approval_canonicalization",
+        "Kctx.T02_selection_journal_entry_canonicalization",
+        "Kctx.T02_selection_result_canonicalization",
+        "Kctx.T02_gate_definition_canonicalization",
+        "Kctx.T02_gate_result_canonicalization",
+        "Kctx.T02_authored_replacement_canonicalization",
+        "Kctx.T02_authored_landed_canonicalization",
+        "Kctx.T02_authored_proposal_canonicalization",
+        "Kctx.T02_plan_list_roundtrip",
+        "Kctx.T02_plan_list_canonicalization",
+        "Kctx.T02_journal_entry_list_roundtrip",
+        "Kctx.T02_journal_entry_list_canonicalization",
+        "Kctx.T02_verified_approval_list_roundtrip",
+        "Kctx.T02_verified_approval_list_canonicalization",
+        "Kctx.T02_verified_selection_approval_list_roundtrip",
+        "Kctx.T02_verified_selection_approval_list_canonicalization",
+        "Kctx.T02_selection_journal_entry_list_roundtrip",
+        "Kctx.T02_selection_journal_entry_list_canonicalization",
+        "Kctx.T02_kb_list_roundtrip",
+        "Kctx.T02_kb_list_canonicalization",
+        "Kctx.T02_atom_canonicalization",
+        "Kctx.T02_ident_canonicalization",
+        "Kctx.T02_optional_ident_canonicalization",
+        "Kctx.T02_optional_checked_roundtrip",
+        "Kctx.T02_optional_checked_canonicalization"
       ],
-      "meaning": "Encoding and decoding valid protocol values preserves their semantic value.",
-      "assumptions": "Canonical positional arrays; recordWf* holds on the value.",
-      "executable": "Kctx.encObservation / decObservation (etc.)",
-      "fixtures": "tests/conformance/*"
+      "meaning": "Encoding/decoding and decode-first canonicalization preserve bounded states, recursive witnesses, contexts, admission/selection plans and journals, authored workflows/gates/investigations, and every bidirectional typed result codec.",
+      "assumptions": "Concrete syntactic field validity and constructor depth <=256, never assumed decoder success. Internal witness completeness is unbounded finite. Raw request/trusted-environment framing and output-only retrieval have no typed codec pair; their validation is exercised by conformance rather than an invented roundtrip theorem.",
+      "executable": "Kctx.encKB / decKB / canonicalKB",
+      "fixtures": "tests/conformance/v2*; docs/kctx/reports/semantic-audit-cases.jsonl"
     },
     "T03": {
       "theorem": [
-        "Kctx.T03_commit_wf"
+        "Kctx.T03_operation_preserves_wf",
+        "Kctx.selection_preserves_ledger",
+        "Kctx.T03_selection_applied_wellFormed"
       ],
-      "meaning": "Successful core operations preserve well-formed admitted state.",
-      "assumptions": "Modeled state; drafts are not required (they never reach commit).",
-      "executable": "Kctx.commitOp",
-      "fixtures": "tests/conformance/commit_cases.jsonl"
+      "meaning": "Applied publication preserves globally well-formed candidate state; retained selection preserves every current ledger collection.",
+      "assumptions": "Authenticated environment supplies full-plan capabilities bound to exact base Context/policy/source selections. Adapter authenticates snapshot history and rejects reused historical publication identities; kernel selection also rejects retained identity reuse. Durable atomicity is an adapter refinement obligation.",
+      "executable": "Kctx.applyPlan / applySelection",
+      "fixtures": "tests/conformance/v2*; docs/kctx/reports/semantic-audit-cases.jsonl"
     },
     "T04": {
       "theorem": [
-        "Kctx.T04_checker_sound"
+        "Kctx.T04_checker_sound",
+        "Kctx.T04_public_check_sound",
+        "Kctx.checkedDerivation_exact",
+        "Kctx.finite_witness_complete",
+        "Kctx.checkWitness_iff"
       ],
-      "meaning": "Derivation checker acceptance implies the declarative derivability judgment, for every interpretation.",
-      "assumptions": "PremisesHold supplies premise truth under the interpretation (the checker verifies structure only). Universal over well-formed views and acyclic witnesses.",
-      "executable": "Kctx.checkDerivationV",
-      "fixtures": "tests/conformance/derivation_cases.jsonl"
+      "meaning": "Structural recursive checker acceptance implies independent inductive Derives, and every finite Derives witness is accepted; public checker and admitted derivation preserve exact conclusion scope/formula/polarity.",
+      "assumptions": "No external PremisesHold. No world-truth assumption needed for derivability.",
+      "executable": "Kctx.checkWitness / check / checkedDerivation",
+      "fixtures": "tests/conformance/v2*; docs/kctx/reports/semantic-audit-cases.jsonl"
     },
     "T05": {
       "theorem": [
-        "Kctx.T05_derives_sound"
+        "Kctx.T05_derives_sound",
+        "Kctx.T05_admitted_derivation_sound",
+        "Kctx.holds_specialize",
+        "Kctx.memberFormula_sound",
+        "Kctx.false_atom"
       ],
-      "meaning": "Every enabled rule preserves its declared proposition semantics.",
-      "assumptions": "Each constructor discharged separately (andIntro/specialize/obsSupports/allChecked); no global soundness axiom.",
-      "executable": "Kctx.Derives",
-      "fixtures": "tests/conformance/derivation_cases.jsonl"
+      "meaning": "Every enabled inference preserves compositional interpretation; admitted exact conclusions hold under local proposition-specific evidence soundness.",
+      "assumptions": "EvidenceSound applies ONLY actual exact selected atomic or inventory-certificate attestation leaves. Inventory truth is equality with independently interpreted domain(source,revision,query,scope,method), not supplied-members definitional truth. False atoms and nonempty-domain countermodels are inhabited.",
+      "executable": "Kctx.Derives / Holds",
+      "fixtures": "tests/conformance/v2*; docs/kctx/reports/semantic-audit-cases.jsonl"
     },
     "T06": {
       "theorem": [
-        "Kctx.T06_reusable_iff"
+        "Kctx.T06_computed_footprint_transfer",
+        "Kctx.T06_derivability_transfer"
       ],
-      "meaning": "Matching the complete declared footprint preserves the reusable judgment under the stated context/time premises.",
-      "assumptions": "Footprint entries matched exactly (contains); check accepted.",
-      "executable": "Kctx.Reusable",
-      "fixtures": "tests/conformance/reuse_cases.jsonl"
+      "meaning": "Matching every actual computed transitive dependency transfers derivability at the same explicit context/time.",
+      "assumptions": "FootprintMatches compares actual target lookups, including full discovery records and empty correction selections; context/time fixed.",
+      "executable": "Kctx.DependencyMatches / checkWitness",
+      "fixtures": "tests/conformance/v2*; docs/kctx/reports/semantic-audit-cases.jsonl"
     },
     "T07": {
       "theorem": [
-        "Kctx.T07_checkDerivationV_agree",
-        "Kctx.T07_checkDerivationV_ext"
+        "Kctx.T07_computed_footprint_locality",
+        "Kctx.T07_check_locality"
       ],
-      "meaning": "Changes outside the declared footprint cannot change the relevant evaluation.",
-      "assumptions": "Agreement form: views identical on the checker's observables (claim/observation lookups restricted to consultedIds, the evidence-binding test, the correction guards) give identical verdicts. Extension form: appending claims/observations/corrections with identities outside consultedIds preserves the verdict. The locality premise is justified by the footprint construction (consultedIds_* lemmas: the checker queries only premise/conclusion/evidence/footprint identities). Bindings are not extended: new bindings are acquisition, not noise.",
-      "executable": "Kctx.checkDerivationV",
-      "fixtures": "tests/conformance/derivation_cases.jsonl"
+      "meaning": "Changes outside a successful computed witness footprint preserve its exact checked result; independent query-local agreement also preserves all checker outcomes.",
+      "assumptions": "Receipt/usability additionally recompute root corrections, contrary evidence and policy rather than assuming witness locality covers global assessment.",
+      "executable": "Kctx.checkWitness / LookupAgree",
+      "fixtures": "tests/conformance/v2*; docs/kctx/reports/semantic-audit-cases.jsonl"
     },
     "T08": {
       "theorem": [
-        "Kctx.T08_missing_dep_not_reusable"
+        "Kctx.T08_dependency_mismatch"
       ],
-      "meaning": "Every required mismatching or missing dependency prevents a fresh assessment for that derivation.",
-      "assumptions": "Independent alternatives unaffected (see T09).",
-      "executable": "Kctx.Reusable",
-      "fixtures": "tests/conformance/reuse_cases.jsonl"
+      "meaning": "Missing or mismatching actual accepted dependency footprint prevents receipt reuse for that alternative.",
+      "assumptions": "Freshness is recomputed origin recency, not a cache-validity flag; receipt reuse and mandatory policy gates remain separate.",
+      "executable": "Kctx.reusable / checkedDerivation",
+      "fixtures": "tests/conformance/v2*; docs/kctx/reports/semantic-audit-cases.jsonl"
     },
     "T09": {
       "theorem": [
         "Kctx.T09_alternative_survives"
       ],
-      "meaning": "A surviving accepted alternative derivation preserves positive support.",
-      "assumptions": "Policy blockers such as contestation remain separate (UsableFor).",
-      "executable": "Kctx.Supported",
-      "fixtures": "tests/conformance/support_cases.jsonl"
+      "meaning": "Any surviving accepted exact-revision alternative preserves selected support; policy blockers remain separate.",
+      "assumptions": "Own polarity is exact requested Ref; opposite atomic evidence remains independently visible.",
+      "executable": "Kctx.supported / supportAlternatives",
+      "fixtures": "tests/conformance/v2*; docs/kctx/reports/semantic-audit-cases.jsonl"
     },
     "T10": {
       "theorem": [
-        "Kctx.T10_all_support_removed"
+        "Kctx.T10_no_alternatives",
+        "Kctx.unsupported_atom_impossible"
       ],
-      "meaning": "Invalidating every supporting derivation removes the support judgment; no negation transfer.",
-      "assumptions": "Does not establish the negated proposition (NonVacuity example).",
-      "executable": "Kctx.Supported",
-      "fixtures": "tests/conformance/support_cases.jsonl"
+      "meaning": "Removing all accepted alternatives removes support; no arbitrary unsupported atomic proposition follows in an inhabited false interpretation.",
+      "assumptions": "No negation-as-failure rule; independent negative support requires its own evidence.",
+      "executable": "Kctx.supported / checkWitness",
+      "fixtures": "tests/conformance/v2*; docs/kctx/reports/semantic-audit-cases.jsonl"
     },
     "T11": {
       "theorem": [
-        "Kctx.assessFresh_stale_mono"
+        "Kctx.T11_expiry_monotone",
+        "Kctx.assessFresh_fresh_iff",
+        "Kctx.assessFresh_future_not_fresh"
       ],
-      "meaning": "With fixed inputs and no new validation, increasing evaluation time cannot restore expired recency.",
-      "assumptions": "Integer epoch seconds; inclusive TTL boundary; future timestamps are unknown, never fresh (assessFresh_future_not_fresh).",
+      "meaning": "Fixed-input expired recency cannot be restored by increasing time; inclusive endpoints and future timestamps are explicit.",
+      "assumptions": "Fixed observation time/TTL; new observations or validations are separate inputs.",
       "executable": "Kctx.assessFresh",
-      "fixtures": "tests/conformance/freshness_cases.jsonl"
+      "fixtures": "tests/conformance/v2*; docs/kctx/reports/semantic-audit-cases.jsonl"
     },
     "T12": {
       "theorem": [
-        "Kctx.T12_footprint_declared",
-        "Kctx.T12_copy_keeps_freshness"
+        "Kctx.T12_specialization_preserves_inputs",
+        "Kctx.T12_conjunction_exact_scope",
+        "Kctx.T12_merge_preserves_dependencies",
+        "Kctx.T12_recursive_origin_preservation",
+        "Kctx.T12_public_origin_preservation",
+        "Kctx.T12_recursive_dependencies_and_scope"
       ],
-      "meaning": "Composition/copying cannot widen scope, renew evidence age, or drop dependencies.",
-      "assumptions": "The checker requires every consulted identity to be declared in the footprint; copying preserves observedAt/ttl exactly.",
-      "executable": "Kctx.footprintDeclares",
-      "fixtures": "tests/conformance/reuse_cases.jsonl"
+      "meaning": "Every recursive witness constructor preserves exact selected originating observations and their timestamps/source/revision/content; arbitrarily deep child dependencies are retained and scope cannot widen.",
+      "assumptions": "Origin integrity is structural and independent of external source truth; no inference mints observation time.",
+      "executable": "Kctx.checkWitness / mergeDependencies",
+      "fixtures": "tests/conformance/v2*; docs/kctx/reports/semantic-audit-cases.jsonl"
     },
     "T13": {
       "theorem": [
-        "Kctx.T13_witness_required"
+        "Kctx.T13_coverage_requires_members",
+        "Kctx.T13_absence_requires_empty_inventory",
+        "Kctx.memberFormula_sound"
       ],
-      "meaning": "Missing coverage cannot justify universal coverage or absence.",
-      "assumptions": "Typed completeness witness mandatory for allChecked.",
-      "executable": "Kctx.checkAllChecked",
-      "fixtures": "tests/conformance/derivation_cases.jsonl"
+      "meaning": "All and absence require recursively derived exact inventory completeness certificates in addition to actual retained acquisition and every member proof; missing certificate or members rejects. Independent-domain semantics prevents forged empty inventory from proving absence under sound local evidence.",
+      "assumptions": "Exact source/revision/query/scope/method finite-domain completeness is an explicit inventory proposition attested by named evidence. Local certificate soundness is external, not a blanket completeness flag. Source selection must match pinned Context.sources.",
+      "executable": "Kctx.enumerationEvidence / allAllowed",
+      "fixtures": "tests/conformance/v2*; docs/kctx/reports/semantic-audit-cases.jsonl"
     },
     "T14": {
       "theorem": [
-        "Kctx.T14_derives_only_enabled"
+        "Kctx.T14_no_arbitrary_atom",
+        "Kctx.false_atom"
       ],
-      "meaning": "No reverse inference or relation composition is accepted without an enabled typed rule.",
-      "assumptions": "Countermodels in NonVacuity (contextualizes does not create support).",
-      "executable": "Kctx.Derives",
-      "fixtures": "formal/Kctx/Theorems2.lean (NonVacuity)"
+      "meaning": "Arbitrary unsupported atoms cannot be derived by reverse navigation or composition; false atomic interpretations exist.",
+      "assumptions": "Only six explicit typed constructors are inference rules; navigation edges are not witness constructors.",
+      "executable": "Kctx.Witness / Derives",
+      "fixtures": "tests/conformance/v2*; docs/kctx/reports/semantic-audit-cases.jsonl"
     },
     "T15": {
       "theorem": [
-        "Kctx.T15_supported_ext"
+        "Kctx.T15_pinned_history",
+        "Kctx.selection_witness_unchanged"
       ],
-      "meaning": "Historical resolution and evaluation are unchanged by extensions outside the pinned historical context.",
-      "assumptions": "The derivation list is pinned (the historical context); additions whose identities lie outside supportFootprint (the union of the consulted footprints of the derivations concluding r) neither create nor destroy support. New derivations may add support: they are new history.",
-      "executable": "Kctx.Supported",
-      "fixtures": "tests/conformance/support_cases.jsonl"
+      "meaning": "Pinned immutable historical selection survives appended later snapshots; forward active selection retains current corrections and does not alter witness support or evidence age.",
+      "assumptions": "Historical release identity is distinct from current selection; adapters retain and authenticate native objects.",
+      "executable": "Kctx.selectSnapshot / applySelection",
+      "fixtures": "tests/conformance/v2*; docs/kctx/reports/semantic-audit-cases.jsonl"
     },
     "T16": {
       "theorem": [
-        "Kctx.T16_add_correction_no_new_support"
+        "Kctx.T16_supersession_no_transfer",
+        "Kctx.T16_identical_statement_no_revision_transfer",
+        "Kctx.T16_no_validation_transfer",
+        "Kctx.T16_valid_supersession_no_transfer",
+        "Kctx.T16_supersession_support_unchanged",
+        "Kctx.T16_supersession_validation_monotone",
+        "Kctx.T16_supersession_reusable_monotone",
+        "Kctx.T16_source_receipt_not_replacement"
       ],
-      "meaning": "A supersession/correction edge alone cannot confer support or validation on its target.",
-      "assumptions": "Corrections only gate (monotone removal lemma checkDerivationV_drop_correction).",
-      "executable": "Kctx.Supported",
-      "fixtures": "formal/Kctx/Theorems2.lean (NonVacuity)"
+      "meaning": "Pure supersession append leaves support unchanged, cannot increase admitted validation/reuse, and cannot use a source receipt to validate a distinct replacement revision.",
+      "assumptions": "Validation monotonicity requires the actual old-state wellFormed receipt-dependency invariant and a fresh appended correction; a retained executable raw-state counterexample shows why that admission invariant matters.",
+      "executable": "Kctx.supported / validationCurrent",
+      "fixtures": "tests/conformance/v2*; docs/kctx/reports/semantic-audit-cases.jsonl"
     },
     "T17": {
       "theorem": [
-        "Kctx.T17_usable_conditions"
+        "Kctx.T17_usable_policy"
       ],
-      "meaning": "UsableFor success entails every mandatory condition of the selected policy.",
-      "assumptions": "Explicit policy fields (requireFreshEvidence/requireValidated/requireUncontested).",
-      "executable": "Kctx.UsableFor",
-      "fixtures": "tests/conformance/support_cases.jsonl"
+      "meaning": "Usability entails applicability and every mandatory selected freshness, validation and uncontested condition.",
+      "assumptions": "Selected claim polarity determines support/freshness; four-valued report does not erase contrary evidence.",
+      "executable": "Kctx.assess / usableFor",
+      "fixtures": "tests/conformance/v2*; docs/kctx/reports/semantic-audit-cases.jsonl"
     },
     "T18": {
       "theorem": [
-        "Kctx.T18_transition_conditions"
+        "Kctx.T18_transition_conditions",
+        "Kctx.T18_authored_bound_gates",
+        "Kctx.applied_authority_exact",
+        "Kctx.no_self_issued_authority",
+        "Kctx.T18_exact_signed_context",
+        "Kctx.T18_authored_candidate_conditions",
+        "Kctx.T18_factual_execution_conditions",
+        "Kctx.authored_transition_candidate"
       ],
-      "meaning": "An accepted proposal transition satisfies its readiness, actor, evidence, and gate preconditions.",
-      "assumptions": "One readiness predicate for both filing paths; actor required for decided statuses.",
-      "executable": "Kctx.planTransition",
-      "fixtures": "tests/conformance/transition_cases.jsonl"
+      "meaning": "Factual transitions use exact current receipts; authored verified transitions require current definition/target-bound gate evidence and landed references; publication requires authenticated full-plan approval and rejects self-issued capabilities.",
+      "assumptions": "Authored parser/gate/landed resolution facts come from actual adapters, never supplied pass/resolves booleans; release approval is independently signature authenticated. Exact signed Context binds full selected policy, source selections, target/use and versions. Authored lifecycle alone is not release authority.",
+      "executable": "Kctx.transition / authoredTransition / authorized",
+      "fixtures": "tests/conformance/v2*; docs/kctx/reports/semantic-audit-cases.jsonl"
     },
     "T19": {
       "theorem": [
-        "Kctx.T19_conclude_conditions"
+        "Kctx.T19_conclusion_conditions"
       ],
-      "meaning": "Investigation conclusion satisfies its structural and hypothesis requirements.",
-      "assumptions": "Malformed hypothesis bullets block conclusion (never invisible).",
-      "executable": "Kctx.canConclude",
-      "fixtures": "tests/conformance/conclude_cases.jsonl"
+      "meaning": "Structural investigation completion requires nonblank examined-input/scope text and no open or malformed typed hypotheses.",
+      "assumptions": "Empty hypothesis list and unk are valid; factual admission is separate. Parser classification is covered by production tests.",
+      "executable": "Kctx.conclude",
+      "fixtures": "tests/conformance/v2*; docs/kctx/reports/semantic-audit-cases.jsonl"
     },
     "T20": {
       "theorem": [
-        "Kctx.T20_predecessor_conflict"
+        "Kctx.T20_expected_predecessor",
+        "Kctx.T20_rejection_unchanged",
+        "Kctx.selection_applied_details",
+        "Kctx.selection_exact_retained_refs",
+        "Kctx.selection_rejection_unchanged"
       ],
-      "meaning": "Conditional application of a plan requires its expected predecessor; rejection leaves modeled state unchanged.",
-      "assumptions": "Modeled state; real storage refinement needs integration tests.",
-      "executable": "Kctx.commitOp",
-      "fixtures": "tests/conformance/commit_cases.jsonl"
+      "meaning": "Applied publication/selection requires expected predecessor; rejected or replayed publication preserves state/journal; selection references exactly the trusted retained target.",
+      "assumptions": "Conditional durable publication remains adapter refinement; pure model never weakens immutable-prefix admission.",
+      "executable": "Kctx.applyPlan / applySelection",
+      "fixtures": "tests/conformance/v2*; docs/kctx/reports/semantic-audit-cases.jsonl"
     },
     "T21": {
       "theorem": [
-        "Kctx.T21_replay_same",
-        "Kctx.T21_replay_conflict"
+        "Kctx.T21_applied_replay",
+        "Kctx.T21_changed_input_conflicts",
+        "Kctx.selection_replay",
+        "Kctx.selection_rejects_self_approval",
+        "Kctx.selection_changed_input_conflicts"
       ],
-      "meaning": "Replay of an already-applied operation id with the same input is idempotent; different input conflicts.",
-      "assumptions": "Journal consulted first; all modeled operations support retries.",
-      "executable": "Kctx.commitOp",
-      "fixtures": "tests/conformance/commit_cases.jsonl"
+      "meaning": "Actual applied result plus produced journal composes with same-input replay unchanged; changed full inputs conflict, and selection uses the same journal construction.",
+      "assumptions": "Canonical identity is entire typed plan, not caller-provided digest. Journal newest-first.",
+      "executable": "Kctx.applyPlan / applySelection",
+      "fixtures": "tests/conformance/v2*; docs/kctx/reports/semantic-audit-cases.jsonl"
     },
     "T22": {
       "theorem": [
-        "Kctx.T22_deterministic",
-        "Kctx.T22_commit_deterministic"
+        "Kctx.T22_deterministic"
       ],
-      "meaning": "Evaluation is deterministic for the same explicit inputs and semantic version.",
-      "assumptions": "Purity by construction: no clock/random/IO in the core.",
-      "executable": "Kctx.checkDerivationV / Kctx.commitOp",
-      "fixtures": "whole conformance run (same inputs -> same outputs)"
+      "meaning": "Evaluation has the same result for identical explicit model inputs; no clock/random/IO or implicit HEAD in core.",
+      "assumptions": "Lists are explicit ordered inputs. Retrieval pagination pins snapshot and preserves selected ordering; no database-row permutation theorem is asserted.",
+      "executable": "Kctx.check / assess / applyPlan / retrieve",
+      "fixtures": "tests/conformance/v2*; docs/kctx/reports/semantic-audit-cases.jsonl"
     }
   },
-  "note": "All 22 obligations discharged. Axiom audit allowlist: propext, Classical.choice, Quot.sound."
+  "nonvacuity": [
+    "Kctx.NonVacuity.inhabited_wellFormed",
+    "Kctx.NonVacuity.leaf_nonvacuous",
+    "Kctx.NonVacuity.truth_nonvacuous",
+    "Kctx.NonVacuity.conjunction_nonvacuous",
+    "Kctx.NonVacuity.specialization_nonvacuous",
+    "Kctx.NonVacuity.coverage_nonvacuous",
+    "Kctx.NonVacuity.absence_nonvacuous",
+    "Kctx.NonVacuity.unsupported_rejected",
+    "Kctx.NonVacuity.usable_nonvacuous",
+    "Kctx.NonVacuity.false_coverage_rejected",
+    "Kctx.NonVacuity.scope_widening_rejected",
+    "Kctx.NonVacuity.falseKB_wellFormed",
+    "Kctx.NonVacuity.falseKB_evidence_sound",
+    "Kctx.NonVacuity.falseKB_no_arbitrary_support",
+    "Kctx.NonVacuity.structural_completion_empty",
+    "Kctx.NonVacuity.structural_completion_unknown",
+    "Kctx.NonVacuity.uncertified_coverage_rejected",
+    "Kctx.NonVacuity.false_absence_impossible",
+    "Kctx.NonVacuity.no_expiry_policy_usable",
+    "Kctx.NonVacuity.missing_policy_not_usable",
+    "Kctx.NonVacuity.no_expiry_future_unknown",
+    "Kctx.WorkflowCodecExamples.T02_workflow_nonvacuous",
+    "Kctx.WorkflowCodecExamples.T02_selection_nonvacuous",
+    "Kctx.WorkflowCodecExamples.T02_authored_nonvacuous",
+    "Kctx.WorkflowCodecExamples.T02_investigation_nonvacuous",
+    "Kctx.CompositionExamples.raw_validation_increases",
+    "Kctx.CompositionExamples.anticipated_receipt_not_admitted",
+    "Kctx.CompositionExamples.supersession_premises_inhabited",
+    "Kctx.CompositionExamples.supported_source_does_not_support_replacement",
+    "Kctx.CompositionExamples.admitted_validation_decreases"
+  ],
+  "note": "Kernel status is reported separately by proof_check.py. T01-T22 meanings and trust boundaries above are the bounded semantic contracts, not a claim that cryptographic provenance, remote storage, parser classification or durable publication is kernel verified. Standard logical axiom allowlist: propext, Classical.choice, Quot.sound."
 }

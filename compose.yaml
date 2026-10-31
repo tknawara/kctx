@@ -19,13 +19,12 @@ services:
     image: kctx-formal:lean-4.21.0
     profiles: ["formal", "verify"]
     volumes:
-      - ./formal:/work/kctx/formal
+      - ./:/work/kctx
     working_dir: /work/kctx/formal
     command: ["./scripts/proof_check.sh"]
 
-  # Full stack in one command. Same image as `proofs` (Lean + python3):
-  # the Python suite and conformance harness are stdlib-only by design, so
-  # one pinned image runs everything (G01, G16).
+  # Full Python, Lean, correspondence and native Dolt verification image.
+  # Runtime and development dependencies come from the same checked-in lock.
   verify:
     build:
       context: .
@@ -47,3 +46,19 @@ services:
       - ./:/work/kctx
     working_dir: /work/kctx
     command: ["./formal/nagini/scripts/nagini_check.sh"]
+
+  runtime:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.runtime
+    image: kctx-runtime:python-only
+    profiles: ["verify"]
+
+  kctx:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.runtime
+    image: kctx-runtime:python-only
+    profiles: ["runtime"]
+    entrypoint: ["kctx"]
+    command: ["--help"]

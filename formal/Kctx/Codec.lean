@@ -1,674 +1,660 @@
 import Lean.Data.Json
-import Kctx.Model
-import Kctx.Time
-import Kctx.WellFormed
-import Kctx.Checker
 import Kctx.Workflow
 
 set_option autoImplicit false
-
-/-! Versioned JSON interchange (Lean ⇄ Python conformance).
-
-Format: **positional JSON arrays** with explicit arity checks. Chosen
-deliberately: every leaf codec round-trips by `rfl`/`simp` in core Lean
-(array-literal `match` patterns cannot generate equation lemmas in Lean
-4.21, so decoders read positionally via `fieldAt`). Field order is the
-contract; the Python codec mirrors these orders exactly and both sides carry
-`SEMANTIC_VERSION`.
-
-Layering: component decoders (scope, ref, prop, witness, deps) are pure
-parsers with unconditional round-trips; the five record decoders (observation,
-claim, binding, derivation, correction) run their `recordWf*` check before
-returning, so decoding success *is* admission to a well-formed value (T01). -/
-
+set_option maxRecDepth 4096
 namespace Kctx
-
 open Lean
 
-/-! ## Base helpers. -/
-
-def fieldAt (a : Array Json) (i : Nat) : Except String Json :=
-  if h : i < a.size then pure a[i] else throw "missing field"
-
-def encStr (s : String) : Json := .str s
-def decStr : Json → Except String String
-  | .str s => pure s
-  | _ => throw "expected string"
-
-def encBool (b : Bool) : Json := .bool b
-def decBool : Json → Except String Bool
-  | .bool b => pure b
-  | _ => throw "expected bool"
-
-def encInt (i : Int) : Json := .num (JsonNumber.fromInt i)
-def decInt : Json → Except String Int := Json.getInt?
-
-theorem decStr_encStr (s : String) : decStr (encStr s) = pure s := by rfl
-theorem decBool_encBool (b : Bool) : decBool (encBool b) = pure b := by rfl
-theorem decInt_encInt (i : Int) : decInt (encInt i) = pure i := by rfl
-
-def encList {α : Type} (f : α → Json) (xs : List α) : Json :=
-  .arr ((xs.map f).toArray)
-
-/-- Positional list decode (own recursion: controllable equations). -/
-def decJsonList {α : Type} (g : Json → Except String α) : List Json → Except String (List α)
+def encList {α : Type} (f : α → Json) (xs : List α) : Json := .arr (xs.map f).toArray
+def decJsonList {α : Type} (f : Json → Except String α) : List Json → Except String (List α)
   | [] => pure []
-  | x :: xs => do
-    let y ← g x
-    let ys ← decJsonList g xs
-    pure (y :: ys)
-
-def decList {α : Type} (g : Json → Except String α) : Json → Except String (List α)
-  | .arr a => decJsonList g a.toList
-  | _ => throw "expected array"
-
-theorem decJsonList_map {α : Type} (f : α → Json) (g : Json → Except String α)
-    (xs : List α) (h : ∀ x ∈ xs, g (f x) = pure x) :
-    decJsonList g (xs.map f) = pure xs := by
-  induction xs with
-  | nil => rfl
-  | cons x xs ih =>
-    simp only [decJsonList, List.map_cons, h x (List.mem_cons_self ..),
-      pure_bind, ih (fun y hy => h y (List.mem_cons_of_mem _ hy))]
-
-theorem decList_encList {α : Type} (f : α → Json) (g : Json → Except String α)
-    (xs : List α) (h : ∀ x ∈ xs, g (f x) = pure x) :
-    decList g (encList f xs) = pure xs := by
-  simp only [encList, decList, List.toArray_toList, decJsonList_map f g xs h]
-
+  | j :: js => do
+      let x ← f j
+      let xs ← decJsonList f js
+      pure (x :: xs)
+def decList {α : Type} (f : Json → Except String α) (j : Json) : Except String (List α) := do
+  let xs ← j.getArr?
+  decJsonList f xs.toList
 def encOpt {α : Type} (f : α → Json) : Option α → Json
-  | none => .arr #[.str "none"]
-  | some x => .arr #[.str "some", f x]
+  | none => .null
+  | some x => f x
+def decOpt {α : Type} (f : Json → Except String α) : Json → Except String (Option α)
+  | .null => pure none
+  | j => some <$> f j
+def encNat (n : Nat) : Json := toJson n
+def decNat : Json → Except String Nat := Json.getNat?
+def encStr : String → Json := Json.str
+def decStr : Json → Except String String := Json.getStr?
 
-def decOpt {α : Type} (g : Json → Except String α) : Json → Except String (Option α)
-  | .arr a =>
-    if a.size == 1 then do
-      let tag ← fieldAt a 0
-      match decStr tag with
-      | .ok "none" => pure none
-      | _ => throw "bad option"
-    else if a.size == 2 then do
-      let tag ← fieldAt a 0
-      match decStr tag with
-      | .ok "some" => do
-        let x ← fieldAt a 1
-        some <$> g x
-      | _ => throw "bad option"
-    else throw "bad option"
-  | _ => throw "bad option"
+/-- Encode nominal identifiers without normalizing their original wire spelling. -/
+def encIdent {kind : IdKind} (id : Ident kind) : Json := encStr id.val
+/-- Parse required identifiers; record-specific validation remains at its boundary. -/
+def decIdent {kind : IdKind} (j : Json) : Except String (Ident kind) := do
+  let raw ← decStr j
+  if h : raw = "" then throw "invalid_request" else return ⟨raw, h⟩
 
-theorem decOpt_encOpt {α : Type} (f : α → Json) (g : Json → Except String α)
-    (h : ∀ x, g (f x) = pure x) (o : Option α) :
-    decOpt g (encOpt f o) = pure o := by
-  cases o with
-  | none => rfl
-  | some x =>
-    have hr : decOpt g (encOpt f (some x)) = some <$> g (f x) := by rfl
-    rw [hr, h x]
-    rfl
+/-- Legacy optional identifier fields use the empty string, never JSON null. -/
+def encOptionalIdent {kind : IdKind} : Option (Ident kind) → Json
+  | none => encStr ""
+  | some id => encIdent id
+def decOptionalIdent {kind : IdKind} (j : Json) : Except String (Option (Ident kind)) := do
+  let raw ← decStr j
+  if h : raw = "" then return none else return some ⟨raw, h⟩
+def encBool : Bool → Json := Json.bool
+def decBool : Json → Except String Bool := Json.getBool?
+def field (j : Json) (name : String) : Except String Json := j.getObjVal? name
 
-/-! ## Enums (encode by name; decode via arr + tag). -/
+def fields (j : Json) (names : List String) : Except String Unit := do
+  let obj ← j.getObj?
+  let actual := obj.fold (fun keys key _ => key :: keys) []
+  if actual.length == names.length && names.all (fun n => actual.contains n) then pure ()
+  else throw "invalid_request"
 
-def tagOf : Json → Except String String
-  | .str s => pure s
-  | _ => throw "expected tag string"
+/-- Three distinct policies; existing numeric/null spellings remain unchanged. -/
+def encTtlPolicy : TtlPolicy → Json
+  | .expireAfter seconds => .num (JsonNumber.fromInt seconds)
+  | .noExpiry => Json.mkObj [("tag", .str "noExpiry")]
+  | .missing => .null
 
-def encTtl : TtlPolicy → Json
-  | .expireAfter s => .arr #[.str "expireAfter", encInt s]
-  | .noExpiry => .str "noExpiry"
-  | .missing => .str "missing"
+def decTtlPolicy : Json → Except String TtlPolicy
+  | .null => pure .missing
+  | j@(.num _) => do
+      let seconds ← decNat j
+      pure (.expireAfter seconds)
+  | j@(.obj _) => do
+      fields j ["tag"]
+      let tag ← field j "tag" >>= decStr
+      if tag == "noExpiry" then pure .noExpiry else throw "invalid_request"
+  | _ => throw "invalid_request"
 
-def decTtl : Json → Except String TtlPolicy
-  | .str "noExpiry" => pure .noExpiry
-  | .str "missing" => pure .missing
-  | .arr a =>
-    if a.size == 2 then do
-      let tag ← fieldAt a 0
-      match tagOf tag with
-      | .ok "expireAfter" => do
-        let s ← fieldAt a 1
-        .expireAfter <$> decInt s
-      | _ => throw "bad ttl"
-    else throw "bad ttl"
-  | _ => throw "bad ttl"
 
-theorem decTtl_encTtl (t : TtlPolicy) : decTtl (encTtl t) = pure t := by
-  cases t <;> rfl
+def encPolarity : Polarity → Json
+  | .positive => .str "positive"
+  | .negative => .str "negative"
+def decPolarity (j : Json) : Except String Polarity := do
+  match ← decStr j with
+  | "positive" => pure .positive
+  | "negative" => pure .negative
+  | _ => throw "invalid_request"
 
-def encObsOutcome : ObsOutcome → Json
+def encOutcome : Outcome → Json
   | .ok => .str "ok"
-  | .timedOut => .str "timedOut"
-  | .partialResult => .str "partialResult"
+  | .timeout => .str "timeout"
+  | .partial => .str "partial"
   | .truncated => .str "truncated"
   | .denied => .str "denied"
   | .unavailable => .str "unavailable"
-
-def decObsOutcome : Json → Except String ObsOutcome
-  | .str "ok" => pure .ok
-  | .str "timedOut" => pure .timedOut
-  | .str "partialResult" => pure .partialResult
-  | .str "truncated" => pure .truncated
-  | .str "denied" => pure .denied
-  | .str "unavailable" => pure .unavailable
-  | _ => throw "bad obs outcome"
-
-theorem decObsOutcome_encObsOutcome (o : ObsOutcome) :
-    decObsOutcome (encObsOutcome o) = pure o := by cases o <;> rfl
-
-def encSupportRole : SupportRole → Json
-  | .supports => .str "supports"
-  | .contradicts => .str "contradicts"
-  | .contextualizes => .str "contextualizes"
-
-def decSupportRole : Json → Except String SupportRole
-  | .str "supports" => pure .supports
-  | .str "contradicts" => pure .contradicts
-  | .str "contextualizes" => pure .contextualizes
-  | _ => throw "bad support role"
-
-theorem decSupportRole_encSupportRole (r : SupportRole) :
-    decSupportRole (encSupportRole r) = pure r := by cases r <;> rfl
-
-def encRuleId : RuleId → Json
-  | .andIntro => .str "andIntro"
-  | .specialize => .str "specialize"
-  | .obsSupports => .str "obsSupports"
-  | .allChecked => .str "allChecked"
-
-def decRuleId : Json → Except String RuleId
-  | .str "andIntro" => pure .andIntro
-  | .str "specialize" => pure .specialize
-  | .str "obsSupports" => pure .obsSupports
-  | .str "allChecked" => pure .allChecked
-  | _ => throw "bad rule"
-
-theorem decRuleId_encRuleId (r : RuleId) : decRuleId (encRuleId r) = pure r := by
-  cases r <;> rfl
-
-def encDepKind : DepKind → Json
-  | .sourceContent => .str "sourceContent"
-  | .kbRecord => .str "kbRecord"
-  | .policy => .str "policy"
-  | .checker => .str "checker"
-  | .correction => .str "correction"
-  | .discovery => .str "discovery"
-
-def decDepKind : Json → Except String DepKind
-  | .str "sourceContent" => pure .sourceContent
-  | .str "kbRecord" => pure .kbRecord
-  | .str "policy" => pure .policy
-  | .str "checker" => pure .checker
-  | .str "correction" => pure .correction
-  | .str "discovery" => pure .discovery
-  | _ => throw "bad dep kind"
-
-theorem decDepKind_encDepKind (k : DepKind) : decDepKind (encDepKind k) = pure k := by
-  cases k <;> rfl
+def decOutcome (j : Json) : Except String Outcome := do
+  match ← decStr j with
+  | "ok" => pure .ok
+  | "timeout" => pure .timeout
+  | "partial" => pure .partial
+  | "truncated" => pure .truncated
+  | "denied" => pure .denied
+  | "unavailable" => pure .unavailable
+  | _ => throw "invalid_request"
 
 def encCorrectionKind : CorrectionKind → Json
   | .retract => .str "retract"
   | .dispute => .str "dispute"
   | .supersede => .str "supersede"
-
-def decCorrectionKind : Json → Except String CorrectionKind
-  | .str "retract" => pure .retract
-  | .str "dispute" => pure .dispute
-  | .str "supersede" => pure .supersede
-  | _ => throw "bad correction kind"
-
-theorem decCorrectionKind_encCorrectionKind (k : CorrectionKind) :
-    decCorrectionKind (encCorrectionKind k) = pure k := by cases k <;> rfl
+def decCorrectionKind (j : Json) : Except String CorrectionKind := do
+  match ← decStr j with
+  | "retract" => pure .retract
+  | "dispute" => pure .dispute
+  | "supersede" => pure .supersede
+  | _ => throw "invalid_request"
 
 def encProposalStatus : ProposalStatus → Json
   | .draft => .str "draft"
   | .proposed => .str "proposed"
-  | .accepted => .str "accepted"
-  | .rejected => .str "rejected"
-  | .deferred => .str "deferred"
-  | .landing => .str "landing"
+  | .approved => .str "approved"
   | .applied => .str "applied"
   | .verified => .str "verified"
-  | .regressed => .str "regressed"
-  | .superseded => .str "superseded"
+  | .rejected => .str "rejected"
+def decProposalStatus (j : Json) : Except String ProposalStatus := do
+  match ← decStr j with
+  | "draft" => pure .draft
+  | "proposed" => pure .proposed
+  | "approved" => pure .approved
+  | "applied" => pure .applied
+  | "verified" => pure .verified
+  | "rejected" => pure .rejected
+  | _ => throw "invalid_request"
 
-def decProposalStatus : Json → Except String ProposalStatus
-  | .str "draft" => pure .draft
-  | .str "proposed" => pure .proposed
-  | .str "accepted" => pure .accepted
-  | .str "rejected" => pure .rejected
-  | .str "deferred" => pure .deferred
-  | .str "landing" => pure .landing
-  | .str "applied" => pure .applied
-  | .str "verified" => pure .verified
-  | .str "regressed" => pure .regressed
-  | .str "superseded" => pure .superseded
-  | _ => throw "bad proposal status"
+def encHypothesisStatus : HypothesisStatus → Json
+  | .supported => .str "supported"
+  | .refuted => .str "refuted"
+  | .unk => .str "unk"
+  | .open => .str "open"
+def decHypothesisStatus (j : Json) : Except String HypothesisStatus := do
+  match ← decStr j with
+  | "supported" => pure .supported
+  | "refuted" => pure .refuted
+  | "unk" => pure .unk
+  | "open" => pure .open
+  | _ => throw "invalid_request"
 
-theorem decProposalStatus_encProposalStatus (s : ProposalStatus) :
-    decProposalStatus (encProposalStatus s) = pure s := by cases s <;> rfl
+def encFresh : Fresh → Json
+  | .fresh => .str "fresh"
+  | .stale => .str "stale"
+  | .unknown => .str "unknown"
+def decFresh (j : Json) : Except String Fresh := do
+  match ← decStr j with
+  | "fresh" => pure .fresh
+  | "stale" => pure .stale
+  | "unknown" => pure .unknown
+  | _ => throw "invalid_request"
 
-def encHypStatus : HypStatus → Json
-  | .openH => .str "openH"
-  | .supportedH => .str "supportedH"
-  | .refutedH => .str "refutedH"
-  | .unknownH => .str "unknownH"
-  | .malformedH => .str "malformedH"
+def encSupport : Support → Json
+  | .none => .str "none"
+  | .positive => .str "positive"
+  | .negative => .str "negative"
+  | .both => .str "both"
+def decSupport (j : Json) : Except String Support := do
+  match ← decStr j with
+  | "none" => pure .none
+  | "positive" => pure .positive
+  | "negative" => pure .negative
+  | "both" => pure .both
+  | _ => throw "invalid_request"
 
-def decHypStatus : Json → Except String HypStatus
-  | .str "openH" => pure .openH
-  | .str "supportedH" => pure .supportedH
-  | .str "refutedH" => pure .refutedH
-  | .str "unknownH" => pure .unknownH
-  | .str "malformedH" => pure .malformedH
-  | _ => throw "bad hyp status"
+def encApplyOutcome : ApplyOutcome → Json
+  | .applied => .str "applied"
+  | .alreadyApplied => .str "already_applied"
+  | .inputConflict => .str "input_conflict"
+  | .predecessorConflict => .str "predecessor_conflict"
+  | .rejected => .str "rejected"
+def decApplyOutcome (j : Json) : Except String ApplyOutcome := do
+  match ← decStr j with
+  | "applied" => pure .applied
+  | "already_applied" => pure .alreadyApplied
+  | "input_conflict" => pure .inputConflict
+  | "predecessor_conflict" => pure .predecessorConflict
+  | "rejected" => pure .rejected
+  | _ => throw "invalid_request"
 
-theorem decHypStatus_encHypStatus (s : HypStatus) :
-    decHypStatus (encHypStatus s) = pure s := by cases s <;> rfl
+def encScope (v : Scope) : Json := Json.mkObj [
+  ("project", encIdent v.project),
+  ("selector", encStr v.selector)]
+def decScope (j : Json) : Except String Scope := do
+  fields j ["project", "selector"]
+  let project ← field j "project" >>= decIdent
+  let selector ← field j "selector" >>= decStr
+  let v : Scope := ⟨project, selector⟩
+  if scopeWf v then pure v else throw "invalid_request"
 
-/-! ## Components (pure parsers, unconditional round-trips). -/
+def encAtom (v : Atom) : Json := Json.mkObj [
+  ("subject", encStr v.subject),
+  ("predicate", encStr v.predicate),
+  ("args", (encList encStr) v.args)]
+def decAtom (j : Json) : Except String Atom := do
+  fields j ["subject", "predicate", "args"]
+  let subject ← field j "subject" >>= decStr
+  let predicate ← field j "predicate" >>= decStr
+  let args ← field j "args" >>= (decList decStr)
+  let v : Atom := ⟨subject, predicate, args⟩
+  if atomWf v then pure v else throw "invalid_request"
 
--- Scope: [project, extra]
-def encScope (s : Scope) : Json := .arr #[encStr s.project, encStr s.extra]
+def encFormula : Formula → Json
+  | .atom a => Json.mkObj [("tag", .str "atom"), ("atom", encAtom a)]
+  | .truth => Json.mkObj [("tag", .str "truth")]
+  | .and a b => Json.mkObj [("tag", .str "and"), ("left", encFormula a), ("right", encFormula b)]
+  | .all e p => Json.mkObj [("tag", .str "all"), ("enumeration", encIdent e), ("predicate", .str p)]
+  | .absent e => Json.mkObj [("tag", .str "absent"), ("enumeration", encIdent e)]
+  | .inventory e => Json.mkObj [("tag", .str "inventory"), ("enumeration", encIdent e)]
+def decFormulaFuel : Nat → Json → Except String Formula
+  | 0, _ => throw "invalid_request"
+  | n+1, j => do
+      match ← field j "tag" >>= decStr with
+      | "atom" => fields j ["tag", "atom"]; return .atom (← field j "atom" >>= decAtom)
+      | "truth" => fields j ["tag"]; return .truth
+      | "and" =>
+          fields j ["tag", "left", "right"]
+          return .and (← field j "left" >>= decFormulaFuel n) (← field j "right" >>= decFormulaFuel n)
+      | "all" =>
+          fields j ["tag", "enumeration", "predicate"]
+          return .all (← field j "enumeration" >>= decIdent) (← field j "predicate" >>= decStr)
+      | "absent" => fields j ["tag", "enumeration"]; return .absent (← field j "enumeration" >>= decIdent)
+      | "inventory" => fields j ["tag", "enumeration"]; return .inventory (← field j "enumeration" >>= decIdent)
+      | _ => throw "invalid_request"
+def decFormula (j : Json) : Except String Formula := do
+  let f ← decFormulaFuel 256 j
+  if formulaWf f then pure f else throw "invalid_request"
 
-def decScope : Json → Except String Scope
-  | .arr a =>
-    if a.size != 2 then throw "expected scope [project, extra]" else do
-    let p ← fieldAt a 0
-    let e ← fieldAt a 1
-    let project ← decStr p
-    let extra ← decStr e
-    pure { project, extra }
-  | _ => throw "expected scope [project, extra]"
+def encStatement (v : Statement) : Json := Json.mkObj [
+  ("formula", encFormula v.formula),
+  ("scope", encScope v.scope),
+  ("polarity", encPolarity v.polarity)]
+def decStatement (j : Json) : Except String Statement := do
+  fields j ["formula", "scope", "polarity"]
+  let formula ← field j "formula" >>= decFormula
+  let scope ← field j "scope" >>= decScope
+  let polarity ← field j "polarity" >>= decPolarity
+  let v : Statement := ⟨formula, scope, polarity⟩
+  if statementWf v then pure v else throw "invalid_request"
 
-theorem decScope_encScope (s : Scope) : decScope (encScope s) = pure s := by
-  rfl
+def encRef (v : Ref) : Json := Json.mkObj [
+  ("id", encIdent v.id),
+  ("revision", encIdent v.revision)]
+def decRef (j : Json) : Except String Ref := do
+  fields j ["id", "revision"]
+  let id ← field j "id" >>= decIdent
+  let revision ← field j "revision" >>= decIdent
+  let v : Ref := ⟨id, revision⟩
+  if refWf v then pure v else throw "invalid_request"
 
--- ClaimRef: [id, rev]
-def encClaimRef (r : ClaimRef) : Json := .arr #[encStr r.id.val, encStr r.rev]
+def encClaim (v : Claim) : Json := Json.mkObj [
+  ("id", encIdent v.id),
+  ("revision", encIdent v.revision),
+  ("statement", encStatement v.statement)]
+def decClaim (j : Json) : Except String Claim := do
+  fields j ["id", "revision", "statement"]
+  let id ← field j "id" >>= decIdent
+  let revision ← field j "revision" >>= decIdent
+  let statement ← field j "statement" >>= decStatement
+  let v : Claim := ⟨id, revision, statement⟩
+  if refWf v.ref then pure v else throw "invalid_request"
 
-def decClaimRef : Json → Except String ClaimRef
-  | .arr a =>
-    if a.size != 2 then throw "expected claimRef [id, rev]" else do
-    let i ← fieldAt a 0
-    let r ← fieldAt a 1
-    let id ← decStr i
-    let rev ← decStr r
-    pure ⟨⟨id⟩, rev⟩
-  | _ => throw "expected claimRef [id, rev]"
+def encObservation (v : Observation) : Json := Json.mkObj [
+  ("id", encIdent v.id),
+  ("source", encIdent v.source),
+  ("revision", encIdent v.revision),
+  ("content", encIdent v.content),
+  ("observed_at", encNat v.observedAt),
+  ("outcome", encOutcome v.outcome)]
+def decObservation (j : Json) : Except String Observation := do
+  fields j ["id", "source", "revision", "content", "observed_at", "outcome"]
+  let id ← field j "id" >>= decIdent
+  let source ← field j "source" >>= decIdent
+  let revision ← field j "revision" >>= decIdent
+  let content ← field j "content" >>= decIdent
+  let observedAt ← field j "observed_at" >>= decNat
+  let outcome ← field j "outcome" >>= decOutcome
+  let v : Observation := ⟨id, source, revision, content, observedAt, outcome⟩
+  if observationWf v then pure v else throw "invalid_request"
 
-theorem decClaimRef_encClaimRef (r : ClaimRef) : decClaimRef (encClaimRef r) = pure r := by
-  rfl
+def encAttestation (v : Attestation) : Json := Json.mkObj [
+  ("id", encIdent v.id),
+  ("claim", encRef v.claim),
+  ("observation", encIdent v.observation),
+  ("statement", encStatement v.statement),
+  ("authority", encIdent v.authority)]
+def decAttestation (j : Json) : Except String Attestation := do
+  fields j ["id", "claim", "observation", "statement", "authority"]
+  let id ← field j "id" >>= decIdent
+  let claim ← field j "claim" >>= decRef
+  let observation ← field j "observation" >>= decIdent
+  let statement ← field j "statement" >>= decStatement
+  let authority ← field j "authority" >>= decIdent
+  let v : Attestation := ⟨id, claim, observation, statement, authority⟩
+  pure v
 
--- Atom: [subject, predicate, [args]]
-def encAtom (a : Atom) : Json :=
-  .arr #[encStr a.subject, encStr a.predicate, encList encStr a.args]
+def encEnumeration (v : Enumeration) : Json := Json.mkObj [
+  ("id", encIdent v.id),
+  ("source", encIdent v.source),
+  ("revision", encIdent v.revision),
+  ("query", encStr v.query),
+  ("scope", encScope v.scope),
+  ("observation", encIdent v.observation),
+  ("members", (encList encStr) v.members),
+  ("universe", (encList encStr) v.universe),
+  ("method", encStr v.method)]
+def decEnumeration (j : Json) : Except String Enumeration := do
+  fields j ["id", "source", "revision", "query", "scope", "observation", "members", "universe", "method"]
+  let id ← field j "id" >>= decIdent
+  let source ← field j "source" >>= decIdent
+  let revision ← field j "revision" >>= decIdent
+  let query ← field j "query" >>= decStr
+  let scope ← field j "scope" >>= decScope
+  let observation ← field j "observation" >>= decIdent
+  let members ← field j "members" >>= (decList decStr)
+  let inventory ← field j "universe" >>= (decList decStr)
+  let method ← field j "method" >>= decStr
+  let v : Enumeration := ⟨id, source, revision, query, scope, observation, members, inventory, method⟩
+  pure v
 
-def decAtom : Json → Except String Atom
-  | .arr a =>
-    if a.size != 3 then throw "expected atom [subject, predicate, [args]]" else do
-    let s ← fieldAt a 0
-    let p ← fieldAt a 1
-    let args ← fieldAt a 2
-    let subject ← decStr s
-    let predicate ← decStr p
-    let as ← decList decStr args
-    pure { subject, predicate, args := as }
-  | _ => throw "expected atom [subject, predicate, [args]]"
+def encWitness : Witness → Json
+  | .attest a => Json.mkObj [("tag", .str "attest"), ("attestation", encIdent a)]
+  | .truth s => Json.mkObj [("tag", .str "truth"), ("scope", encScope s)]
+  | .and a b => Json.mkObj [("tag", .str "and"), ("left", encWitness a), ("right", encWitness b)]
+  | .specialize s w => Json.mkObj [("tag", .str "specialize"), ("scope", encScope s), ("premise", encWitness w)]
+  | .all e p w => Json.mkObj [("tag", .str "all"), ("enumeration", encIdent e), ("predicate", .str p), ("premise", encWitness w)]
+  | .absent e w => Json.mkObj [("tag", .str "absent"), ("enumeration", encIdent e), ("premise", encWitness w)]
+def decWitnessFuel : Nat → Json → Except String Witness
+  | 0, _ => throw "invalid_request"
+  | n+1, j => do
+      match ← field j "tag" >>= decStr with
+      | "attest" => fields j ["tag", "attestation"]; return .attest (← field j "attestation" >>= decIdent)
+      | "truth" => fields j ["tag", "scope"]; return .truth (← field j "scope" >>= decScope)
+      | "and" =>
+          fields j ["tag", "left", "right"]
+          return .and (← field j "left" >>= decWitnessFuel n) (← field j "right" >>= decWitnessFuel n)
+      | "specialize" =>
+          fields j ["tag", "scope", "premise"]
+          return .specialize (← field j "scope" >>= decScope) (← field j "premise" >>= decWitnessFuel n)
+      | "all" =>
+          fields j ["tag", "enumeration", "predicate", "premise"]
+          return .all (← field j "enumeration" >>= decIdent) (← field j "predicate" >>= decStr) (← field j "premise" >>= decWitnessFuel n)
+      | "absent" =>
+          fields j ["tag", "enumeration", "premise"]
+          return .absent (← field j "enumeration" >>= decIdent) (← field j "premise" >>= decWitnessFuel n)
+      | _ => throw "invalid_request"
+def decWitness (j : Json) : Except String Witness := do
+  let w ← decWitnessFuel 256 j
+  if witnessWf w then pure w else throw "invalid_request"
 
-theorem decAtom_encAtom (a : Atom) : decAtom (encAtom a) = pure a := by
-  have hlist : decList decStr (encList encStr a.args) = pure a.args :=
-    decList_encList _ _ _ (fun x _ => decStr_encStr x)
-  simp [decAtom, encAtom, hlist, decStr_encStr, fieldAt]
+def encDerivation (v : Derivation) : Json := Json.mkObj [
+  ("id", encIdent v.id),
+  ("claim", encRef v.claim),
+  ("witness", encWitness v.witness)]
+def decDerivation (j : Json) : Except String Derivation := do
+  fields j ["id", "claim", "witness"]
+  let id ← field j "id" >>= decIdent
+  let claim ← field j "claim" >>= decRef
+  let witness ← field j "witness" >>= decWitness
+  let v : Derivation := ⟨id, claim, witness⟩
+  pure v
 
--- ClaimProp: ["atom", atom] | ["conj", [atoms]] | ["allChecked", pred, [members]]
-def encProp : ClaimProp → Json
-  | .atom a => .arr #[.str "atom", encAtom a]
-  | .conj ps => .arr #[.str "conj", encList encAtom ps]
-  | .allChecked p ms => .arr #[.str "allChecked", encStr p, encList encStr ms]
+def encCorrection (v : Correction) : Json := Json.mkObj [
+  ("id", encIdent v.id),
+  ("kind", encCorrectionKind v.kind),
+  ("target", encRef v.target),
+  ("replacement", (encOpt encRef) v.replacement),
+  ("recorded_at", encNat v.recordedAt)]
+def decCorrection (j : Json) : Except String Correction := do
+  fields j ["id", "kind", "target", "replacement", "recorded_at"]
+  let id ← field j "id" >>= decIdent
+  let kind ← field j "kind" >>= decCorrectionKind
+  let target ← field j "target" >>= decRef
+  let replacement ← field j "replacement" >>= (decOpt decRef)
+  let recordedAt ← field j "recorded_at" >>= decNat
+  let v : Correction := ⟨id, kind, target, replacement, recordedAt⟩
+  pure v
 
-def decProp : Json → Except String ClaimProp
-  | .arr a =>
-    if a.size != 2 then
-      if a.size != 3 then throw "bad claimProp" else do
-        let tag ← fieldAt a 0
-        match tagOf tag with
-        | .ok "allChecked" => do
-          let p ← fieldAt a 1
-          let ms ← fieldAt a 2
-          let predicate ← decStr p
-          let members ← decList decStr ms
-          pure (.allChecked predicate members)
-        | _ => throw "bad claimProp"
-    else do
-      let tag ← fieldAt a 0
-      match tagOf tag with
-      | .ok "atom" => do
-        let x ← fieldAt a 1
-        .atom <$> decAtom x
-      | .ok "conj" => do
-        let x ← fieldAt a 1
-        .conj <$> decList decAtom x
-      | _ => throw "bad claimProp"
-  | _ => throw "bad claimProp"
+def encPolicy (v : Policy) : Json := Json.mkObj [
+  ("id", encIdent v.id),
+  ("require_fresh", encBool v.requireFresh),
+  ("require_validation", encBool v.requireValidation),
+  ("require_uncontested", encBool v.requireUncontested),
+  ("ttl", encTtlPolicy v.ttl),
+  ("authorized_actors", encList encIdent v.authorizedActors)]
+def decPolicy (j : Json) : Except String Policy := do
+  fields j ["id", "require_fresh", "require_validation", "require_uncontested", "ttl", "authorized_actors"]
+  let id ← field j "id" >>= decIdent
+  let requireFresh ← field j "require_fresh" >>= decBool
+  let requireValidation ← field j "require_validation" >>= decBool
+  let requireUncontested ← field j "require_uncontested" >>= decBool
+  let ttl ← field j "ttl" >>= decTtlPolicy
+  let authorizedActors ← field j "authorized_actors" >>= decList decIdent
+  let v : Policy := ⟨id, requireFresh, requireValidation, requireUncontested, ttl, authorizedActors⟩
+  pure v
 
-theorem decProp_encProp (p : ClaimProp) : decProp (encProp p) = pure p := by
-  cases p with
-  | atom a =>
-    have h : decAtom (encAtom a) = pure a := decAtom_encAtom a
-    simp [decProp, encProp, h, fieldAt]
-    rfl
-  | conj ps =>
-    have hlist : decList decAtom (encList encAtom ps) = pure ps :=
-      decList_encList _ _ _ (fun x _ => decAtom_encAtom x)
-    simp [decProp, encProp, hlist, fieldAt]
-    rfl
-  | allChecked pred ms =>
-    have hlist : decList decStr (encList encStr ms) = pure ms :=
-      decList_encList _ _ _ (fun x _ => decStr_encStr x)
-    simp [decProp, encProp, hlist, decStr_encStr, fieldAt]
-    rfl
+def encSourceSelection (v : SourceSelection) : Json := Json.mkObj [
+  ("source", encIdent v.source), ("revision", encIdent v.revision), ("content", encIdent v.content)]
+def decSourceSelection (j : Json) : Except String SourceSelection := do
+  fields j ["source", "revision", "content"]
+  return ⟨← field j "source" >>= decIdent, ← field j "revision" >>= decIdent, ← field j "content" >>= decIdent⟩
 
--- Dep: [kind, target, digest]
-def encDep (d : Dep) : Json :=
-  .arr #[encDepKind d.kind, encStr d.target, encStr d.digest]
+def encContext (v : Context) : Json := Json.mkObj [
+  ("snapshot", encIdent v.snapshot),
+  ("semantic_version", encStr v.semanticVersion),
+  ("ruleset", encIdent v.ruleset),
+  ("checker", encIdent v.checker),
+  ("policy", encPolicy v.policy),
+  ("now", encNat v.now),
+  ("target", encScope v.target),
+  ("intended_use", encStr v.intendedUse), ("sources", encList encSourceSelection v.sources)]
+def decContext (j : Json) : Except String Context := do
+  fields j ["snapshot", "semantic_version", "ruleset", "checker", "policy", "now", "target", "intended_use", "sources"]
+  let snapshot ← field j "snapshot" >>= decIdent
+  let semanticVersion ← field j "semantic_version" >>= decStr
+  let ruleset ← field j "ruleset" >>= decIdent
+  let checker ← field j "checker" >>= decIdent
+  let policy ← field j "policy" >>= decPolicy
+  let now ← field j "now" >>= decNat
+  let target ← field j "target" >>= decScope
+  let intendedUse ← field j "intended_use" >>= decStr
+  let sources ← field j "sources" >>= decList decSourceSelection
+  let v : Context := ⟨snapshot, semanticVersion, ruleset, checker, policy, now, target, intendedUse, sources⟩
+  if contextWf v then pure v else throw "invalid_request"
 
-def decDep : Json → Except String Dep
-  | .arr a =>
-    if a.size != 3 then throw "expected dep [kind, target, digest]" else do
-    let k ← fieldAt a 0
-    let t ← fieldAt a 1
-    let g ← fieldAt a 2
-    let kind ← decDepKind k
-    let target ← decStr t
-    let digest ← decStr g
-    pure { kind, target, digest }
-  | _ => throw "expected dep [kind, target, digest]"
+def encDependency : Dependency → Json
+  | .observation v => Json.mkObj [("tag", .str "observation"), ("value", encObservation v)]
+  | .claim v => Json.mkObj [("tag", .str "claim"), ("value", encClaim v)]
+  | .attestation v => Json.mkObj [("tag", .str "attestation"), ("value", encAttestation v)]
+  | .enumeration v => Json.mkObj [("tag", .str "enumeration"), ("value", encEnumeration v)]
+  | .context v => Json.mkObj [("tag", .str "context"), ("value", encContext v)]
+  | .corrections r es => Json.mkObj [("tag", .str "corrections"), ("target", encRef r), ("events", encList encCorrection es)]
+def decDependency (j : Json) : Except String Dependency := do
+  match ← field j "tag" >>= decStr with
+  | "observation" => fields j ["tag", "value"]; return .observation (← field j "value" >>= decObservation)
+  | "claim" => fields j ["tag", "value"]; return .claim (← field j "value" >>= decClaim)
+  | "attestation" => fields j ["tag", "value"]; return .attestation (← field j "value" >>= decAttestation)
+  | "enumeration" => fields j ["tag", "value"]; return .enumeration (← field j "value" >>= decEnumeration)
+  | "context" =>
+      fields j ["tag", "value"]
+      let context ← field j "value" >>= decContext
+      if context.now == 0 then return .context context else throw "invalid_request"
+  | "corrections" => fields j ["tag", "target", "events"]; return .corrections (← field j "target" >>= decRef) (← field j "events" >>= decList decCorrection)
+  | _ => throw "invalid_request"
 
-theorem decDep_encDep (d : Dep) : decDep (encDep d) = pure d := by
-  cases d with
-  | mk kind _ _ => cases kind <;> rfl
+def encResult (b : Bool) : Json := .str (if b then "pass" else "fail")
+def decResult (j : Json) : Except String Bool := do
+  match ← decStr j with
+  | "pass" => pure true
+  | "fail" => pure false
+  | _ => throw "invalid_request"
+def encReceipt (v : Receipt) : Json := Json.mkObj [
+  ("id", encIdent v.id),
+  ("claim", encRef v.claim),
+  ("context", encContext v.context),
+  ("witness", encWitness v.witness),
+  ("dependencies", (encList encDependency) v.dependencies),
+  ("result", encResult v.passed),
+  ("expires_at", encNat v.expiresAt)]
+def decReceipt (j : Json) : Except String Receipt := do
+  fields j ["id", "claim", "context", "witness", "dependencies", "result", "expires_at"]
+  let id ← field j "id" >>= decIdent
+  let claim ← field j "claim" >>= decRef
+  let context ← field j "context" >>= decContext
+  let witness ← field j "witness" >>= decWitness
+  let dependencies ← field j "dependencies" >>= (decList decDependency)
+  let passed ← field j "result" >>= decResult
+  let expiresAt ← field j "expires_at" >>= decNat
+  let v : Receipt := ⟨id, claim, context, witness, dependencies, passed, expiresAt⟩
+  pure v
 
--- CoverageWitness: [scope, [members], complete]
-def encWitness (w : CoverageWitness) : Json :=
-  .arr #[encScope w.scope, encList encStr w.members, encBool w.complete]
+def encKB (v : KB) : Json := Json.mkObj [
+  ("snapshot", encIdent v.snapshot),
+  ("observations", (encList encObservation) v.observations),
+  ("claims", (encList encClaim) v.claims),
+  ("attestations", (encList encAttestation) v.attestations),
+  ("enumerations", (encList encEnumeration) v.enumerations),
+  ("derivations", (encList encDerivation) v.derivations),
+  ("corrections", (encList encCorrection) v.corrections),
+  ("receipts", (encList encReceipt) v.receipts)]
+/-- Structural parsing only; decKB is the globally guarded public admission boundary. -/
+def parseKB (j : Json) : Except String KB := do
+  fields j ["snapshot", "observations", "claims", "attestations", "enumerations", "derivations", "corrections", "receipts"]
+  let snapshot ← field j "snapshot" >>= decIdent
+  let observations ← field j "observations" >>= (decList decObservation)
+  let claims ← field j "claims" >>= (decList decClaim)
+  let attestations ← field j "attestations" >>= (decList decAttestation)
+  let enumerations ← field j "enumerations" >>= (decList decEnumeration)
+  let derivations ← field j "derivations" >>= (decList decDerivation)
+  let corrections ← field j "corrections" >>= (decList decCorrection)
+  let receipts ← field j "receipts" >>= (decList decReceipt)
+  let v : KB := ⟨snapshot, observations, claims, attestations, enumerations, derivations, corrections, receipts⟩
+  pure v
 
-def decWitness : Json → Except String CoverageWitness
-  | .arr a =>
-    if a.size != 3 then throw "expected witness [scope, [members], complete]" else do
-    let s ← fieldAt a 0
-    let m ← fieldAt a 1
-    let c ← fieldAt a 2
-    let scope ← decScope s
-    let members ← decList decStr m
-    let complete ← decBool c
-    pure { scope, members, complete }
-  | _ => throw "expected witness [scope, [members], complete]"
+def decKB (j : Json) : Except String KB := do
+  let k ← parseKB j
+  if k.wellFormed then pure k else throw "invalid_request"
 
-theorem decWitness_encWitness (w : CoverageWitness) :
-    decWitness (encWitness w) = pure w := by
-  have hlist : decList decStr (encList encStr w.members) = pure w.members :=
-    decList_encList _ _ _ (fun x _ => decStr_encStr x)
-  simp [decWitness, encWitness, hlist, decScope_encScope, decBool_encBool,
-    decStr_encStr, fieldAt]
+theorem decKB_wellFormed {j : Json} {k : KB} (h : decKB j = .ok k) : k.wellFormed = true := by
+  cases hp : parseKB j with
+  | error error => simp [decKB, hp, bind, Except.bind] at h
+  | ok value =>
+      simp only [decKB, hp, bind, Except.bind] at h
+      split at h
+      · cases h; assumption
+      · contradiction
 
--- EvalCtx: [now, requireFreshEvidence, requireValidated, requireUncontested]
-def encEvalCtx (c : EvalCtx) : Json :=
-  .arr #[encInt c.now, encBool c.requireFreshEvidence, encBool c.requireValidated,
-         encBool c.requireUncontested]
+def encAuthority (v : Authority) : Json := Json.mkObj [
+  ("actor", encIdent v.actor),
+  ("target", encRef v.target),
+  ("intended_use", encStr v.intendedUse),
+  ("policy", encIdent v.policy),
+  ("statement", encStatement v.statement),
+  ("approved", encKB v.approved),
+  ("approvals", (encList encClaim) v.approvals), ("context", encContext v.context)]
+def decAuthority (j : Json) : Except String Authority := do
+  fields j ["actor", "target", "intended_use", "policy", "statement", "approved", "approvals", "context"]
+  let actor ← field j "actor" >>= decIdent
+  let target ← field j "target" >>= decRef
+  let intendedUse ← field j "intended_use" >>= decStr
+  let policy ← field j "policy" >>= decIdent
+  let statement ← field j "statement" >>= decStatement
+  let approved ← field j "approved" >>= decKB
+  let approvals ← field j "approvals" >>= (decList decClaim)
+  let context ← field j "context" >>= decContext
+  let v : Authority := ⟨actor, target, intendedUse, policy, statement, approved, approvals, context⟩
+  pure v
 
-def decEvalCtx : Json → Except String EvalCtx
-  | .arr a =>
-    if a.size != 4 then throw "expected ctx [now, rf, rv, ru]" else do
-    let n ← fieldAt a 0
-    let rf ← fieldAt a 1
-    let rv ← fieldAt a 2
-    let ru ← fieldAt a 3
-    let now ← decInt n
-    let requireFreshEvidence ← decBool rf
-    let requireValidated ← decBool rv
-    let requireUncontested ← decBool ru
-    pure { now, requireFreshEvidence, requireValidated, requireUncontested }
-  | _ => throw "expected ctx [now, rf, rv, ru]"
+def encPlan (v : Plan) : Json := Json.mkObj [
+  ("id", encIdent v.id),
+  ("expected_snapshot", encIdent v.expectedSnapshot),
+  ("candidate", encKB v.candidate),
+  ("authority", encAuthority v.authority),
+  ("claim", encRef v.claim),
+  ("witness", encWitness v.witness)]
+def decPlan (j : Json) : Except String Plan := do
+  fields j ["id", "expected_snapshot", "candidate", "authority", "claim", "witness"]
+  let id ← field j "id" >>= decIdent
+  let expectedSnapshot ← field j "expected_snapshot" >>= decIdent
+  let candidate ← field j "candidate" >>= decKB
+  let authority ← field j "authority" >>= decAuthority
+  let claim ← field j "claim" >>= decRef
+  let witness ← field j "witness" >>= decWitness
+  let v : Plan := ⟨id, expectedSnapshot, candidate, authority, claim, witness⟩
+  pure v
 
-theorem decEvalCtx_encEvalCtx (c : EvalCtx) : decEvalCtx (encEvalCtx c) = pure c := by
-  rfl
+def encJournalEntry (v : JournalEntry) : Json := Json.mkObj [
+  ("plan", encPlan v.plan)]
+def decJournalEntry (j : Json) : Except String JournalEntry := do
+  fields j ["plan"]
+  let plan ← field j "plan" >>= decPlan
+  let v : JournalEntry := ⟨plan⟩
+  pure v
 
-/-! ## Records (parse + `recordWf*` admission = T01). -/
+def encVerifiedApproval (a : VerifiedApproval) : Json := Json.mkObj [("plan", encPlan a.plan)]
+def decVerifiedApproval (j : Json) : Except String VerifiedApproval := do
+  fields j ["plan"]
+  return ⟨← field j "plan" >>= decPlan⟩
 
--- Observation: [id, outcome, observedAt, ttl, system, locator]
-def encObservation (o : Observation) : Json :=
-  .arr #[encStr o.id.val, encObsOutcome o.outcome, encInt o.observedAt,
-         encTtl o.ttl, encStr o.system, encStr o.locator]
+def encProposal (v : Proposal) : Json := Json.mkObj [
+  ("id", encIdent v.id),
+  ("revision", encIdent v.revision),
+  ("target", encRef v.target),
+  ("status", encProposalStatus v.status),
+  ("actor", encOptionalIdent v.actor),
+  ("executor", encOptionalIdent v.executor),
+  ("acceptor", encOptionalIdent v.acceptor),
+  ("gates", (encList encIdent) v.gates)]
+def decProposal (j : Json) : Except String Proposal := do
+  fields j ["id", "revision", "target", "status", "actor", "executor", "acceptor", "gates"]
+  let id ← field j "id" >>= decIdent
+  let revision ← field j "revision" >>= decIdent
+  let target ← field j "target" >>= decRef
+  let status ← field j "status" >>= decProposalStatus
+  let actor ← field j "actor" >>= decOptionalIdent
+  let executor ← field j "executor" >>= decOptionalIdent
+  let acceptor ← field j "acceptor" >>= decOptionalIdent
+  let gates ← field j "gates" >>= (decList decIdent)
+  let v : Proposal := ⟨id, revision, target, status, actor, executor, acceptor, gates⟩
+  pure v
 
-def decObservationRaw : Json → Except String Observation
-  | .arr a =>
-    if a.size != 6 then throw "expected observation" else do
-    let idj ← fieldAt a 0
-    let outj ← fieldAt a 1
-    let atj ← fieldAt a 2
-    let ttlj ← fieldAt a 3
-    let sysj ← fieldAt a 4
-    let locj ← fieldAt a 5
-    let id ← decStr idj
-    let outcome ← decObsOutcome outj
-    let observedAt ← decInt atj
-    let ttl ← decTtl ttlj
-    let system ← decStr sysj
-    let locator ← decStr locj
-    pure ({ id := ⟨id⟩, outcome, observedAt, ttl, system, locator } : Observation)
-  | _ => throw "expected observation"
+def encHypothesis (v : Hypothesis) : Json := Json.mkObj [
+  ("text", encStr v.text),
+  ("status", encHypothesisStatus v.status)]
+def decHypothesis (j : Json) : Except String Hypothesis := do
+  fields j ["text", "status"]
+  let text ← field j "text" >>= decStr
+  let status ← field j "status" >>= decHypothesisStatus
+  let v : Hypothesis := ⟨text, status⟩
+  pure v
 
-def decObservation (j : Json) : Except String Observation :=
-  match decObservationRaw j with
-  | .ok x => if recordWfObservation x then pure x else throw "observation not well-formed"
-  | .error e => throw e
+def encInvestigation (v : Investigation) : Json := Json.mkObj [
+  ("checked_against", encStr v.checkedAgainst),
+  ("scope_and_limits", encStr v.scopeAndLimits),
+  ("hypotheses", (encList encHypothesis) v.hypotheses)]
+def decInvestigation (j : Json) : Except String Investigation := do
+  fields j ["checked_against", "scope_and_limits", "hypotheses"]
+  let checkedAgainst ← field j "checked_against" >>= decStr
+  let scopeAndLimits ← field j "scope_and_limits" >>= decStr
+  let hypotheses ← field j "hypotheses" >>= (decList decHypothesis)
+  let v : Investigation := ⟨checkedAgainst, scopeAndLimits, hypotheses⟩
+  pure v
 
-theorem decObservationRaw_encObservation (o : Observation) (h : recordWfObservation o = true) :
-    decObservationRaw (encObservation o) = pure o := by
-  have hred : decObservationRaw (encObservation o) = pure o := by
-    simp [decObservationRaw, encObservation, fieldAt, pure_bind, reduceIte, decStr_encStr, decInt_encInt, decObsOutcome_encObsOutcome, decTtl_encTtl]
-  exact hred
+def encChecked (v : Checked) : Json := Json.mkObj [
+  ("statement", encStatement v.statement),
+  ("dependencies", (encList encDependency) v.dependencies)]
+def decChecked (j : Json) : Except String Checked := do
+  fields j ["statement", "dependencies"]
+  let statement ← field j "statement" >>= decStatement
+  let dependencies ← field j "dependencies" >>= (decList decDependency)
+  let v : Checked := ⟨statement, dependencies⟩
+  pure v
 
-theorem decObservation_encObservation (o : Observation) (h : recordWfObservation o = true) :
-    decObservation (encObservation o) = pure o := by
-  rw [decObservation, decObservationRaw_encObservation o h]
-  show (if recordWfObservation o = true then pure o else throw "observation not well-formed") = pure o
-  rw [if_pos h]
+def encAssessment (v : Assessment) : Json := Json.mkObj [
+  ("support", encSupport v.support),
+  ("applicable", encBool v.applicable),
+  ("freshness", encFresh v.freshness),
+  ("validated", encBool v.validated),
+  ("contested", encBool v.contested),
+  ("available", encBool v.available),
+  ("usable", encBool v.usable)]
+def decAssessment (j : Json) : Except String Assessment := do
+  fields j ["support", "applicable", "freshness", "validated", "contested", "available", "usable"]
+  let support ← field j "support" >>= decSupport
+  let applicable ← field j "applicable" >>= decBool
+  let freshness ← field j "freshness" >>= decFresh
+  let validated ← field j "validated" >>= decBool
+  let contested ← field j "contested" >>= decBool
+  let available ← field j "available" >>= decBool
+  let usable ← field j "usable" >>= decBool
+  let v : Assessment := ⟨support, applicable, freshness, validated, contested, available, usable⟩
+  pure v
 
--- Claim: [claimRef, prop, scope]
-def encClaim (c : Claim) : Json :=
-  .arr #[encClaimRef ⟨c.id, c.rev⟩, encProp c.prop, encScope c.scope]
+def encApplyResult (v : ApplyResult) : Json := Json.mkObj [
+  ("kb", encKB v.kb),
+  ("journal", (encList encJournalEntry) v.journal),
+  ("outcome", encApplyOutcome v.outcome)]
+def decApplyResult (j : Json) : Except String ApplyResult := do
+  fields j ["kb", "journal", "outcome"]
+  let kb ← field j "kb" >>= decKB
+  let journal ← field j "journal" >>= (decList decJournalEntry)
+  let outcome ← field j "outcome" >>= decApplyOutcome
+  let v : ApplyResult := ⟨kb, journal, outcome⟩
+  pure v
 
-def decClaimRaw : Json → Except String Claim
-  | .arr a =>
-    if a.size != 3 then throw "expected claim [ref, prop, scope]" else do
-    let rj ← fieldAt a 0
-    let pj ← fieldAt a 1
-    let sj ← fieldAt a 2
-    let r ← decClaimRef rj
-    let p ← decProp pj
-    let s ← decScope sj
-    pure ({ id := r.id, rev := r.rev, prop := p, scope := s } : Claim)
-  | _ => throw "expected claim [ref, prop, scope]"
+def encSequenceResult (v : SequenceResult) : Json := Json.mkObj [
+  ("kb", encKB v.kb),
+  ("journal", (encList encJournalEntry) v.journal),
+  ("outcomes", (encList encApplyOutcome) v.outcomes)]
+def decSequenceResult (j : Json) : Except String SequenceResult := do
+  fields j ["kb", "journal", "outcomes"]
+  let kb ← field j "kb" >>= decKB
+  let journal ← field j "journal" >>= (decList decJournalEntry)
+  let outcomes ← field j "outcomes" >>= (decList decApplyOutcome)
+  let v : SequenceResult := ⟨kb, journal, outcomes⟩
+  pure v
 
-def decClaim (j : Json) : Except String Claim :=
-  match decClaimRaw j with
-  | .ok x => if recordWfClaim x then pure x else throw "claim not well-formed"
-  | .error e => throw e
-
-theorem decClaimRaw_encClaim (c : Claim) (h : recordWfClaim c = true) :
-    decClaimRaw (encClaim c) = pure c := by
-  have hred : decClaimRaw (encClaim c) = pure c := by
-    simp [decClaimRaw, encClaim, fieldAt, pure_bind, reduceIte, decClaimRef_encClaimRef, decProp_encProp, decScope_encScope]
-  exact hred
-
-theorem decClaim_encClaim (c : Claim) (h : recordWfClaim c = true) :
-    decClaim (encClaim c) = pure c := by
-  rw [decClaim, decClaimRaw_encClaim c h]
-  show (if recordWfClaim c = true then pure c else throw "claim not well-formed") = pure c
-  rw [if_pos h]
-
--- Binding: [obsId, claimRef, role]
-def encBinding (b : Binding) : Json :=
-  .arr #[encStr b.obs.val, encClaimRef b.ref, encSupportRole b.role]
-
-def decBindingRaw : Json → Except String Binding
-  | .arr a =>
-    if a.size != 3 then throw "expected binding [obs, ref, role]" else do
-    let oj ← fieldAt a 0
-    let rj ← fieldAt a 1
-    let rolej ← fieldAt a 2
-    let obs ← decStr oj
-    let r ← decClaimRef rj
-    let role ← decSupportRole rolej
-    pure ({ obs := ⟨obs⟩, ref := r, role } : Binding)
-  | _ => throw "expected binding [obs, ref, role]"
-
-def decBinding (j : Json) : Except String Binding :=
-  match decBindingRaw j with
-  | .ok x => if recordWfBinding x then pure x else throw "binding not well-formed"
-  | .error e => throw e
-
-theorem decBindingRaw_encBinding (b : Binding) (h : recordWfBinding b = true) :
-    decBindingRaw (encBinding b) = pure b := by
-  have hred : decBindingRaw (encBinding b) = pure b := by
-    simp [decBindingRaw, encBinding, fieldAt, pure_bind, reduceIte, decStr_encStr, decClaimRef_encClaimRef, decSupportRole_encSupportRole]
-  exact hred
-
-theorem decBinding_encBinding (b : Binding) (h : recordWfBinding b = true) :
-    decBinding (encBinding b) = pure b := by
-  rw [decBinding, decBindingRaw_encBinding b h]
-  show (if recordWfBinding b = true then pure b else throw "binding not well-formed") = pure b
-  rw [if_pos h]
-
--- Correction: [kind, target, recordedAt]
-def encCorrection (c : Correction) : Json :=
-  .arr #[encCorrectionKind c.kind, encClaimRef c.target, encInt c.recordedAt]
-
-def decCorrectionRaw : Json → Except String Correction
-  | .arr a =>
-    if a.size != 3 then throw "expected correction [kind, target, recordedAt]" else do
-    let kj ← fieldAt a 0
-    let tj ← fieldAt a 1
-    let aj ← fieldAt a 2
-    let kind ← decCorrectionKind kj
-    let target ← decClaimRef tj
-    let recordedAt ← decInt aj
-    pure ({ kind, target, recordedAt } : Correction)
-  | _ => throw "expected correction [kind, target, recordedAt]"
-
-def decCorrection (j : Json) : Except String Correction :=
-  match decCorrectionRaw j with
-  | .ok x => if recordWfCorrection x then pure x else throw "correction not well-formed"
-  | .error e => throw e
-
-theorem decCorrectionRaw_encCorrection (c : Correction) (h : recordWfCorrection c = true) :
-    decCorrectionRaw (encCorrection c) = pure c := by
-  have hred : decCorrectionRaw (encCorrection c) = pure c := by
-    simp [decCorrectionRaw, encCorrection, fieldAt, pure_bind, reduceIte, decCorrectionKind_encCorrectionKind, decClaimRef_encClaimRef, decInt_encInt]
-  exact hred
-
-theorem decCorrection_encCorrection (c : Correction) (h : recordWfCorrection c = true) :
-    decCorrection (encCorrection c) = pure c := by
-  rw [decCorrection, decCorrectionRaw_encCorrection c h]
-  show (if recordWfCorrection c = true then pure c else throw "correction not well-formed") = pure c
-  rw [if_pos h]
-
--- Derivation:
--- [id, rule, [groups], conclusionRef, conclusionProp, scope, [footprint],
---  evidenceOpt, witnessOpt]
-def encDerivation (d : Derivation) : Json :=
-  .arr #[encStr d.id, encRuleId d.rule,
-         encList (encList encClaimRef) d.premiseGroups,
-         encClaimRef d.conclusion, encProp d.conclusionProp, encScope d.scope,
-         encList encDep d.footprint, encOpt (fun i => encStr i.val) d.evidence,
-         encOpt encWitness d.witness]
-
-def decDerivationRaw : Json → Except String Derivation
-  | .arr a =>
-    if a.size != 9 then throw "expected derivation" else do
-    let idj ← fieldAt a 0
-    let rulej ← fieldAt a 1
-    let groupsj ← fieldAt a 2
-    let conclusionj ← fieldAt a 3
-    let propj ← fieldAt a 4
-    let scopej ← fieldAt a 5
-    let footj ← fieldAt a 6
-    let evidencej ← fieldAt a 7
-    let witnessj ← fieldAt a 8
-    let id ← decStr idj
-    let rule ← decRuleId rulej
-    let premiseGroups ← decList (decList decClaimRef) groupsj
-    let conclusion ← decClaimRef conclusionj
-    let conclusionProp ← decProp propj
-    let s ← decScope scopej
-    let footprint ← decList decDep footj
-    let evidence ← decOpt (fun j => (⟨·⟩) <$> decStr j) evidencej
-    let witness ← decOpt decWitness witnessj
-    pure (Derivation.mk id rule premiseGroups conclusion conclusionProp
-      s footprint evidence witness)
-  | _ => throw "expected derivation"
-
-def decDerivation (j : Json) : Except String Derivation :=
-  match decDerivationRaw j with
-  | .ok x => if recordWfDerivation x then pure x else throw "derivation not well-formed"
-  | .error e => throw e
-
-theorem decDerivationRaw_encDerivation (d : Derivation) (h : recordWfDerivation d = true) :
-    decDerivationRaw (encDerivation d) = pure d := by
-  have hred : decDerivationRaw (encDerivation d) = pure d := by
-    simp [decDerivationRaw, encDerivation, fieldAt, pure_bind, reduceIte, decStr_encStr, decRuleId_encRuleId, decClaimRef_encClaimRef, decProp_encProp, decScope_encScope, decDep_encDep, decList_encList, decOpt_encOpt, decWitness_encWitness]
-  exact hred
-
-theorem decDerivation_encDerivation (d : Derivation) (h : recordWfDerivation d = true) :
-    decDerivation (encDerivation d) = pure d := by
-  rw [decDerivation, decDerivationRaw_encDerivation d h]
-  show (if recordWfDerivation d = true then pure d else throw "derivation not well-formed") = pure d
-  rw [if_pos h]
-
-/-! ## KB codec. -/
-
-def encValidation (p : ClaimRef × String) : Json :=
-  .arr #[encClaimRef p.1, encStr p.2]
-
-def decValidation : Json → Except String (ClaimRef × String)
-  | .arr a =>
-    if a.size != 2 then throw "expected validation [ref, digest]" else do
-    let rj ← fieldAt a 0
-    let dj ← fieldAt a 1
-    let r ← decClaimRef rj
-    let d ← decStr dj
-    pure (r, d)
-  | _ => throw "expected validation [ref, digest]"
-
-theorem decValidation_encValidation (p : ClaimRef × String) :
-    decValidation (encValidation p) = pure p := by
-  rfl
-
-def encKB (kb : KB) : Json :=
-  .arr #[encStr kb.head, encList encObservation kb.observations,
-         encList encClaim kb.claims, encList encBinding kb.bindings,
-         encList encDerivation kb.derivations, encList encCorrection kb.corrections,
-         encList encValidation kb.validations]
-
-def decKB : Json → Except String KB
-  | .arr a =>
-    if a.size != 7 then throw "expected kb" else do
-    let hj ← fieldAt a 0
-    let oj ← fieldAt a 1
-    let cj ← fieldAt a 2
-    let bj ← fieldAt a 3
-    let dj ← fieldAt a 4
-    let kj ← fieldAt a 5
-    let vj ← fieldAt a 6
-    let head ← decStr hj
-    let observations ← decList decObservation oj
-    let claims ← decList decClaim cj
-    let bindings ← decList decBinding bj
-    let derivations ← decList decDerivation dj
-    let corrections ← decList decCorrection kj
-    let validations ← decList decValidation vj
-    pure { head, observations, claims, bindings, derivations, corrections, validations }
-  | _ => throw "expected kb"
+def encRetrieval (r : Retrieval) : Json := Json.mkObj [
+  ("snapshot", encIdent r.snapshot),
+  ("records", encList (fun pair => Json.mkObj [("claim", encClaim pair.1), ("assessment", encAssessment pair.2)]) r.records),
+  ("omitted", encNat r.omitted), ("complete", encBool r.complete), ("next_offset", encOpt encNat r.nextOffset)]
 
 end Kctx

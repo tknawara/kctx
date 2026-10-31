@@ -8,7 +8,7 @@ ARG DOLT_VERSION=v2.6.1
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      curl ca-certificates git python3 python3-pip unzip && \
+      curl ca-certificates git gh python3 python3-pip unzip && \
     rm -rf /var/lib/apt/lists/*
 
 # Lean 4.21.0 via elan (same pin as formal/lean-toolchain; elan's bundled
@@ -18,9 +18,6 @@ RUN curl -sSfL https://elan.lean-lang.org/elan-init.sh | sh -s -- -y \
       --default-toolchain leanprover/lean4:v4.21.0 --no-modify-path && \
     /opt/elan/bin/lean --version
 
-# Graph-package deps, pinned exactly as pyproject.toml pins them.
-RUN pip install --no-cache-dir --break-system-packages \
-      "pydantic==2.14.1" "structlog==26.1.0"
 
 # Dolt CLI, pinned. Not a database or a backing repo — the tool only; the
 # KB's data stays the user's. Integration tests build throwaway databases
@@ -36,3 +33,12 @@ RUN curl -sSfL -o /tmp/dolt.tgz \
 
 ENV PATH="/opt/elan/bin:${PATH}"
 WORKDIR /work/kctx
+
+# Runtime and quality tools are installed from one lock, including Node for
+# Pyright. The editable path is the Compose mount path, not a host venv.
+RUN pip install --no-cache-dir --break-system-packages "uv==0.9.9"
+ENV UV_PROJECT_ENVIRONMENT="/opt/kctx"
+ENV PATH="/opt/kctx/bin:${PATH}"
+COPY pyproject.toml uv.lock ./
+COPY src ./src
+RUN uv sync --locked --group dev

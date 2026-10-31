@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 
 import unittest
 
-from errors import KctxError
+from kctx.errors import KctxError
 from kctx.graph.quoting import sql_quote, validate_id
 
 

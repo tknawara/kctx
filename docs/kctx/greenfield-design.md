@@ -146,6 +146,10 @@ the semantic authority and both hosts, then update the reviewed expectations.
 7. The public agent contract is machine-readable, versioned and bounded. Missing
    evidence, partial acquisition, contradiction, omitted context and stale
    receipts remain explicit outcomes.
+8. One application owns citations, knowledge workflows and the agent protocol.
+   `kctx cite` is a command family, not a separate executable or external script.
+   CLI and stdio adapters call the same typed services; neither shells out to
+   the other or reconstructs a dynamic argument namespace.
 
 ### Phases and dependencies
 
@@ -221,6 +225,7 @@ host. Every row requires commands and receipts from the actual Rust artifact.
 | R10 Migration, retention and restore | Dry-run classifications account for every legacy input; exact bytes/IDs/citations preserved; unresolved records quarantined; repeat idempotent; clean independent restore and authorized rollback/rollforward preserve intervening audit/corrections | Rewriting or retiring existing stores |
 | R11 Cost and agent usefulness | Frozen held-out protocol; same selected inputs/meaning; actual model/harness/prompt/tool metadata; correctness and cold/warm latency, memory, IO, subprocess, context/token measures; no post-hoc threshold weakening | Performance or adoption claims |
 | R12 Release/cutover | Real installed CLI/agent flows, no Lean/Python/formal artifacts required at runtime; operator guide and recovery drill; applicable earlier gates pass; coherent pushed source and linked reports; old runtime/shims removed | Replacing Python for users |
+| R13 Human and machine presentation | Real TTY/pipe captures for help, results, errors, warnings and verbose logs; stream-local color/NO_COLOR; literal untrusted data; stable structured diagnostics; uncontaminated JSON/JSONL; citation operations through the same installed CLI and engine protocol | Shipping the operator or agent interface |
 
 ### Required negative cases
 
@@ -290,6 +295,80 @@ The Rust delivery includes:
 - A per-capability cutover decision. Unverified enterprise policy assumptions
   are not inferred from local Git transport; environment-specific deployment
   testing remains with the operator/work agent as requested.
+
+## Human presentation and machine protocol
+
+Follow Gripsack's separation of diagnostic data, terminal rendering and structured
+tracing. Inspected implementation references are
+`gripsack-ir/src/diagnostic.rs`, `gripsack/src/render.rs`,
+`gripsack-process/src/terminal.rs`, and `gripsack-trace/src/lib.rs` in its crate
+workspace. Reuse the house conventions, not a dependency on those private modules.
+The current Python implementation uses native Click groups, Rich presentation and
+structlog JSONL; the Rust host should use its existing native CLI/tracing stack,
+not embed Python for formatting.
+
+### Presentation contract
+
+- A diagnostic is data: versioned code, severity, redacted message, labels with
+  source location/notes, optional actionable help, and correlation identity when
+  available. Ordinary missing evidence is not an internal-error traceback.
+  Codes carry meaning; consumers never parse English text or ANSI sequences.
+- Help uses native nested command grammar and consistent headings/options.
+  Results use compact tables for comparable records and clearly labelled nested
+  details. Partial, stale, unknown and contradictory are visible states, not green
+  success labels. Warnings remain visible without replacing successful results.
+- Determine color separately for stdout and stderr. Automatic mode requires a
+  terminal and honors `NO_COLOR`/dumb terminals; explicit always/never affects only
+  human rendering. Piped data remains plain. Do not force a background or depend
+  on a particular terminal theme.
+- Untrusted filenames, identifiers, source text and provider errors are literal
+  data. Escape terminal controls and bidi-formatting characters; never interpret
+  their markup, hyperlinks, cursor controls or log prefixes as renderer instructions.
+  Renderer-owned styling must not pass through the untrusted-text escape path.
+- Source snippets are optional, bounded and read only through the already
+  authorized root/revision boundary. A diagnostic must not open arbitrary
+  provider-supplied paths to become prettier. Missing source still produces a
+  useful diagnostic.
+- Normal results go to stdout, human warnings/errors and requested verbose events
+  to stderr. Full operation logs remain redacted structured JSONL. Machine mode
+  bypasses human rendering entirely, including parser errors and startup failure.
+  Do not hide an operation's non-success exit code behind a decorative footer.
+
+### Unified agent surface
+
+Preserve the current `kctx serve` newline-delimited JSON-RPC 2.0 model or introduce
+an explicit negotiated protocol version. Initialization advertises exact method
+schemas, supported capabilities and frame bounds. The transport version is not
+the calculus semantic version. The application includes citation construction,
+checking/rendering, authored navigation, pinned graph queries, and authenticated
+knowledge operations. Private-key signing remains an explicit operator operation;
+no request-supplied `approved=true` substitutes for signature verification.
+
+A graph read session pins its data/metadata generation. Publication does not
+silently move that session; explicit refresh opens a valid replacement before
+releasing the old reader. Knowledge continuations bind selected release and query
+identity. Responses retain operation exit state, generation and completeness.
+Notifications, unsupported batches, malformed frames, oversized requests, EOF
+and cancellation have specified behavior. An uncertain consequential write must
+not be reported as a known rejection or automatically retried.
+
+### Required R13 probes
+
+1. Exercise the installed executable in a real pseudo-terminal and through pipes;
+   compare each stream's color decision, including `NO_COLOR`, narrow terminals,
+   Unicode and explicit color flags.
+2. Send literal ANSI/OSC/bidi/markup-looking names and source errors. They remain
+   visible escaped text; output cannot clear the screen, create links, overwrite
+   prior rows, or manufacture diagnostic prefixes.
+3. Parse stdout as JSON on success, malformed CLI input, unknown command, missing
+   configuration and an adapter failure. Warnings belong in structured fields and
+   never become extra non-JSON stdout. Verify exit statuses independently.
+4. Run citation and knowledge calls in one stdio process. Reject bad versions,
+   duplicate keys, wrong scalar types and oversized frames; then accept a valid
+   next frame. Verify no help, logs, progress animation or ANSI enters the protocol.
+5. Open a pinned graph reader, publish a new generation, query the old reader,
+   explicitly refresh and observe the new identity. EOF/shutdown must release its
+   native companion and temporary state.
 
 ## First actions for the Rust implementer
 

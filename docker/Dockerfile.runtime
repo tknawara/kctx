@@ -1,0 +1,19 @@
+# Production runtime: Python, Git and Dolt; no Lean, Docker or formal files.
+FROM python:3.12-slim
+ARG DOLT_VERSION=v2.6.1
+RUN apt-get update && apt-get install -y --no-install-recommends git gh curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -fsSL "https://github.com/dolthub/dolt/releases/download/${DOLT_VERSION}/dolt-linux-amd64.tar.gz" -o /tmp/dolt.tgz \
+    && tar -xzf /tmp/dolt.tgz -C /tmp \
+    && install /tmp/dolt-linux-amd64/bin/dolt /usr/local/bin/dolt \
+    && rm -rf /tmp/dolt.tgz /tmp/dolt-linux-amd64
+RUN pip install --no-cache-dir "uv==0.9.9"
+WORKDIR /app
+COPY pyproject.toml uv.lock ./
+COPY src ./src
+ENV UV_PROJECT_ENVIRONMENT="/opt/kctx"
+ENV PATH="/opt/kctx/bin:${PATH}"
+RUN uv sync --locked --no-dev
+COPY scripts/runtime_smoke.py /runtime_smoke.py
+WORKDIR /tmp
+CMD ["python3", "/runtime_smoke.py"]

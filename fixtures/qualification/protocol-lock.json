@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "protocol": "evaluation-v1.json",
+  "sha256": "37110f972c6f49a9995ebd0f34393aba8465f8414f941f991fb61da40f7c2ff6",
+  "corpus_lock": "corpus-lock.json",
+  "corpus_patch_version": "1.0.1",
+  "change_policy": "Changing tasks, labels, partitions, repetition counts or thresholds requires a new protocol version before any new measurements; retain prior reports.",
+  "commands": {
+    "storage": [
+      "python",
+      "scripts/qualify_storage.py",
+      "--output",
+      "reports/qualification/storage"
+    ],
+    "remote": [
+      "python",
+      "scripts/qualify_remote.py",
+      "--output",
+      "reports/qualification/remote"
+    ],
+    "mechanical": [
+      "python",
+      "scripts/evaluate_kctx.py",
+      "--mode",
+      "mechanical",
+      "--output",
+      "reports/qualification/evaluation"
+    ],
+    "agents": [
+      "python",
+      "scripts/evaluate_kctx.py",
+      "--mode",
+      "agents",
+      "--agent-config",
+      "APPROVED_CONFIG_PATH",
+      "--output",
+      "reports/qualification/agents"
+    ]
+  },
+  "execution": "docker compose --profile verify run --rm verify uv run --locked <command>",
+  "gate_policy": "Harness existence or zero exit on a selected subset is not gate qualification. Review full scenario evidence; missing prerequisites and failed thresholds return nonzero."
+}

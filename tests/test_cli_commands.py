@@ -1,16 +1,16 @@
-"""Thin CLI-wiring checks for the new subcommands: the module-level tests in
-test_nav.py and test_ktlo.py cover behavior, this only guards against an
-argparse/dispatch mismatch (wrong dest, missing branch, wrong exit code)."""
+"""CLI outcomes across authored records, navigation and citation workflows."""
 
 import io
 import json
-import os
+import subprocess
 from contextlib import redirect_stdout
 
-from _base import KctxTestCase, no_cite_available, set_config, clear_config
+from _base import KctxTestCase
 
-import cli
-import inventory
+from kctx.cli import app as cli
+from kctx.services import inventory
+from kctx.domain.ids import AssetId
+from kctx.domain.vocabulary import AssetKind
 
 
 def _run(argv):
@@ -20,7 +20,7 @@ def _run(argv):
     return code, json.loads(buf.getvalue())
 
 
-class CliWiringTest(KctxTestCase):
+class CliCommandsTest(KctxTestCase):
     def test_home_no_match_exits_2(self):
         code, payload = _run(["--json", "home", "nothing-here"])
         self.assertEqual(code, 2)
@@ -29,34 +29,23 @@ class CliWiringTest(KctxTestCase):
     def test_home_match_exits_0(self):
         inventory.asset_add(
             self.root,
-            kind="service",
+            kind=AssetKind.SERVICE,
             name="pbpsvc",
-            id="service-pbpsvc",
-            projects=["demo-project"],
+            id=AssetId("service-pbpsvc"),
+            projects=("demo-project",),
         )
         code, payload = _run(["--json", "home", "pbpsvc"])
         self.assertEqual(code, 0)
         self.assertEqual(len(payload["candidates"]), 1)
 
     def test_context_exits_0(self):
-        inventory.asset_add(self.root, kind="service", name="svc", id="service-svc")
+        inventory.asset_add(self.root, kind=AssetKind.SERVICE, name="svc", id=AssetId("service-svc"))
         code, payload = _run(["--json", "context", "service-svc", "--depth", "1"])
         self.assertEqual(code, 0)
         self.assertEqual(payload["asset"], "service-svc")
 
     def test_stale_exits_0(self):
-        # Pin CITE_BIN to a path that can't resolve so this stays
-        # host-independent -- it must not depend on whether this machine
-        # happens to have the real grounding cite script deployed.
-        old = os.environ.get("CITE_BIN")
-        os.environ["CITE_BIN"] = "/nonexistent/cite"
-        try:
-            code, payload = _run(["--json", "stale"])
-        finally:
-            if old is None:
-                clear_config("cite_bin")
-            else:
-                set_config(cite_bin=str(old))
+        code, payload = _run(["--json", "stale"])
         self.assertEqual(code, 0)
 
     def test_stale_drain_requires_project_or_paths(self):
@@ -67,57 +56,54 @@ class CliWiringTest(KctxTestCase):
     def test_stale_drain_exits_0_when_nothing_remains(self):
         proj = self.root / "demo-project"
         proj.mkdir()
-        stub = self.write_cite_stub(
-            {"results": [], "warnings": [], "skipped": [], "exit_code": 0}
+        code, payload = _run(
+            ["--json", "stale", "--drain", "--project", "demo-project"]
         )
-        set_config(cite_bin=str(stub))
-        try:
-            code, payload = _run(
-                ["--json", "stale", "--drain", "--project", "demo-project"]
-            )
-        finally:
-            clear_config("cite_bin")
         self.assertEqual(code, 0)
         self.assertEqual(payload["total_remaining"], 0)
 
     def test_stale_drain_exits_2_when_items_remain(self):
         proj = self.root / "demo-project"
         proj.mkdir()
-        stub = self.write_cite_stub(
-            {
-                "results": [
-                    {
-                        "file": "demo-project/notes/a.md",
-                        "line_no": 3,
-                        "status": "expired",
-                        "fields": {"kind": "ticket"},
-                    }
-                ],
-                "warnings": [],
-                "skipped": [],
-                "exit_code": 2,
-            },
-            exit_code=2,
+        (proj / "note.md").write_text('⟦cite kind=ticket seen=2020-01-01T00:00Z ttl=1d⟧\n', encoding="utf-8")
+        code, payload = _run(
+            ["--json", "stale", "--drain", "--project", "demo-project"]
         )
-        set_config(cite_bin=str(stub))
-        try:
-            code, payload = _run(
-                ["--json", "stale", "--drain", "--project", "demo-project"]
-            )
-        finally:
-            clear_config("cite_bin")
         self.assertEqual(code, 2)
         self.assertEqual(payload["total_remaining"], 1)
 
-    def test_stale_drain_exits_3_when_citations_unavailable(self):
+    def test_stale_drain_reports_unverifiable_sources_as_remaining(self):
         proj = self.root / "demo-project"
         proj.mkdir()
-        with no_cite_available():
-            code, payload = _run(
-                ["--json", "stale", "--drain", "--project", "demo-project"]
-            )
+        (proj / "note.md").write_text(
+            f'⟦cite kind=code repo=local:{self.root / "missing"} path=x L=1-1⟧\n',
+            encoding="utf-8",
+        )
+        code, payload = _run(
+            ["--json", "stale", "--drain", "--project", "demo-project"]
+        )
+        self.assertEqual(code, 2)
+        self.assertEqual(len(payload["remaining"]["unverifiable"]), 1)
+
+    def test_cite_make_check_stale_render_round_trip(self):
+        code, made = _run(["--json", "cite", "make", "ticket", "id=DRQS 1", "q=why", "ttl=1d"])
+        self.assertEqual(code, 0)
+        code, checked = _run(["--json", "cite", "check", "--line", made["line"]])
+        self.assertEqual(code, 0)
+        self.assertEqual(checked["results"][0]["status"], "fresh")
+        code, rendered = _run(["--json", "cite", "render", made["line"]])
+        self.assertEqual(code, 0)
+        self.assertTrue(rendered["rendered"])
+        path = self.root / "note.md"
+        path.write_text('⟦cite kind=ticket seen=2020-01-01T00:00Z ttl=1d⟧\n', encoding="utf-8")
+        code, stale = _run(["--json", "cite", "stale", str(path), "--offline"])
+        self.assertEqual(code, 2)
+        self.assertEqual(stale["entries"][0]["reason"], "due")
+
+    def test_cite_check_unavailable_source_exits_three(self):
+        code, checked = _run(["--json", "cite", "check", "--line", f'⟦cite kind=code repo=local:{self.root / "missing"} path=x L=1-1⟧'])
         self.assertEqual(code, 3)
-        self.assertFalse(payload["citations_available"])
+        self.assertEqual(checked["results"][0]["status"], "unverifiable")
 
     def test_ktlo_new_then_promote_round_trip(self):
         code, payload = _run(
@@ -135,10 +121,14 @@ class CliWiringTest(KctxTestCase):
         self.assertTrue(payload["already_promoted"])
 
     def test_proposal_add_list_set_gate_show_round_trip(self):
+        target = self.root / "target"
+        subprocess.run(["git", "init", "-q", str(target)], check=True)
+        subprocess.run(["git", "-C", str(target), "-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "--allow-empty", "-qm", "retained target"], check=True)
+        revision = subprocess.check_output(["git", "-C", str(target), "rev-parse", "HEAD"], text=True).strip()
         gates_table = (
-            "| id | claim | check | when | by |\n"
-            "|---|---|---|---|---|\n"
-            "| G1 | it works | `true` | land | agent |\n"
+            "| id | claim | check | when | by | checker |\n"
+            "|---|---|---|---|---|---|\n"
+            "| G1 | it works | `true` | land | agent | fixture-checker |\n"
         )
         code, added = _run(
             [
@@ -169,6 +159,8 @@ class CliWiringTest(KctxTestCase):
                 "agent",
                 "--type",
                 "module",
+                "--target-revision", f"target@{revision}",
+                "--environment", "local-fixture", "--scope", str(target),
             ]
         )
         self.assertEqual(code, 0)
@@ -200,13 +192,15 @@ class CliWiringTest(KctxTestCase):
                 "pass",
                 "--evidence",
                 "obs:1",
+                "--by", "agent", "--checker", "fixture-checker",
+                "--expires-at", "4102444800",
             ]
         )
         self.assertEqual(code, 0)
         self.assertEqual(gate_result["outcome"], "pass")
 
         code, fm = _run(
-            ["--json", "proposal", "set", pid, "--status", "applied", "--by", "agent"]
+            ["--json", "proposal", "set", pid, "--status", "applied", "--by", "agent", "--landed", f"target@{revision}"]
         )
         self.assertEqual(code, 0)
         self.assertEqual(fm["status"], "applied")
@@ -256,32 +250,14 @@ class CliWiringTest(KctxTestCase):
         self.assertEqual(code, 1)
         self.assertEqual(payload["error"], "malformed")
 
-    def test_proposal_add_missing_review_sections_lists_them_in_text_mode(self):
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            code = cli.main(
-                [
-                    "proposal",
-                    "add",
-                    "--kind",
-                    "other",
-                    "--origin",
-                    "unk",
-                    "--title",
-                    "Needs review",
-                    "--context",
-                    "c",
-                    "--evidence",
-                    "e",
-                    "--change",
-                    "ch",
-                    "--why",
-                    "w",
-                ]
-            )
+    def test_proposal_missing_review_sections_remains_draft(self):
+        code, added = _run([
+            "--json", "proposal", "add", "--kind", "other", "--origin", "unk",
+            "--title", "Needs review", "--context", "c", "--evidence", "e",
+            "--change", "ch", "--why", "w",
+        ])
         self.assertEqual(code, 0)
-        out = buf.getvalue()
-        self.assertIn("missing for review", out)
+        self.assertEqual(added["frontmatter"]["status"], "draft")
 
     def test_inv_new_list_show_conclude(self):
         code, result = _run(
@@ -388,3 +364,49 @@ class CliWiringTest(KctxTestCase):
         code, payload = _run(["--json", "validate"])
         self.assertEqual(code, 0)
         self.assertTrue(payload["ok"])
+
+    def test_run_capture_coverage_and_resume_preserve_provenance(self):
+        code, manifest = _run([
+            "--json", "run", "new", "--project", "demo", "--mode", "advice",
+            "--task", "Capture a CLI investigation",
+        ])
+        self.assertEqual(code, 0)
+        run_id = manifest["run_id"]
+        code, observation = _run([
+            "--json", "observe", run_id, "--system", "other", "--locator", "source-a",
+            "--environment", "fixture", "--cmd", "inspect", "--note", "First source",
+        ])
+        self.assertEqual(code, 0)
+        self.assertEqual(observation["environment"], "fixture")
+        self.assertEqual(observation["command"], "inspect")
+        code, derived = _run([
+            "--json", "observe", run_id, "--system", "other", "--locator", "source-b",
+            "--derived-from", observation["id"],
+        ])
+        self.assertEqual(code, 0)
+        self.assertEqual(derived["derived_from"], [observation["id"]])
+        code, coverage = _run([
+            "--json", "cover", run_id, "--item", "question", "--outcome", "inconclusive",
+            "--evidence", derived["id"], "--reason", "Needs independent corroboration",
+            "--policy", "independent-origins",
+        ])
+        self.assertEqual(code, 0)
+        self.assertEqual(coverage["policy"], "independent-origins")
+        self.assertEqual(coverage["evidence"], [derived["id"]])
+        code, checkpoint = _run(["--json", "checkpoint", run_id, "--note", "Continue later"])
+        self.assertEqual(code, 0)
+        self.assertEqual(checkpoint["run"], run_id)
+        code, resumed = _run(["--json", "resume", run_id])
+        self.assertEqual(code, 0)
+        self.assertEqual(resumed["manifest"]["run_id"], run_id)
+        self.assertEqual(resumed["coverage_summary"], {"inconclusive": 1})
+
+    def test_correction_recovery_without_operations_is_empty(self):
+        code, recovered = _run(["--json", "correction", "recover"])
+        self.assertEqual(code, 0)
+        self.assertEqual(recovered, {"operations": []})
+
+    def test_invalid_asset_vocabulary_is_a_domain_error(self):
+        code, error = _run(["--json", "asset", "add", "--kind", "not-a-kind", "--name", "Invalid"])
+        self.assertEqual(code, 1)
+        self.assertEqual(error["error"], "malformed")

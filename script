@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
-# Picks an interpreter and runs kctx.py through `uv run` against this
-# directory's pyproject.toml, so pydantic/structlog (used only by the graph
-# package) are always available -- uv syncs the venv on every invocation.
-# Spaces have no bare python3, only versioned /opt/bb/bin/python3.1x, so
-# select_python() still picks the system interpreter uv is told to use
-# (--python), rather than letting uv download its own.
+# Run the installed package with locked dependencies and a system interpreter.
+# Spaces expose versioned interpreters under /opt/bb/bin; uv never downloads one.
 set -euo pipefail
 
 select_python() {
@@ -47,11 +43,11 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 py="$(select_python)"
 
 if uv_bin="$(select_uv)"; then
-  exec "$uv_bin" run --quiet --project "$script_dir" --python "$py" \
-    python "${script_dir}/kctx.py" "$@"
+  exec "$uv_bin" run --locked --quiet --project "$script_dir" --python "$py" \
+    python -m kctx "$@"
 fi
 
 echo "kctx: no uv found on PATH, in \$HOME/.local/bin, /usr/local/bin, or /bb/bin." >&2
-echo "kctx requires uv to run (it manages the graph package's pydantic/structlog deps)." >&2
+echo "kctx requires uv for managed execution, or use the repository's Compose services." >&2
 echo "install uv: https://docs.astral.sh/uv/getting-started/installation/" >&2
 exit 1

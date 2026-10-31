@@ -16,3 +16,6 @@ formal/build/
 # Local qualification artifacts (committed evidence lives in docs/kctx/reports/)
 *.local/
 .DS_Store
+
+# Native Dolt working state is never an authored Git asset.
+.dolt/

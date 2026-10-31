@@ -1,7 +1,7 @@
 """Integration tests against a real temporary Dolt database: sync
 idempotency, impact depth/cycle-safety, and diff across two syncs. Skips
-cleanly when `dolt` isn't on PATH, when pydantic/structlog aren't installed,
-or when the real cite.py isn't available (reused, not reimplemented).
+cleanly when `dolt` isn't on PATH or pydantic/structlog aren't installed.
+Citation parsing uses the built-in implementation.
 
 These are slower than the unit tests (each sync shells out to `dolt` several
 times) but still fast enough to run by default -- no network, no real kb
@@ -16,7 +16,7 @@ import os
 import shutil
 import unittest
 
-from _base import KctxTestCase, dotfiles_cite_available, use_dotfiles_cite
+from _base import KctxTestCase
 
 try:
     import pydantic  # noqa: F401
@@ -36,8 +36,6 @@ def _skip_reason():
         return "pydantic/structlog not installed in ambient interpreter; run via `uv run`"
     if not HAVE_DOLT:
         return "dolt not found on PATH or ~/.local/bin/dolt"
-    if not dotfiles_cite_available():
-        return "dotfiles checkout's cite.py not available"
     return None
 
 
@@ -45,32 +43,14 @@ def _skip_reason():
 class GraphSyncIntegrationTest(KctxTestCase):
     def setUp(self):
         super().setUp()
-        self._cite_ctx = use_dotfiles_cite()
-        self._cite_ctx.__enter__()
-        from graph import cite_loader
-
-        cite_loader.reset_cache()
-        os.environ.pop("KCTX_CITE_PY", None)
-
         self.repo = self.make_git_repo("kb")
         self.graph_dir = self.root / "_graph"
-        self._saved_graph_dir = os.environ.get("KCTX_GRAPH_DIR")
-        os.environ["KCTX_GRAPH_DIR"] = str(self.graph_dir)
+        self.set_config(graph_dir=str(self.graph_dir))
 
-        from graph import sync as sync_mod
+        from kctx.graph import sync as sync_mod
 
         self.sync_mod = sync_mod
 
-    def tearDown(self):
-        if self._saved_graph_dir is None:
-            os.environ.pop("KCTX_GRAPH_DIR", None)
-        else:
-            os.environ["KCTX_GRAPH_DIR"] = self._saved_graph_dir
-        from graph import cite_loader
-
-        cite_loader.reset_cache()
-        self._cite_ctx.__exit__(None, None, None)
-        super().tearDown()
 
     def _write(self, rel_path, content):
         path = self.repo / rel_path
@@ -115,9 +95,10 @@ class GraphSyncIntegrationTest(KctxTestCase):
         self._commit("cycle fixture")
         self.sync_mod.sync(self.repo)
 
-        from graph import queries as queries_mod
+        from kctx.graph import queries as queries_mod
+        from kctx.graph.models import GraphNodeId
 
-        res = queries_mod.impact("A", depth=2)
+        res = queries_mod.impact(GraphNodeId("A"), kb_root=self.repo, depth=2)
         nodes_by_depth = {d["node"]: d["depth"] for d in res["dependents"]}
         self.assertEqual(nodes_by_depth.get("B"), 1)
         self.assertEqual(nodes_by_depth.get("D"), 1)
@@ -138,9 +119,9 @@ class GraphSyncIntegrationTest(KctxTestCase):
         sha2 = self._commit("add service-bar + relationship")
         self.sync_mod.sync(self.repo)
 
-        from graph import queries as queries_mod
+        from kctx.graph import queries as queries_mod
 
-        result = queries_mod.diff(sha1, sha2)
+        result = queries_mod.diff(sha1, sha2, kb_root=self.repo)
         kinds = {(row["rel"], row["diff_type"]) for row in result["summary"]}
         self.assertIn(("consumes", "added"), kinds)
 
@@ -154,12 +135,13 @@ class GraphSyncIntegrationTest(KctxTestCase):
         self._commit("directional fixture")
         self.sync_mod.sync(self.repo)
 
-        from graph import queries as queries_mod
+        from kctx.graph import queries as queries_mod
+        from kctx.graph.models import GraphNodeId
 
-        into_bar = queries_mod.uses("store-bar")
+        into_bar = queries_mod.uses(GraphNodeId("store-bar"), kb_root=self.repo)
         self.assertIn("service-foo", {r["src_node"] for rows in into_bar["by_rel"].values() for r in rows})
 
-        into_foo = queries_mod.uses("service-foo")
+        into_foo = queries_mod.uses(GraphNodeId("service-foo"), kb_root=self.repo)
         self.assertEqual(into_foo["total"], 0, "service-foo's own outgoing edge must not look like an inbound use")
 
     def test_check_shadow_parity_matches_a_direct_cite_parse(self):
@@ -172,19 +154,151 @@ class GraphSyncIntegrationTest(KctxTestCase):
         self._commit("status with citations")
         self.sync_mod.sync(self.repo)
 
-        from graph import queries as queries_mod
+        from kctx.graph import queries as queries_mod
+        from kctx.graph.models import GraphNodeId
 
         # uses_comparison cross-checks against `kctx uses` (nav.uses), which
         # is being fixed concurrently this session -- asserted loosely here
         # (shape, not nav.py's exact resolution behavior) to avoid coupling
         # this test to a module this change doesn't own.
-        result = queries_mod.check(self.repo, sample_ids=["ticket:DRQS-1"])
+        result = queries_mod.check(self.repo, sample_ids=[GraphNodeId("ticket:DRQS-1")])
         self.assertTrue(result["parity"]["match"])
         self.assertEqual(result["parity"]["direct_cite_tokens"], 2)
         self.assertEqual(result["parity"]["graph_binding_rows"], 2)
         self.assertEqual(result["parity"]["direct_illus_tokens"], 1)
         self.assertEqual(len(result["uses_comparison"]), 1)
         self.assertEqual(result["uses_comparison"][0]["target"], "ticket:DRQS-1")
+
+    def test_working_changes_do_not_leak_into_completed_queries(self):
+        from kctx.errors import KctxError
+        from kctx.graph import queries
+        from kctx.graph.dolt_store import DoltStore
+        from kctx.graph.models import GraphNodeId
+
+        self._write("inventory/relationships/link.json", '{"from":"source","to":"target","type":"consumes"}\n')
+        self._commit()
+        self.sync_mod.sync(self.repo)
+        store = DoltStore(self.sync_mod.dolt_db_dir())
+        store._run("sql", "-q", "UPDATE edges SET dst_node='unpublished' WHERE rel='consumes'")
+        self.assertEqual(queries.uses(GraphNodeId("target"), kb_root=self.repo)["total"], 1)
+        self.assertEqual(queries.uses(GraphNodeId("unpublished"), kb_root=self.repo)["total"], 0)
+        with self.assertRaises(KctxError):
+            self.sync_mod.sync(self.repo)
+
+    def test_rebuild_retains_native_history(self):
+        from kctx.graph.dolt_store import DoltStore
+        from kctx.graph.generation import completed_snapshot
+
+        self._write("inventory/assets/service-foo.json", '{"id":"service-foo","name":"Foo"}\n')
+        self._commit()
+        self.sync_mod.sync(self.repo)
+        store = DoltStore(self.sync_mod.dolt_db_dir())
+        before = completed_snapshot(store)
+        self.assertIsNotNone(before)
+        self.sync_mod.sync(self.repo, rebuild=True)
+        self.assertEqual(completed_snapshot(store), before)
+        store = DoltStore(self.sync_mod.dolt_db_dir())
+        after = completed_snapshot(store)
+        self.assertNotEqual(before.metadata_commit, after.metadata_commit)
+        rows = store.sql_read(f"SELECT hashof('{before.metadata_commit.val}') AS h")
+        self.assertEqual(rows[0]["h"], before.metadata_commit.val)
+
+    def test_checkout_mismatch_never_rebuilds_another_graph(self):
+        from kctx.errors import KctxError
+        from kctx.graph.dolt_store import DoltStore
+        from kctx.graph.generation import completed_snapshot
+
+        self._write("inventory/assets/service-foo.json", '{"id":"service-foo","name":"Foo"}\n')
+        self._commit()
+        self.sync_mod.sync(self.repo)
+        store = DoltStore(self.sync_mod.dolt_db_dir())
+        before = completed_snapshot(store)
+        other = self.make_git_repo("other-kb")
+        with self.assertRaises(KctxError):
+            self.sync_mod.sync(other, rebuild=True)
+        self.assertEqual(completed_snapshot(store), before)
+
+    def test_incomplete_first_generation_is_not_current(self):
+        from kctx.errors import KctxError
+        from kctx.graph import queries
+        from kctx.graph.dolt_store import SYNC_STATE_COLUMNS
+        from kctx.graph.operations import writer
+
+        self._write("inventory/assets/service-foo.json", '{"id":"service-foo","name":"Foo"}\n')
+        sha = self._commit()
+        with writer(self.graph_dir, self.repo) as store:
+            store.ensure_init()
+            store.upsert_rows("sync_state", SYNC_STATE_COLUMNS, [{"id": 1, "kb_sha": sha, "kb_subject": "incomplete", "dolt_commit": None, "synced_at": "2026-10-31T00:00:00Z", "node_count": 0, "edge_count": 0}])
+        status = queries.status(self.repo)
+        self.assertFalse(status["up_to_date"])
+        self.assertIsNone(status["sync_state"])
+        with self.assertRaises(KctxError):
+            self.sync_mod.sync(self.repo)
+
+    def test_failed_candidate_preserves_last_completed_generation(self):
+        from unittest.mock import patch
+        from kctx.graph import queries
+        from kctx.graph.dolt_store import DoltStore
+        from kctx.graph.generation import completed_snapshot
+        from kctx.graph.models import GraphNodeId
+
+        self._write("inventory/relationships/link.json", '{"from":"source","to":"target","type":"consumes"}\n')
+        self._commit()
+        self.sync_mod.sync(self.repo)
+        store = DoltStore(self.sync_mod.dolt_db_dir())
+        before = completed_snapshot(store)
+        self._write("inventory/relationships/link.json", '{"from":"source","to":"candidate","type":"consumes"}\n')
+        self._commit("candidate")
+        with patch("kctx.graph.sync.activate", side_effect=RuntimeError("interrupted before activation")):
+            with self.assertRaises(RuntimeError):
+                self.sync_mod.sync(self.repo)
+        self.assertEqual(completed_snapshot(store), before)
+        self.assertEqual(queries.uses(GraphNodeId("target"), kb_root=self.repo)["total"], 1)
+        self.assertEqual(queries.uses(GraphNodeId("candidate"), kb_root=self.repo)["total"], 0)
+
+    def test_writer_lock_serializes_processes(self):
+        import subprocess
+        from kctx.graph.operations import writer
+
+        lock = self.graph_dir / "dolt.writer.lock"
+        code = "import fcntl,sys; f=open(sys.argv[1],'a+b'); fcntl.flock(f.fileno(),fcntl.LOCK_EX|fcntl.LOCK_NB)"
+        with writer(self.graph_dir, self.repo):
+            blocked = subprocess.run([sys.executable, "-c", code, str(lock)], capture_output=True)
+            self.assertNotEqual(blocked.returncode, 0)
+        released = subprocess.run([sys.executable, "-c", code, str(lock)], capture_output=True)
+        self.assertEqual(released.returncode, 0)
+
+    def test_failure_after_import_leaves_published_snapshot_readable(self):
+        from unittest.mock import patch
+        from kctx.graph import queries
+        from kctx.graph.dolt_store import DoltStore
+        from kctx.graph.generation import completed_snapshot
+        from kctx.graph.models import GraphNodeId
+
+        self._write("inventory/relationships/link.json", '{"from":"source","to":"target","type":"consumes"}\n')
+        self._commit()
+        self.sync_mod.sync(self.repo)
+        store = DoltStore(self.sync_mod.dolt_db_dir())
+        before = completed_snapshot(store)
+        self._write("inventory/relationships/link.json", '{"from":"source","to":"candidate","type":"consumes"}\n')
+        self._commit("candidate")
+        with patch.object(DoltStore, "commit", side_effect=RuntimeError("interrupted after imports")):
+            with self.assertRaises(RuntimeError):
+                self.sync_mod.sync(self.repo)
+        self.assertEqual(completed_snapshot(store), before)
+        self.assertEqual(queries.uses(GraphNodeId("target"), kb_root=self.repo)["total"], 1)
+        self.assertEqual(queries.uses(GraphNodeId("candidate"), kb_root=self.repo)["total"], 0)
+
+    def test_unowned_database_is_not_adopted_or_deleted(self):
+        from kctx.errors import KctxError
+        from kctx.graph.dolt_store import DoltStore
+
+        store = DoltStore(self.sync_mod.dolt_db_dir())
+        store.ensure_init()
+        commit = store.commit("unowned history", allow_empty=True)
+        with self.assertRaises(KctxError):
+            self.sync_mod.sync(self.repo, rebuild=True)
+        self.assertEqual(store.head_commit_hash(), commit)
 
 
 if __name__ == "__main__":

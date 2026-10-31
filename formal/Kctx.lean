@@ -9,10 +9,17 @@ import Kctx.Codec
 import Kctx.Theorems
 import Kctx.Theorems2
 import Kctx.Locality
+import Kctx.AuthoredCodec
+import Kctx.NonVacuity
+import Kctx.SelectionCodec
+import Kctx.CodecRecords
+import Kctx.Footprint
+import Kctx.WorkflowCodecProofs
+import Kctx.CompositionLaws
 
 /-! # kctx knowledge calculus — root
 
-Bounded first calculus per `docs/kctx/handover.md` §4–§5: claims, evidence,
-derivations, freshness, corrections, and workflow transitions. Proved
-generically over every well-formed KB; no corpus-specific facts. Concrete
-data appears only in the `NonVacuity` examples (kernel-checked by `decide`). -/
+Bounded version-two calculus: recursive finite witnesses, independent derivability,
+local attestation soundness, exact finite inventory coverage, typed dependency
+receipts, four-valued assessment, and authenticated conditional operations.
+NonVacuity exhibits accepted instances of every rule and false unsupported atoms. -/

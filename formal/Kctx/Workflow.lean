@@ -1,221 +1,287 @@
-import Kctx.Model
-import Kctx.WellFormed
+import Kctx.Checker
 
 set_option autoImplicit false
-
-/-! Workflow transitions: proposals, investigation conclusions, and
-conditionally-applied operation plans with idempotent commit (T18–T21).
-
-All functions are pure; `CommitOutcome` results never collapse distinctions
-(committed / already committed / predecessor conflict / input conflict /
-rejected invalid) into booleans or opaque exceptions. -/
-
 namespace Kctx
 
-/-! ## Proposals. -/
+def nonblank (s : String) : Bool := s.toList.any (fun c => !c.isWhitespace)
+
+def identPresent {kind : IdKind} (id : Option (Ident kind)) : Bool :=
+  id.any (fun value => nonblank value.val)
+
+structure Authority where
+  actor : ActorId
+  target : Ref
+  intendedUse : String
+  policy : PolicyId
+  statement : Statement
+  approved : KB
+  approvals : List Claim
+  context : Context
+  deriving DecidableEq, Repr, Inhabited
+
+structure Plan where
+  id : OperationId
+  expectedSnapshot : SnapshotId
+  candidate : KB
+  authority : Authority
+  claim : Ref
+  witness : Witness
+  deriving DecidableEq, Repr, Inhabited
+
+/-- Constructed by the authenticated adapter, never from ordinary candidate input. -/
+structure VerifiedApproval where
+  plan : Plan
+  deriving DecidableEq, Repr, Inhabited
+
+def authorized (e : Context) (p : Plan) (trusted : List VerifiedApproval) : Bool :=
+  e.policy.authorizedActors.contains p.authority.actor && trusted.any (fun a => a.plan == p)
+
+structure JournalEntry where
+  plan : Plan
+  deriving DecidableEq, Repr, Inhabited
+
+inductive ApplyOutcome where
+  | applied | alreadyApplied | inputConflict | predecessorConflict | rejected
+  deriving DecidableEq, Repr, Inhabited
+
+structure ApplyResult where
+  kb : KB
+  journal : List JournalEntry
+  outcome : ApplyOutcome
+  deriving DecidableEq, Repr, Inhabited
+
+def isPrefix {α : Type} [BEq α] (a b : List α) : Bool := b.take a.length == a
+
+def extendsKB (a b : KB) : Bool :=
+  isPrefix a.observations b.observations && isPrefix a.claims b.claims &&
+  isPrefix a.attestations b.attestations && isPrefix a.enumerations b.enumerations &&
+  isPrefix a.derivations b.derivations && isPrefix a.corrections b.corrections &&
+  isPrefix a.receipts b.receipts
+
+def planValid (k : KB) (e : Context) (p : Plan) : Bool :=
+  let ce := { e with snapshot := p.candidate.snapshot }
+  token p.id.val && contextValid k e && p.candidate.wellFormed &&
+  p.candidate.snapshot != k.snapshot && extendsKB k p.candidate &&
+  nonblank p.authority.actor.val && p.authority.target == p.claim &&
+  p.authority.intendedUse == e.intendedUse && p.authority.policy == e.policy.id &&
+  p.authority.context == e &&
+  p.authority.approved == p.candidate &&
+  p.authority.approvals == p.candidate.claims.drop k.claims.length &&
+  (match claimAt p.candidate p.claim, check p.candidate ce p.witness with
+   | some c, some r => c.statement == p.authority.statement && r.statement == c.statement &&
+       p.candidate.derivations.any (fun d => d.claim == p.claim && d.witness == p.witness) &&
+       usableFor p.candidate ce p.claim
+   | _, _ => false) &&
+  (p.candidate.claims.drop k.claims.length).all (fun c => usableFor p.candidate ce c.ref)
+
+/-- Canonical inputs are the typed plan itself, not an unrelated caller digest.
+The journal producer and replay consumer share this single state transition. -/
+def applyPlan (k : KB) (e : Context) (journal : List JournalEntry) (p : Plan)
+    (trusted : List VerifiedApproval := []) : ApplyResult :=
+  match journal.find? (fun j => j.plan.id == p.id) with
+  | some j => ⟨k, journal, if j.plan == p then .alreadyApplied else .inputConflict⟩
+  | none => if p.expectedSnapshot != k.snapshot then ⟨k, journal, .predecessorConflict⟩
+    else if authorized e p trusted && planValid k e p then ⟨p.candidate, ⟨p⟩ :: journal, .applied⟩
+    else ⟨k, journal, .rejected⟩
+
+structure SequenceResult where
+  kb : KB
+  journal : List JournalEntry
+  outcomes : List ApplyOutcome
+  deriving DecidableEq, Repr, Inhabited
+
+def applySequence (k : KB) (e : Context) (journal : List JournalEntry)
+    (trusted : List VerifiedApproval) : List Plan → SequenceResult
+  | [] => ⟨k, journal, []⟩
+  | p :: ps =>
+      let a := applyPlan k { e with snapshot := k.snapshot } journal p trusted
+      let rest := applySequence a.kb e a.journal trusted ps
+      ⟨rest.kb, rest.journal, a.outcome :: rest.outcomes⟩
 
 inductive ProposalStatus where
-  | draft
-  | proposed
-  | accepted
-  | rejected
-  | deferred
-  | landing
-  | applied
-  | verified
-  | regressed
-  | superseded
-deriving DecidableEq, Repr, Inhabited
-
-instance : BEq ProposalStatus := ⟨fun a b => decide (a = b)⟩
-
-/-- Transition table mirroring the existing CLI lifecycle
-(`draft → proposed → accepted → landing → applied → verified`, with
-`rejected`/`deferred` from proposed, `regressed` from applied/verified, and
-`superseded` from anywhere except itself). -/
-def legalTransition (src tgt : ProposalStatus) : Bool :=
-  match src, tgt with
-  | .draft, .proposed => true
-  | .proposed, .accepted => true
-  | .proposed, .rejected => true
-  | .proposed, .deferred => true
-  | .accepted, .landing => true
-  | .landing, .applied => true
-  | .applied, .verified => true
-  | .applied, .regressed => true
-  | .verified, .regressed => true
-  | .superseded, .superseded => false
-  | _, .superseded => true
-  | _, _ => false
+  | draft | proposed | approved | applied | verified | rejected
+  deriving DecidableEq, Repr, Inhabited
 
 structure Proposal where
-  id : Ident IdKind.proposal
+  id : ProposalId
+  revision : ProposalRevision
+  target : Ref
   status : ProposalStatus
-  researchPresent : Bool
-  researchJustifiedSkip : Bool
-  alternativesCount : Int
-  gatesTablePresent : Bool
-  legacyProfile : Bool
-  decidedBy : Option String
-  landedRefs : List String
-  landGatesPassed : Bool
-  deployUseGatesPassed : Bool
-deriving DecidableEq, Repr, Inhabited
+  actor : Option ActorId
+  executor : Option ActorId
+  acceptor : Option ActorId
+  gates : List ReceiptId
+  deriving DecidableEq, Repr, Inhabited
 
-/-- Statuses that require an actor (`--by` in the current CLI):
-accepted, rejected, applied, landing. -/
-def decidedStatus (s : ProposalStatus) : Bool :=
-  match s with
-  | .accepted => true
-  | .rejected => true
-  | .applied => true
-  | .landing => true
-  | _ => false
+def legalTransition : ProposalStatus → ProposalStatus → Bool
+  | .draft, .proposed | .proposed, .approved | .proposed, .rejected |
+    .approved, .applied | .approved, .rejected | .applied, .verified => true
+  | _, _ => false
 
-/-- One readiness predicate, used by BOTH filing-as-proposed and
-draft→proposed (the readiness-bypass fix; the old bypass fixture is
-intentionally superseded). Research present OR justified skip, two or more
-alternatives, and a gates table unless explicitly legacy-profiled. -/
+def transition (k : KB) (e : Context) (p : Proposal) (target : ProposalStatus) : Bool :=
+  legalTransition p.status target && p.id.val != "" && p.revision.val != "" &&
+  identPresent p.actor && usableFor k e p.target &&
+  p.gates.all (fun id => k.receipts.any (fun r => r.id == id && reusable k e p.target r)) &&
+  (!(target == .approved || target == .applied || target == .verified) || !p.gates.isEmpty) &&
+  (!(target == .applied || target == .verified) || identPresent p.executor) &&
+  (target != .verified || (identPresent p.acceptor && p.executor != p.acceptor))
 
-def readyForProposed (p : Proposal) : Bool :=
-  (p.researchPresent || p.researchJustifiedSkip)
-  && 2 ≤ p.alternativesCount
-  && (p.gatesTablePresent || p.legacyProfile)
-
-inductive TransitionError where
-  | illegalTransition
-  | notReady
-  | missingActor
-  | gatesNotPassed
-  | landedRefsUnresolved
-deriving DecidableEq, Repr, Inhabited
-
-inductive PlanOutcome where
-  | planned (p : Proposal)
-  | refused (e : TransitionError)
-deriving DecidableEq, Repr, Inhabited
-
-/-- Pure proposal transition planning (T18). The candidate is constructed
-from every change in the command, then checked as a whole. -/
-
-def planTransition (p : Proposal) (target : ProposalStatus)
-    (actor : Option String) (landedRefs : List String)
-    (refsResolvable : Bool) : PlanOutcome :=
-  if !legalTransition p.status target then .refused .illegalTransition
-  else if target == .proposed && !readyForProposed p then .refused .notReady
-  else if decidedStatus target && actor.isNone then .refused .missingActor
-  else if target == .applied
-      && !(p.landGatesPassed && refsResolvable && !landedRefs.isEmpty)
-    then .refused .gatesNotPassed
-  else if target == .verified && !p.deployUseGatesPassed
-    then .refused .gatesNotPassed
-  else
-    .planned
-      { p with
-        status := target
-        decidedBy :=
-          if decidedStatus target then actor
-          else if target == .proposed then none
-          else p.decidedBy
-        landedRefs :=
-          if target == .applied then landedRefs else p.landedRefs }
-
-/-! ## Investigation conclusions (T19). -/
-
-inductive HypStatus where
-  | openH
-  | supportedH
-  | refutedH
-  | unknownH
-  | malformedH
-deriving DecidableEq, Repr, Inhabited
+inductive HypothesisStatus where
+  | supported | refuted | unk | open
+  deriving DecidableEq, Repr, Inhabited
 
 structure Hypothesis where
   text : String
-  status : HypStatus
-deriving DecidableEq, Repr, Inhabited
+  status : HypothesisStatus
+  deriving DecidableEq, Repr, Inhabited
 
 structure Investigation where
-  id : Ident IdKind.investigation
   checkedAgainst : String
   scopeAndLimits : String
   hypotheses : List Hypothesis
-deriving Repr, Inhabited
+  deriving DecidableEq, Repr, Inhabited
 
-/-- Typed conclusion predicate: both sections non-empty, no open hypothesis,
-and no malformed hypothesis bullet (malformed is a blocker, never invisible). -/
+/-- Structural incident completion is separate from factual claim admission. -/
+def conclude (i : Investigation) : Bool :=
+  nonblank i.checkedAgainst && nonblank i.scopeAndLimits &&
+  i.hypotheses.all (fun h => nonblank h.text && h.status != .open)
 
-def canConclude (i : Investigation) : Bool :=
-  !i.checkedAgainst.isEmpty
-  && !i.scopeAndLimits.isEmpty
-  && !i.hypotheses.any (fun h => h.status == .openH || h.status == .malformedH)
 
-/-! ## Operation plans and conditional commit (T03, T20, T21). -/
+inductive AuthoredStatus where
+  | draft | proposed | accepted | rejected | landing | applied | verified
+  | regressed | deferred | superseded
+  deriving DecidableEq, Repr, Inhabited
 
-inductive Change where
-  | addClaim (c : Claim)
-  | addObservation (o : Observation)
-  | addDerivation (d : Derivation)
-  | addCorrection (c : Correction)
-  | addValidation (r : ClaimRef) (digest : String)
-deriving Repr, Inhabited
+inductive Profile where
+  | modern | legacyLimited
+  deriving DecidableEq, Repr, Inhabited
 
-structure Op where
-  id : String
-  expectedHead : String
-  changes : List Change
-  inputDigest : String
-deriving Repr, Inhabited
+inductive GatePhase where
+  | land | deploy | use
+  deriving DecidableEq, Repr, Inhabited
 
-structure JournalEntry where
-  id : String
-  head : String
-  digest : String
-deriving DecidableEq, Repr, Inhabited
+inductive GateOutcome where
+  | pass | fail | unk
+  deriving DecidableEq, Repr, Inhabited
 
-instance : BEq JournalEntry := ⟨fun a b => decide (a = b)⟩
+structure GateDefinition where
+  id : GateId
+  claim : String
+  check : String
+  when : GatePhase
+  byActor : Option ActorId
+  checker : Option CheckerId
+  deriving DecidableEq, Repr, Inhabited
 
-inductive CommitOutcome where
-  | committed
-  | alreadyCommitted
-  | predecessorConflict
-  | inputConflict
-  | rejectedInvalid
-deriving DecidableEq, Repr, Inhabited
+structure GateResult where
+  definition : GateDefinition
+  targetRevision : Option TargetRevision
+  checker : Option CheckerId
+  result : GateOutcome
+  observedAt : Nat
+  expiresAt : Nat
+  proposalRevision : Option ProposalRevision
+  environment : String
+  scope : String
+  evidenceRefs : List String
+  actor : Option ActorId
+  deriving DecidableEq, Repr, Inhabited
 
-def applyChange (kb : KB) : Change → KB
-  | .addClaim c => { kb with claims := kb.claims ++ [c] }
-  | .addObservation o => { kb with observations := kb.observations ++ [o] }
-  | .addDerivation d => { kb with derivations := kb.derivations ++ [d] }
-  | .addCorrection c => { kb with corrections := kb.corrections ++ [c] }
-  | .addValidation r digest => { kb with validations := kb.validations ++ [(r, digest)] }
+structure AuthoredReplacement where
+  id : ProposalId
+  supersededBy : Option ProposalId
+  deriving DecidableEq, Repr, Inhabited
 
-def applyChanges (kb : KB) (changes : List Change) : KB :=
-  changes.foldl applyChange kb
+structure AuthoredLanded where
+  reference : String
+  targetRevision : TargetRevision
+  deriving DecidableEq, Repr, Inhabited
 
-/-- Conditionally apply an operation (T20/T21). Rejection of any kind leaves
-the modeled state unchanged; success requires the expected predecessor, an
-unseen (or identically-replayed) operation id, and a resulting state that
-still satisfies well-formedness. -/
+structure AuthoredProposal where
+  status : AuthoredStatus
+  profile : Profile
+  researchPresent : Bool
+  alternativesCount : Nat
+  targetRevision : Option TargetRevision
+  gateDefinitions : List GateDefinition
+  gateResults : List GateResult
+  actor : Option ActorId
+  acceptor : Option ActorId
+  executor : Option ActorId
+  verifier : Option ActorId
+  landedRefs : List String
+  regressionNote : String
+  id : ProposalId
+  supersededBy : Option ProposalId
+  proposals : List AuthoredReplacement
+  acceptedRevision : Option ProposalRevision
+  proposalRevision : Option ProposalRevision
+  environment : String
+  scope : String
+  resolvedLanded : List AuthoredLanded
+  deriving DecidableEq, Repr, Inhabited
 
-def commitOp (kb : KB) (journal : List JournalEntry) (op : Op) : KB × CommitOutcome :=
-  match journal.find? (fun e => e.id == op.id) with
-  | some e =>
-    if e.digest == op.inputDigest && e.head == op.expectedHead
-      then (kb, .alreadyCommitted)
-      else (kb, .inputConflict)
-  | none =>
-    if kb.head != op.expectedHead then (kb, .predecessorConflict)
-    else if (applyChanges kb op.changes).wellFormed then
-      ({ (applyChanges kb op.changes) with head := op.id }, .committed)
-    else (kb, .rejectedInvalid)
+def gateDefinitionValid (g : GateDefinition) : Bool :=
+  nonblank g.id.val && nonblank g.claim && nonblank g.check && identPresent g.byActor
+def gatePassed (p : AuthoredProposal) (now : Nat) (g : GateDefinition) : Bool :=
+  gateDefinitionValid g && identPresent p.targetRevision && identPresent p.proposalRevision &&
+  nonblank p.environment && nonblank p.scope &&
+  match p.gateResults.reverse.find? (fun r =>
+      r.definition == g && r.targetRevision == p.targetRevision &&
+      r.proposalRevision == p.proposalRevision && r.environment == p.environment && r.scope == p.scope &&
+      identPresent r.checker && (g.checker.isNone || r.checker == g.checker) && r.observedAt ≤ now) with
+  | some r => r.result == .pass && now ≤ r.expiresAt && identPresent r.actor &&
+      !r.evidenceRefs.isEmpty && r.evidenceRefs.all nonblank
+  | none => false
+def authoredLegal (a b : AuthoredStatus) : Bool :=
+  (b == .superseded && a != b) || match a, b with
+  | .draft, .proposed | .proposed, .draft | .proposed, .accepted | .proposed, .rejected |
+    .accepted, .landing | .accepted, .deferred | .landing, .applied |
+    .applied, .verified | .applied, .regressed | .verified, .regressed => true
+  | _, _ => false
+def authoredReady (p : AuthoredProposal) : Bool :=
+  p.researchPresent && p.alternativesCount ≥ 2 && !p.gateDefinitions.isEmpty &&
+  unique (p.gateDefinitions.map (·.id)) && p.gateDefinitions.all gateDefinitionValid
+def needsReadiness (s : AuthoredStatus) : Bool :=
+  s == .proposed || s == .accepted || s == .landing || s == .applied || s == .verified
+def hasPhase (p : AuthoredProposal) (phase : GatePhase) : Bool :=
+  p.gateDefinitions.any (fun g => g.when == phase)
+def replacementChain (proposals : List AuthoredReplacement) : Nat → List ProposalId → ProposalId → Bool
+  | 0, _, _ => false
+  | n + 1, seen, id =>
+      if seen.contains id then false else
+      match proposals.find? (fun p => p.id == id) with
+      | none => false
+      | some p => match p.supersededBy with
+        | none => true
+        | some next => replacementChain proposals n (id :: seen) next
+def replacementValid (p : AuthoredProposal) : Bool :=
+  unique (p.proposals.map (·.id)) && p.proposals.any (fun q => q.id == p.id) &&
+  match p.supersededBy with
+  | none => false
+  | some next => replacementChain p.proposals (p.proposals.length + 1) [p.id] next
 
-def journalAfter (journal : List JournalEntry) (kb : KB) (op : Op) : List JournalEntry :=
-  match journal.find? (fun e => e.id == op.id) with
-  | some _ => journal
-  | none =>
-    if kb.head == op.expectedHead
-    then journal ++ [JournalEntry.mk op.id op.id op.inputDigest]
-    else journal
+def authoredCandidateValid (p : AuthoredProposal) (target : AuthoredStatus) (now : Nat) : Bool :=
+  (!(target == .accepted || target == .landing || target == .applied || target == .verified) ||
+    (identPresent p.acceptedRevision && p.acceptedRevision == p.proposalRevision)) &&
+  (target != .superseded || replacementValid p) &&
+  (!(target == .accepted || target == .rejected || target == .landing || target == .applied) || identPresent p.actor) &&
+  (p.profile == .legacyLimited || !needsReadiness target || authoredReady p) &&
+  (!(target == .accepted || target == .landing || target == .applied || target == .verified) || identPresent p.acceptor) &&
+  (!(target == .landing || target == .applied || target == .verified) || identPresent p.executor) &&
+  (!(target == .applied || target == .verified) || (!p.landedRefs.isEmpty && p.landedRefs.all nonblank &&
+    p.landedRefs.all (fun ref => p.resolvedLanded.any (fun resolved => resolved.reference == ref)) &&
+    p.resolvedLanded.any (fun resolved => p.landedRefs.contains resolved.reference && some resolved.targetRevision == p.targetRevision))) &&
+  (target != .applied || (hasPhase p .land &&
+    (p.gateDefinitions.filter (fun g => g.when == .land)).all (gatePassed p now))) &&
+  (target != .verified || (hasPhase p .deploy && hasPhase p .use && p.gateDefinitions.all (gatePassed p now))) &&
+  (target != .regressed || nonblank p.regressionNote)
+
+def authoredTransition (p : AuthoredProposal) (target : AuthoredStatus) (now : Nat) : Bool :=
+  authoredLegal p.status target && authoredCandidateValid p target now
+
+theorem authored_transition_candidate (p : AuthoredProposal) (target : AuthoredStatus) (now : Nat) :
+    authoredTransition p target now = (authoredLegal p.status target && authoredCandidateValid p target now) := rfl
+
 
 end Kctx

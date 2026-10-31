@@ -9,7 +9,7 @@ and every one of them must go through `sql_quote` here.
 
 import re
 
-from errors import KctxError
+from kctx.errors import KctxError
 
 # Defense in depth ahead of sql_quote's escaping: an id containing a raw
 # quote, backslash, or newline is already suspicious for a graph node/edge
@@ -20,7 +20,7 @@ _UNSAFE_CHARS_RE = re.compile(r"['\\\x00\n\r]")
 
 
 def validate_id(value: str) -> str:
-    if not isinstance(value, str) or not value:
+    if not value:
         raise KctxError("malformed", f"expected a non-empty id string, got {value!r}")
     if _UNSAFE_CHARS_RE.search(value):
         raise KctxError(
@@ -30,7 +30,7 @@ def validate_id(value: str) -> str:
     return value
 
 
-def sql_quote(value) -> str:
+def sql_quote(value: str | int | None) -> str:
     """Single-quote and escape a value for interpolation into a `dolt sql -q`
     string. None becomes the bare SQL keyword NULL."""
     if value is None:

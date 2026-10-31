@@ -2,12 +2,16 @@ import json
 
 from _base import KctxTestCase
 
-import runs
-from errors import KctxError
+from kctx.services import runs
+from kctx.errors import KctxError
+from kctx.domain.ids import ObservationId
+from kctx.domain.records import CoverageCount
+from kctx.domain.vocabulary import CoverageOutcome, ObservationRole, ObservationStatus, ObservationSystem, Readiness, RunMode
+from kctx.codecs.records import encode_observation
 
 
 def _new_run(root):
-    return runs.new_run(root, project="demo", mode="advice", task="test task")["run_id"]
+    return runs.new_run(root, project="demo", mode=RunMode("advice"), task="test task").run_id
 
 
 class CoverRefusalTest(KctxTestCase):
@@ -18,34 +22,24 @@ class CoverRefusalTest(KctxTestCase):
         run_id = _new_run(self.root)
         for bad_status in ("timeout", "denied"):
             with self.subTest(status=bad_status):
-                obs = runs.add_observation(
-                    self.root,
-                    run_id,
-                    system="grafana",
-                    locator="dash://x",
-                    role="runtime",
-                    status=bad_status,
-                )
+                obs = runs.add_observation(self.root,
+                run_id, system=ObservationSystem("grafana"), locator="dash://x", role=ObservationRole("runtime"), status=ObservationStatus(bad_status), )
                 with self.assertRaises(KctxError) as ctx:
-                    runs.cover(
-                        self.root,
-                        run_id,
-                        item=f"item-{bad_status}",
-                        outcome="supported",
-                        evidence=[obs["id"]],
-                    )
+                    runs.cover(self.root,
+                    run_id,
+                    item=f"item-{bad_status}", outcome=CoverageOutcome("supported"), evidence=tuple([obs.id]), )
                 self.assertEqual(ctx.exception.category, "incomplete")
 
     def test_cover_supported_requires_evidence(self):
         run_id = _new_run(self.root)
         with self.assertRaises(KctxError) as ctx:
-            runs.cover(self.root, run_id, item="no-evidence", outcome="supported")
+            runs.cover(self.root, run_id, item="no-evidence", outcome=CoverageOutcome.SUPPORTED)
         self.assertEqual(ctx.exception.category, "incomplete")
 
     def test_cover_non_supported_requires_reason(self):
         run_id = _new_run(self.root)
         with self.assertRaises(KctxError):
-            runs.cover(self.root, run_id, item="x", outcome="inconclusive")
+            runs.cover(self.root, run_id, item="x", outcome=CoverageOutcome.INCONCLUSIVE)
 
 
 class NoDataPartialTruncatedTest(KctxTestCase):
@@ -57,34 +51,19 @@ class NoDataPartialTruncatedTest(KctxTestCase):
         run_id = _new_run(self.root)
         for status in ("no-data", "partial", "truncated"):
             with self.subTest(status=status):
-                obs = runs.add_observation(
-                    self.root,
-                    run_id,
-                    system="metrics",
-                    locator="metric://x",
-                    role="runtime",
-                    status=status,
-                )
+                obs = runs.add_observation(self.root,
+                run_id, system=ObservationSystem("metrics"), locator="metric://x", role=ObservationRole("runtime"), status=ObservationStatus(status), )
                 with self.assertRaises(KctxError) as ctx:
-                    runs.cover(
-                        self.root,
-                        run_id,
-                        item=f"q13-{status}",
-                        outcome="supported",
-                        evidence=[obs["id"]],
-                    )
+                    runs.cover(self.root,
+                    run_id,
+                    item=f"q13-{status}", outcome=CoverageOutcome("supported"), evidence=tuple([obs.id]), )
                 self.assertEqual(ctx.exception.category, "incomplete")
                 # The unsupported condition is still visible as a regular,
                 # non-supported coverage entry with the required reason.
-                entry = runs.cover(
-                    self.root,
-                    run_id,
-                    item=f"q13-{status}-recorded",
-                    outcome="inconclusive",
-                    evidence=[obs["id"]],
-                    reason=f"observation status={status}",
-                )
-                self.assertEqual(entry["outcome"], "inconclusive")
+                entry = runs.cover(self.root,
+                run_id,
+                item=f"q13-{status}-recorded", outcome=CoverageOutcome("inconclusive"), evidence=tuple([obs.id]), reason=f"observation status={status}",)
+                self.assertEqual(entry.outcome.value, "inconclusive")
 
 
 class DirtyWorktreeTest(KctxTestCase):
@@ -96,29 +75,27 @@ class DirtyWorktreeTest(KctxTestCase):
         repo = self.make_git_repo("dirty-check")
         run_id = _new_run(self.root)
 
-        clean = runs.add_observation(
-            self.root, run_id, system="git", locator=str(repo), role="code"
-        )
-        self.assertFalse(bool(clean.get("dirty")))
-        self.assertIsNone(clean.get("dirty_diff_sha256"))
-        clean_revision = clean["source"]["revision"]
+        clean = runs.add_observation(self.root, run_id, system=ObservationSystem("git"), locator=str(repo), role=ObservationRole.CODE)
+        self.assertFalse(bool(clean.dirty))
+        self.assertIsNone(clean.dirty_diff_sha256)
+        clean_revision = clean.source.revision
         self.assertTrue(clean_revision)
 
         (repo / "tracked.txt").write_text(
             "synthetic fixture content, modified\n", encoding="utf-8"
         )
-        dirty = runs.add_observation(
-            self.root, run_id, system="git", locator=str(repo), role="code"
-        )
+        dirty = runs.add_observation(self.root, run_id, system=ObservationSystem("git"), locator=str(repo), role=ObservationRole.CODE)
 
-        self.assertTrue(dirty["dirty"])
-        self.assertIsNotNone(dirty["dirty_diff_sha256"])
-        # Same commit both times -- the change is uncommitted -- but the two
-        # observation records are distinct because of the dirty digest.
-        self.assertEqual(dirty["source"]["revision"], clean_revision)
-        self.assertNotEqual(dirty["dirty_diff_sha256"], clean.get("dirty_diff_sha256"))
+        self.assertTrue(dirty.dirty)
+        self.assertIsNone(dirty.dirty_diff_sha256)
+        # New captures retain a complete declared input identity; the old
+        # git-diff digest field is never relabeled as complete evidence.
+        assert clean.input_identity is not None
+        assert dirty.input_identity is not None
+        self.assertEqual(dirty.source.revision, clean_revision)
+        self.assertNotEqual(dirty.input_identity.digest, clean.input_identity.digest)
         self.assertNotEqual(
-            json.dumps(dirty, sort_keys=True), json.dumps(clean, sort_keys=True)
+            json.dumps(encode_observation(dirty), sort_keys=True), json.dumps(encode_observation(clean), sort_keys=True)
         )
 
 
@@ -129,29 +106,20 @@ class ConcurrentObservationTest(KctxTestCase):
 
     def test_q19_concurrent_observations_survive_duplicate_refused(self):
         run_id = _new_run(self.root)
-        first = runs.add_observation(
-            self.root, run_id, system="other", locator="a", obs_id="obs-concurrent-a"
-        )
-        second = runs.add_observation(
-            self.root, run_id, system="other", locator="b", obs_id="obs-concurrent-b"
-        )
+        first = runs.add_observation(self.root, run_id, system=ObservationSystem("other"), locator="a", obs_id=ObservationId("obs-concurrent-a"))
+        second = runs.add_observation(self.root, run_id, system=ObservationSystem("other"), locator="b", obs_id=ObservationId("obs-concurrent-b"))
 
-        all_obs = {o["id"] for o in runs.load_observations(self.root, run_id)}
-        self.assertEqual(all_obs, {first["id"], second["id"]})
+        all_obs = {o.id for o in runs.load_observations(self.root, run_id)}
+        self.assertEqual(all_obs, {first.id, second.id})
 
         with self.assertRaises(KctxError) as ctx:
-            runs.add_observation(
-                self.root,
-                run_id,
-                system="other",
-                locator="clobber-attempt",
-                obs_id="obs-concurrent-a",
-            )
+            runs.add_observation(self.root,
+            run_id, system=ObservationSystem("other"), locator="clobber-attempt", obs_id=ObservationId("obs-concurrent-a"), )
         self.assertEqual(ctx.exception.category, "conflict")
 
         # The original observation must be untouched by the refused write.
-        reloaded = runs.get_observation(self.root, run_id, "obs-concurrent-a")
-        self.assertEqual(reloaded["source"]["locator"], "a")
+        reloaded = runs.get_observation(self.root, run_id, ObservationId("obs-concurrent-a"))
+        self.assertEqual(reloaded.source.locator, "a")
 
 
 class CrashRecoveryTest(KctxTestCase):
@@ -161,20 +129,16 @@ class CrashRecoveryTest(KctxTestCase):
 
     def test_q20_stray_temp_file_does_not_corrupt_run_and_resume_works(self):
         run_id = _new_run(self.root)
-        runs.add_observation(
-            self.root, run_id, system="other", locator="a", obs_id="obs-1"
-        )
-        runs.cover(
-            self.root, run_id, item="q1", outcome="not-examined", reason="not yet"
-        )
+        runs.add_observation(self.root, run_id, system=ObservationSystem("other"), locator="a", obs_id=ObservationId("obs-1"))
+        runs.cover(self.root, run_id, item="q1", outcome=CoverageOutcome("not-examined"), reason="not yet")
 
         run_dir = runs.run_dir(self.root, run_id)
         stray = run_dir / ".tmp-abcd1234"
         stray.write_text('{"broken json truncated mid-writ', encoding="utf-8")
 
         result = runs.resume(self.root, run_id)
-        self.assertEqual(result["coverage_summary"], {"not-examined": 1})
-        self.assertEqual(result["manifest"]["run_id"], run_id)
+        self.assertEqual(result.coverage_summary, (CoverageCount(CoverageOutcome.NOT_EXAMINED, 1),))
+        self.assertEqual(result.manifest.run_id, run_id)
         # The stray temp file is still there (we don't clean it up implicitly)
         # but is not mistaken for a real record.
         self.assertTrue(stray.exists())
@@ -188,18 +152,14 @@ class ReceiptRevisionBindingTest(KctxTestCase):
         repo = self.make_git_repo("revision-binding")
         run_id = _new_run(self.root)
 
-        obs = runs.add_observation(
-            self.root, run_id, system="git", locator=str(repo), role="code"
-        )
-        first_revision = obs["source"]["revision"]
-        runs.cover(
-            self.root, run_id, item="q1", outcome="supported", evidence=[obs["id"]]
-        )
+        obs = runs.add_observation(self.root, run_id, system=ObservationSystem("git"), locator=str(repo), role=ObservationRole.CODE)
+        first_revision = obs.source.revision
+        runs.cover(self.root, run_id, item="q1", outcome=CoverageOutcome("supported"), evidence=(obs.id,))
 
         receipt1 = runs.check(self.root, run_id)
-        self.assertEqual(receipt1["readiness"], "ready")
-        self.assertEqual(receipt1["stale_observations"], [])
-        self.assertEqual(receipt1["observations"][0]["revision"], first_revision)
+        self.assertEqual(receipt1.readiness, Readiness.READY)
+        self.assertEqual(receipt1.stale_observations, ())
+        self.assertEqual(receipt1.observations[0].revision, first_revision)
 
         # Move the repo forward -- the reviewed head changed.
         (repo / "tracked.txt").write_text(
@@ -219,12 +179,12 @@ class ReceiptRevisionBindingTest(KctxTestCase):
         )
 
         receipt2 = runs.check(self.root, run_id)
-        self.assertIn(obs["id"], receipt2["stale_observations"])
-        self.assertEqual(receipt2["readiness"], "partial")
+        self.assertIn(obs.id, receipt2.stale_observations)
+        self.assertEqual(receipt2.readiness, Readiness.PARTIAL)
 
         coverage = runs.load_coverage(self.root, run_id)
-        self.assertEqual(coverage["entries"]["q1"]["outcome"], "needs-recheck")
-        self.assertEqual(coverage["entries"]["q1"]["prior_outcome"], "supported")
+        self.assertEqual(coverage.entries[0].outcome, CoverageOutcome.NEEDS_RECHECK)
+        self.assertEqual(coverage.entries[0].prior_outcome, CoverageOutcome.SUPPORTED)
 
         # The first receipt is immutable: it still certifies only the old revision.
         receipts_dir = runs.receipts_dir(self.root, run_id)
@@ -232,10 +192,10 @@ class ReceiptRevisionBindingTest(KctxTestCase):
             (receipts_dir / "1.json").read_text(encoding="utf-8")
         )
         self.assertEqual(
-            reloaded_receipt1["observations"][0]["revision"], first_revision
+            reloaded_receipt1["observations"][0]["revision"], first_revision.val
         )
         self.assertEqual(reloaded_receipt1["readiness"], "ready")
-        self.assertNotEqual(receipt2["receipt"], receipt1["receipt"])
+        self.assertNotEqual(receipt2.receipt, receipt1.receipt)
 
 
 class SharedEvidenceOriginTest(KctxTestCase):
@@ -245,40 +205,22 @@ class SharedEvidenceOriginTest(KctxTestCase):
 
     def test_q21_check_counts_distinct_observations_not_citations(self):
         run_id = _new_run(self.root)
-        obs = runs.add_observation(
-            self.root,
-            run_id,
-            system="doc",
-            locator="notes://shared",
-            role="note",
-            status="ok",
-        )
+        obs = runs.add_observation(self.root,
+        run_id, system=ObservationSystem("doc"), locator="notes://shared", role=ObservationRole("note"), status=ObservationStatus("ok"), )
 
-        runs.cover(
-            self.root,
-            run_id,
-            item="claim-a",
-            outcome="inconclusive",
-            evidence=[obs["id"]],
-            reason="only a note, unverified",
-        )
-        runs.cover(
-            self.root,
-            run_id,
-            item="claim-b",
-            outcome="inconclusive",
-            evidence=[obs["id"]],
-            reason="same unverified note cited again",
-        )
+        runs.cover(self.root,
+        run_id,
+        item="claim-a", outcome=CoverageOutcome("inconclusive"), evidence=tuple([obs.id]), reason="only a note, unverified",)
+        runs.cover(self.root,
+        run_id,
+        item="claim-b", outcome=CoverageOutcome("inconclusive"), evidence=tuple([obs.id]), reason="same unverified note cited again",)
 
         receipt = runs.check(self.root, run_id)
-        origins = receipt["evidence_origins"]
-        self.assertEqual(origins["total_citations"], 2)
-        self.assertEqual(origins["distinct_observations"], 1)
-        self.assertIn(obs["id"], origins["shared_evidence"])
-        self.assertEqual(
-            set(origins["shared_evidence"][obs["id"]]), {"claim-a", "claim-b"}
-        )
+        origins = receipt.evidence_origins
+        self.assertEqual(origins.total_citations, 2)
+        self.assertEqual(origins.distinct_observations, 1)
+        self.assertEqual(origins.shared_evidence[0].observation, obs.id)
+        self.assertEqual(set(origins.shared_evidence[0].items), {"claim-a", "claim-b"})
 
 
 class SameOriginCorroborationTest(KctxTestCase):
@@ -289,55 +231,33 @@ class SameOriginCorroborationTest(KctxTestCase):
 
     def test_q44_cover_supported_refuses_same_origin_evidence(self):
         run_id = _new_run(self.root)
-        obs_a = runs.add_observation(
-            self.root, run_id, system="doc", locator="notes://shared", status="ok"
-        )
-        obs_b = runs.add_observation(
-            self.root, run_id, system="doc", locator="notes://shared", status="ok"
-        )
+        obs_a = runs.add_observation(self.root, run_id, system=ObservationSystem("doc"), locator="notes://shared", status=ObservationStatus.OK)
+        obs_b = runs.add_observation(self.root, run_id, system=ObservationSystem("doc"), locator="notes://shared", status=ObservationStatus.OK)
         with self.assertRaises(KctxError) as ctx:
-            runs.cover(
-                self.root,
-                run_id,
-                item="claim-a",
-                outcome="supported",
-                evidence=[obs_a["id"], obs_b["id"]],
-            )
+            runs.cover(self.root,
+            run_id,
+            item="claim-a", outcome=CoverageOutcome("supported"), evidence=tuple([obs_a.id, obs_b.id]), )
         self.assertEqual(ctx.exception.category, "incomplete")
 
     def test_q44_cover_supported_allows_distinct_origin_evidence(self):
         run_id = _new_run(self.root)
-        obs_a = runs.add_observation(
-            self.root, run_id, system="doc", locator="notes://one", status="ok"
-        )
-        obs_b = runs.add_observation(
-            self.root, run_id, system="doc", locator="notes://two", status="ok"
-        )
-        entry = runs.cover(
-            self.root,
-            run_id,
-            item="claim-a",
-            outcome="supported",
-            evidence=[obs_a["id"], obs_b["id"]],
-        )
-        self.assertEqual(entry["outcome"], "supported")
+        obs_a = runs.add_observation(self.root, run_id, system=ObservationSystem("doc"), locator="notes://one", status=ObservationStatus.OK)
+        obs_b = runs.add_observation(self.root, run_id, system=ObservationSystem("doc"), locator="notes://two", status=ObservationStatus.OK)
+        entry = runs.cover(self.root,
+        run_id,
+        item="claim-a", outcome=CoverageOutcome("supported"), evidence=tuple([obs_a.id, obs_b.id]), )
+        self.assertEqual(entry.outcome.value, "supported")
 
     def test_q44_cover_supported_refuses_three_evidence_all_same_origin(self):
         run_id = _new_run(self.root)
         obs_ids = [
-            runs.add_observation(
-                self.root, run_id, system="doc", locator="notes://shared", status="ok"
-            )["id"]
+            runs.add_observation(self.root, run_id, system=ObservationSystem("doc"), locator="notes://shared", status=ObservationStatus.OK).id
             for _ in range(3)
         ]
         with self.assertRaises(KctxError) as ctx:
-            runs.cover(
-                self.root,
-                run_id,
-                item="claim-a",
-                outcome="supported",
-                evidence=obs_ids,
-            )
+            runs.cover(self.root,
+            run_id,
+            item="claim-a", outcome=CoverageOutcome("supported"), evidence=tuple(obs_ids), )
         self.assertEqual(ctx.exception.category, "incomplete")
 
     def test_q44_cover_supported_allows_two_shared_plus_one_distinct_origin(self):
@@ -346,20 +266,10 @@ class SameOriginCorroborationTest(KctxTestCase):
         origin still provides independent corroboration, so this must be
         allowed."""
         run_id = _new_run(self.root)
-        obs_a = runs.add_observation(
-            self.root, run_id, system="doc", locator="notes://shared", status="ok"
-        )
-        obs_b = runs.add_observation(
-            self.root, run_id, system="doc", locator="notes://shared", status="ok"
-        )
-        obs_c = runs.add_observation(
-            self.root, run_id, system="doc", locator="notes://distinct", status="ok"
-        )
-        entry = runs.cover(
-            self.root,
-            run_id,
-            item="claim-a",
-            outcome="supported",
-            evidence=[obs_a["id"], obs_b["id"], obs_c["id"]],
-        )
-        self.assertEqual(entry["outcome"], "supported")
+        obs_a = runs.add_observation(self.root, run_id, system=ObservationSystem("doc"), locator="notes://shared", status=ObservationStatus.OK)
+        obs_b = runs.add_observation(self.root, run_id, system=ObservationSystem("doc"), locator="notes://shared", status=ObservationStatus.OK)
+        obs_c = runs.add_observation(self.root, run_id, system=ObservationSystem("doc"), locator="notes://distinct", status=ObservationStatus.OK)
+        entry = runs.cover(self.root,
+        run_id,
+        item="claim-a", outcome=CoverageOutcome("supported"), evidence=tuple([obs_a.id, obs_b.id, obs_c.id]), )
+        self.assertEqual(entry.outcome.value, "supported")

@@ -1,811 +1,236 @@
-import Kctx.Theorems
+import Kctx.Codec
+import Kctx.Locality
 
 set_option autoImplicit false
-set_option maxHeartbeats 1000000
-
-/-! Theorem registry, part 2: obsSupports/allChecked inversions, the main
-T04 theorem, T05–T22, and non-vacuity examples. -/
-
+set_option maxHeartbeats 1600000
 namespace Kctx
 
-/-! ## T04 (continued). -/
+/-- Full state boundary, including uniqueness, references and supersession acyclicity. -/
+theorem T01_admission_wellFormed {k v : KB} (h : admitKB k = some v) :
+    v.wellFormed = true := admitKB_sound h
 
-theorem not_isNone_eq {a : Type} {o : Option a}
-    (h : Not (o.isNone = true)) : o.isNone = false := by
-  cases ho : o <;> rw [ho] at h <;> simp_all
+/-- The canonical internal value is retained exactly at the admitted boundary. -/
+theorem T02_admitted_identity {k : KB} (h : k.wellFormed = true) :
+    admitKB k = some k := admitKB_complete h
 
-theorem verdict_eq_of_beq : ∀ {a b : Verdict}, (a == b) = true → a = b := by
-  intro a b h
-  cases a <;> cases b <;> simp_all
+private theorem applied_details {k : KB} {e : Context} {js : List JournalEntry}
+    {p : Plan} {trusted : List VerifiedApproval}
+    (h : (applyPlan k e js p trusted).outcome = .applied) :
+    p.expectedSnapshot = k.snapshot ∧ authorized e p trusted = true ∧ planValid k e p = true ∧
+      applyPlan k e js p trusted = ⟨p.candidate, ⟨p⟩ :: js, .applied⟩ := by
+  cases hf : js.find? (fun j => j.plan.id == p.id) with
+  | some j =>
+      simp only [applyPlan, hf] at h
+      split at h <;> contradiction
+  | none =>
+      simp only [applyPlan, hf] at h ⊢
+      split at h
+      · contradiction
+      · next predecessor =>
+          split at h
+          · next valid =>
+              have hp : p.expectedSnapshot = k.snapshot := by simpa using predecessor
+              have hv := bool_and.mp valid
+              simp [hp, hv.1, hv.2]
+          · contradiction
 
-theorem not_any_true_eq {a : Type} {l : List a} {p : a -> Bool}
-    (h : Not (l.any p = true)) : l.any p = false := by
-  cases hb : l.any p with
-  | true => exact absurd hb h
-  | false => rfl
+theorem T03_operation_preserves_wf {k : KB} {e : Context} {js : List JournalEntry}
+    {p : Plan} {trusted : List VerifiedApproval}
+    (h : (applyPlan k e js p trusted).outcome = .applied) :
+    (applyPlan k e js p trusted).kb.wellFormed = true := by
+  have hd := applied_details h
+  rw [hd.2.2.2]
+  have hv := hd.2.2.1
+  simp only [planValid, bool_and] at hv
+  simp_all
 
-theorem isNone_false_of_not {a : Type} {o : Option a}
-    (h : !(o.isNone) = true) : o.isSome = true := by
-  cases ho : o <;> rw [ho] at h <;> simp_all
+/-- Computed exact dependency mismatch rejects reuse even if all caller IDs match. -/
+theorem T08_dependency_mismatch {k : KB} {e : Context} {r : Ref} {receipt : Receipt}
+    (h : ∀ d ∈ k.derivations, d.claim = r → d.witness = receipt.witness →
+      ∀ result, checkedDerivation k e d = some result → result.dependencies ≠ receipt.dependencies) :
+    reusable k e r receipt = false := by
+  apply Bool.eq_false_iff.mpr
+  intro accepted
+  simp only [reusable, bool_and] at accepted
+  obtain ⟨d, hd, good⟩ := List.any_eq_true.mp accepted.2
+  have pieces := bool_and.mp good
+  have ids := bool_and.mp pieces.1
+  cases hc : checkedDerivation k e d with
+  | none => simp [hc] at pieces
+  | some result =>
+      have dep : result.dependencies = receipt.dependencies := by simpa [hc] using pieces.2
+      exact h d hd (eq_of_beq ids.1) (eq_of_beq ids.2) result hc dep
 
-theorem T04_obsSupports {ip : Interp} {v : KbView} {ctx : EvalCtx} {d : Derivation}
-    (hr : d.rule = RuleId.obsSupports)
-    (h : checkObsSupports v ctx d = Verdict.accepted)
-    (hconc : (v.findClaim d.conclusion).isNone = false)
-    (hmatch : conclusionMatches v d = true) : Derives ip v ctx d := by
-  obtain ⟨c, hcf, hcp⟩ := conclusionMatches_inv hconc hmatch
-  unfold checkObsSupports at h
-  by_cases c0 : (!d.premiseGroups.isEmpty)
-  · rw [if_pos c0] at h; exact absurd h (by intro hh; cases hh)
-  · rw [if_neg c0] at h
-    have hempty : d.premiseGroups = [] := by
-      cases hpg : d.premiseGroups with
-      | nil => rfl
-      | cons x xs => rw [hpg] at c0; simp at c0
-    cases hEv : d.evidence with
-    | none => rw [hEv] at h; exact absurd h (by intro hh; cases hh)
-    | some i =>
-      simp only [hEv] at h
-      cases hObs : v.findObs i with
-      | none => simp only [hObs] at h; exact absurd h (by intro hh; cases hh)
-      | some o =>
-        simp only [hObs] at h
-        by_cases c1 : (!(v.scopeOf d.conclusion == some d.scope))
-        · rw [if_pos c1] at h; exact absurd h (by intro hh; cases hh)
-        · rw [if_neg c1] at h
-          by_cases c2 : d.conclusionProp.asAtom.isNone
-          · rw [if_pos c2] at h; exact absurd h (by intro hh; cases hh)
-          · rw [if_neg c2] at h
-            by_cases c3 : (o.outcome != ObsOutcome.ok)
-            · rw [if_pos c3] at h; exact absurd h (by intro hh; cases hh)
-            · rw [if_neg c3] at h
-              by_cases c4 : (!v.bindings.contains (Binding.mk i d.conclusion .supports))
-              · rw [if_pos c4] at h; exact absurd h (by intro hh; cases hh)
-              · rw [if_neg c4] at h
-                by_cases c5 : (assessFresh o.ttl o.observedAt ctx.now != Fresh.fresh)
-                · rw [if_pos c5] at h; exact absurd h (by intro hh; cases hh)
-                · rw [if_neg c5] at h
-                  by_cases c6 : (!footprintDeclares v d)
-                  · rw [if_pos c6] at h; exact absurd h (by intro hh; cases hh)
-                  · rw [if_neg c6] at h
-                    have hscope : d.scope = c.scope := by
-                      have hs0 : (v.scopeOf d.conclusion == some d.scope) = true :=
-                        not_notB_eq c1
-                      have hso := opt_scope_beq hs0
-                      unfold KbView.scopeOf at hso
-                      rw [hcf] at hso
-                      simp only [Option.map_some, Option.some.injEq] at hso
-                      exact hso.symm
-                    have h2 : d.conclusionProp.asAtom.isSome = true :=
-                      isNone_false_of_not (by simpa using c2)
-                    have hatom : ∃ a : Atom, c.prop = .atom a := by
-                      obtain ⟨a, ha⟩ := asAtom_isSome h2
-                      exact ⟨a, by rw [hcp, ha]⟩
-                    have hok : o.outcome = .ok := obsOutcome_eq_of_beq (not_neqB_eq c3)
-                    have hbind : Binding.mk i d.conclusion .supports ∈ v.bindings :=
-                      any_supports_binding_inv (not_notB_eq c4)
-                    have hfresh : FreshAt o.ttl o.observedAt ctx.now :=
-                      assessFresh_fresh_iff.mp (by
-                        have hbeq : (assessFresh o.ttl o.observedAt ctx.now
-                            == Fresh.fresh) = true := not_neqB_eq c5
-                        cases ha : assessFresh o.ttl o.observedAt ctx.now <;>
-                          rw [ha] at hbeq <;> simp_all)
-                    have hoid : o.id = i := findObs_id hObs
-                    rw [← hoid] at hObs
-                    rw [← hoid] at hbind
-                    exact Derives.obsSupports d o c hr hempty
-                      (by simp [hEv, hoid]) hObs hcf
-                      ⟨hcp.symm, hscope⟩ hatom hok hbind hfresh
+theorem T09_alternative_survives {k : KB} {e : Context} {r : Ref} {p : Polarity}
+    (hr : supportAlternatives k e r p ≠ []) : supported k e r p = true := by
+  simp [supported, List.isEmpty_iff, hr]
 
-theorem T04_allChecked {ip : Interp} {v : KbView} {ctx : EvalCtx} {d : Derivation}
-    (hr : d.rule = RuleId.allChecked)
-    (h : checkAllChecked v d = Verdict.accepted)
-    (hprem : PremisesHold ip v d) : Derives ip v ctx d := by
-  unfold PremisesHold at hprem
-  simp only [hr] at hprem
-  unfold checkAllChecked at h
-  by_cases c0 : (!d.premiseGroups.isEmpty)
-  · rw [if_pos c0] at h; exact absurd h (by intro hh; cases hh)
-  · rw [if_neg c0] at h
-    have hempty : d.premiseGroups = [] := by
-      cases hpg : d.premiseGroups with
-      | nil => rfl
-      | cons x xs => rw [hpg] at c0; simp at c0
-    cases hW : d.witness with
-    | none => rw [hW] at h; exact absurd h (by intro hh; cases hh)
-    | some w =>
-      simp only [hW] at h
-      by_cases c1 : (!w.complete)
-      · rw [if_pos c1] at h; exact absurd h (by intro hh; cases hh)
-      · rw [if_neg c1] at h
-        by_cases c2 : w.members.isEmpty
-        · rw [if_pos c2] at h; exact absurd h (by intro hh; cases hh)
-        · rw [if_neg c2] at h
-          cases hP : d.conclusionProp with
-          | atom a => simp only [hP] at h; exact absurd h (by intro hh; cases hh)
-          | conj ps => simp only [hP] at h; exact absurd h (by intro hh; cases hh)
-          | allChecked pred ms =>
-            simp only [hP] at h
-            by_cases c3 : (ms != w.members)
-            · rw [if_pos c3] at h; exact absurd h (by intro hh; cases hh)
-            · rw [if_neg c3] at h
-              by_cases c4 : (w.scope != d.scope)
-              · rw [if_pos c4] at h; exact absurd h (by intro hh; cases hh)
-              · rw [if_neg c4] at h
-                by_cases c5 : (!footprintDeclares v d)
-                · rw [if_pos c5] at h; exact absurd h (by intro hh; cases hh)
-                · rw [if_neg c5] at h
-                  have hcomp : w.complete = true := not_notB_eq c1
-                  have hne : w.members ≠ [] := by
-                    intro hcon
-                    rw [hcon] at c2
-                    simp at c2
-                  have hms : ms = w.members := by simpa using (not_neqB_eq c3)
-                  have hscope : w.scope = d.scope := scope_beq_true (not_neqB_eq c4)
-                  refine Derives.allChecked d w pred hr hempty hW hcomp hne ?_ hscope ?_
-                  · rw [hP, hms]
-                  · intro m hm
-                    have hmp : m ∈ (match d.witness with
-                      | some w2 => w2.members
-                      | none => []) := by rw [hW]; exact hm
-                    have hp := hprem m hmp
-                    simp only [hP] at hp
-                    exact hp
+theorem T10_no_alternatives {k : KB} {e : Context} {r : Ref} {p : Polarity}
+    (hr : supportAlternatives k e r p = []) : supported k e r p = false := by
+  simp [supported, hr]
 
-/-- T04: checker acceptance implies the declarative derivability judgment
-(premise truth supplied per rule, never checked). -/
+theorem T11_expiry_monotone {o : TtlPolicy} {observed now later : Int}
+    (h : assessFresh o observed now = .stale) (hl : now ≤ later) :
+    assessFresh o observed later = .stale := assessFresh_stale_mono h hl
 
-theorem T04_checker_sound {ip : Interp} {v : KbView} {ctx : EvalCtx} {d : Derivation}
-    (h : checkDerivationV v ctx d = Verdict.accepted)
-    (hprem : PremisesHold ip v d) : Derives ip v ctx d := by
-  unfold checkDerivationV at h
-  by_cases g0 : (!enabledRules.contains d.rule)
-  · rw [if_pos g0] at h; exact absurd h (by intro hh; cases hh)
-  · rw [if_neg g0] at h
-    by_cases g1 : (!premisesResolve v d)
-    · rw [if_pos g1] at h; exact absurd h (by intro hh; cases hh)
-    · rw [if_neg g1] at h
-      by_cases g2 : (v.findClaim d.conclusion).isNone
-      · rw [if_pos g2] at h; exact absurd h (by intro hh; cases hh)
-      · rw [if_neg g2] at h
-        by_cases g3 : (!conclusionMatches v d)
-        · rw [if_pos g3] at h; exact absurd h (by intro hh; cases hh)
-        · rw [if_neg g3] at h
-          by_cases g4 : v.corrections.any (fun k => k.target == d.conclusion)
-          · rw [if_pos g4] at h; exact absurd h (by intro hh; cases hh)
-          · rw [if_neg g4] at h
-            by_cases g5 : v.corrections.any
-                (fun k => d.premiseGroups.any (fun g => g.contains k.target))
-            · rw [if_pos g5] at h; exact absurd h (by intro hh; cases hh)
-            · rw [if_neg g5] at h
-              cases hr : d.rule with
-              | andIntro =>
-                rw [show d.rule = RuleId.andIntro from hr] at h
-                exact T04_andIntro hr h hprem
-              | specialize =>
-                rw [show d.rule = RuleId.specialize from hr] at h
-                exact T04_specialize hr h hprem (not_isNone_eq (by simpa using g2)) (not_notB_eq g3)
-              | obsSupports =>
-                rw [show d.rule = RuleId.obsSupports from hr] at h
-                exact T04_obsSupports hr h (not_isNone_eq (by simpa using g2)) (not_notB_eq g3)
-              | allChecked =>
-                rw [show d.rule = RuleId.allChecked from hr] at h
-                exact T04_allChecked hr h hprem
-
-/-! ## T05: every enabled rule preserves its declared proposition semantics. -/
-
-theorem T05_derives_sound {ip : Interp} {v : KbView} {ctx : EvalCtx} {d : Derivation}
-    (h : Derives ip v ctx d) : ip.holds d.conclusionProp d.scope := by
-  induction h with
-  | andIntro g hr hg hatoms hconj hscope hne hprem =>
-    rw [hconj]
-    refine ip.conj_intro _ _ ?_
-    intro a ha
-    have hmem : a ∈ andIntroAtoms v g := ha
-    simp only [andIntroAtoms, List.mem_map] at hmem
-    obtain ⟨r, hrg, haeq⟩ := hmem
-    obtain ⟨a', hra'⟩ := hatoms r hrg
-    have hget : ((v.propOf r).asAtom).getD default = a' := by
-      rw [hra']; rfl
-    exact hprem a ha
-  | specialize r src tgt hr hg hsrc htgt hprop hspec hp =>
-    obtain ⟨hprop1, hprop2⟩ := hprop
-    obtain ⟨hspec1, hspec2⟩ := hspec
-    rw [hprop1, hprop2, hspec2]
-    exact ip.spec_weaken src.prop src.scope tgt.scope hspec1 hp
-  | obsSupports o c hr hg hev ho hc hcp hatom hok hbind hfresh =>
-    obtain ⟨hcp1, hcp2⟩ := hcp
-    rw [hcp1, hcp2]
-    exact ip.evidence_veridical o c hok
-  | allChecked w pred hr hg hw hcomp hne hprop hscope hprem =>
-    rw [hprop]
-    exact ip.allc_intro pred w.members d.scope hprem
-
-/-! ## T06/T08: footprint reuse. -/
-
-theorem T06_reusable_iff {v : KbView} {ctx : EvalCtx} {d : Derivation}
-    {observed : List Dep} :
-    Reusable v ctx d observed = true ↔
-      (checkDerivationV v ctx d = Verdict.accepted
-        ∧ ∀ dep ∈ d.footprint, (observed.contains dep) = true) := by
-  simp [Reusable, depsSatisfied, Bool.and_eq_true, List.all_eq_true]
-
-theorem T08_missing_dep_not_reusable {v : KbView} {ctx : EvalCtx} {d : Derivation}
-    {observed : List Dep} {dep : Dep}
-    (hreq : dep ∈ d.footprint) (hmiss : (observed.contains dep) = false) :
-    Reusable v ctx d observed = false := by
-  unfold Reusable
-  have h1 : depsSatisfied observed d.footprint = false := by
-    refine List.all_eq_false.mpr ?_
-    refine ⟨dep, hreq, ?_⟩
-    rw [hmiss]
-    simp
-  cases hc : checkDerivationV v ctx d == Verdict.accepted with
-  | true => simp [h1]
-  | false => simp [hc]
-
-/-! ## T09/T10: support and alternatives. -/
-
-theorem T09_alternative_survives {v : KbView} {ctx : EvalCtx} {r : ClaimRef}
-    {d2 : Derivation} (hmem : d2 ∈ v.derivations) (hcon : d2.conclusion = r)
-    (hacc : checkDerivationV v ctx d2 = Verdict.accepted) :
-    Supported v ctx r = true :=
-  List.any_eq_true.mpr ⟨d2, hmem, by simp [hcon, hacc]⟩
-
-theorem T10_all_support_removed {v : KbView} {ctx : EvalCtx} {r : ClaimRef}
-    (h : ∀ d ∈ v.derivations, d.conclusion = r →
-      checkDerivationV v ctx d ≠ Verdict.accepted) :
-    Supported v ctx r = false := by
-  unfold Supported
-  refine List.any_eq_false.mpr ?_
-  intro d hd
-  by_cases hbeq : (d.conclusion == r) = true
-  · intro hp
-    simp only [Bool.and_eq_true] at hp
-    obtain ⟨hbeq2, hacc2⟩ := hp
-    exact h d hd (claimRef_eq_of_beq hbeq2) (verdict_eq_of_beq hacc2)
-  · simp [hbeq]
-
-/-! ## T12: composition cannot widen scope, renew evidence age, or drop deps. -/
-
-theorem T12_copy_keeps_freshness (o : Observation) (copyId : String) (now : Int) :
-    assessFresh o.ttl o.observedAt now
-      = assessFresh { o with id := ⟨copyId⟩ }.ttl
-          { o with id := ⟨copyId⟩ }.observedAt now := rfl
-
-theorem T12_andIntro_footprint {v : KbView} {d : Derivation}
-    (h : checkAndIntro v d = Verdict.accepted) : footprintDeclares v d = true := by
-  unfold checkAndIntro at h
+/-- Specialization cannot mint observation times or omit any dependency. -/
+theorem T12_specialization_preserves_inputs {k : KB} {e : Context} {w : Witness}
+    {r out : Checked} {s : Scope} (hr : checkWitness k e w = some r)
+    (h : checkWitness k e (.specialize s w) = some out) :
+    narrower s r.statement.scope ∧ out.dependencies = r.dependencies ∧
+      out.statement.formula = r.statement.formula ∧ out.statement.scope = s := by
+  simp only [checkWitness, hr, bind, Option.bind] at h
   split at h
-  · next xg g heq =>
-    by_cases c1 : g.isEmpty
-    · rw [if_pos c1] at h; exact absurd h (by intro hh; cases hh)
-    · rw [if_neg c1] at h
-      by_cases c2 : (!g.all (fun r => (v.propOf r).asAtom.isSome))
-      · rw [if_pos c2] at h; exact absurd h (by intro hh; cases hh)
-      · rw [if_neg c2] at h
-        by_cases c3 : (!g.all (fun r => v.scopeOf r == some d.scope))
-        · rw [if_pos c3] at h; exact absurd h (by intro hh; cases hh)
-        · rw [if_neg c3] at h
-          by_cases c4 : (d.conclusionProp != ClaimProp.conj (andIntroAtoms v g))
-          · rw [if_pos c4] at h; exact absurd h (by intro hh; cases hh)
-          · rw [if_neg c4] at h
-            by_cases c5 : (!footprintDeclares v d)
-            · rw [if_pos c5] at h; exact absurd h (by intro hh; cases hh)
-            · exact not_notB_eq c5
-  · exact absurd h (by intro hh; cases hh)
+  · cases h; exact ⟨‹_›, rfl, rfl, rfl⟩
+  · contradiction
 
-theorem T12_specialize_footprint {v : KbView} {d : Derivation}
-    (h : checkSpecialize v d = Verdict.accepted) : footprintDeclares v d = true := by
-  unfold checkSpecialize at h
-  split at h
-  · next xr r heq =>
-    cases hsrc : v.findClaim r with
-    | none => rw [hsrc] at h; exact absurd h (by intro hh; cases hh)
-    | some src =>
-      cases htar : v.findClaim d.conclusion with
-      | none => rw [hsrc, htar] at h; exact absurd h (by intro hh; cases hh)
-      | some tgt =>
-        simp only [hsrc, htar] at h
-        by_cases c1 : (src.prop != tgt.prop)
-        · rw [if_pos c1] at h; exact absurd h (by intro hh; cases hh)
-        · rw [if_neg c1] at h
-          by_cases c2 : (!tgt.scope.specializes src.scope)
-          · rw [if_pos c2] at h; exact absurd h (by intro hh; cases hh)
-          · rw [if_neg c2] at h
-            by_cases c3 : (d.scope != tgt.scope)
-            · rw [if_pos c3] at h; exact absurd h (by intro hh; cases hh)
-            · rw [if_neg c3] at h
-              by_cases c4 : (!footprintDeclares v d)
-              · rw [if_pos c4] at h; exact absurd h (by intro hh; cases hh)
-              · exact not_notB_eq c4
-  · exact absurd h (by intro hh; cases hh)
+theorem T12_conjunction_exact_scope {k : KB} {e : Context} {a b : Witness} {r : Checked}
+    (h : checkWitness k e (.and a b) = some r) :
+    ∃ ra rb, checkWitness k e a = some ra ∧ checkWitness k e b = some rb ∧
+      ra.statement.scope = rb.statement.scope ∧ r.statement.scope = ra.statement.scope ∧
+      r.dependencies = mergeDependencies ra.dependencies rb.dependencies := by
+  have hd := T04_checker_sound h
+  cases hd with
+  | and ha hb allowed =>
+      exact ⟨_, _, finite_witness_complete ha, finite_witness_complete hb,
+        eq_of_beq (bool_and.mp (bool_and.mp allowed).1).1, rfl, rfl⟩
 
-theorem T12_obsSupports_footprint {v : KbView} {ctx : EvalCtx} {d : Derivation}
-    (h : checkObsSupports v ctx d = Verdict.accepted) : footprintDeclares v d = true := by
-  unfold checkObsSupports at h
-  by_cases c0 : (!d.premiseGroups.isEmpty)
-  · rw [if_pos c0] at h; exact absurd h (by intro hh; cases hh)
-  · rw [if_neg c0] at h
-    have hempty : d.premiseGroups = [] := by
-      cases hpg : d.premiseGroups with
-      | nil => rfl
-      | cons x xs => rw [hpg] at c0; simp at c0
-    cases hEv : d.evidence with
-    | none => rw [hEv] at h; exact absurd h (by intro hh; cases hh)
-    | some i =>
-      simp only [hEv] at h
-      cases hObs : v.findObs i with
-      | none => rw [hObs] at h; exact absurd h (by intro hh; cases hh)
-      | some o =>
-        simp only [hObs] at h
-        by_cases c1 : (!(v.scopeOf d.conclusion == some d.scope))
-        · rw [if_pos c1] at h; exact absurd h (by intro hh; cases hh)
-        · rw [if_neg c1] at h
-          by_cases c2 : d.conclusionProp.asAtom.isNone
-          · rw [if_pos c2] at h; exact absurd h (by intro hh; cases hh)
-          · rw [if_neg c2] at h
-            by_cases c3 : (o.outcome != ObsOutcome.ok)
-            · rw [if_pos c3] at h; exact absurd h (by intro hh; cases hh)
-            · rw [if_neg c3] at h
-              by_cases c4 : (!v.bindings.contains (Binding.mk i d.conclusion SupportRole.supports))
-              · rw [if_pos c4] at h; exact absurd h (by intro hh; cases hh)
-              · rw [if_neg c4] at h
-                by_cases c5 : (assessFresh o.ttl o.observedAt ctx.now != Fresh.fresh)
-                · rw [if_pos c5] at h; exact absurd h (by intro hh; cases hh)
-                · rw [if_neg c5] at h
-                  by_cases c6 : (!footprintDeclares v d)
-                  · rw [if_pos c6] at h; exact absurd h (by intro hh; cases hh)
-                  · exact not_notB_eq c6
+theorem T13_coverage_requires_members {k : KB} {e : Context} {id : EnumerationId} {p : String} {w : Witness} {r : Checked}
+    (h : checkWitness k e (.all id p w) = some r) :
+    ∃ z o a, enumerationEvidence k e id = some (z, o) ∧ Derives k e w a ∧
+      a.statement = ⟨.and (.inventory z.id) (memberFormula z.members p), z.scope, .positive⟩ := by
+  cases T04_checker_sound h with
+  | all hz hw ha => exact ⟨_, _, _, hz, hw, eq_of_beq (bool_and.mp ha).2⟩
 
-theorem T12_allChecked_footprint {v : KbView} {d : Derivation}
-    (h : checkAllChecked v d = Verdict.accepted) : footprintDeclares v d = true := by
-  unfold checkAllChecked at h
-  by_cases c0 : (!d.premiseGroups.isEmpty)
-  · rw [if_pos c0] at h; exact absurd h (by intro hh; cases hh)
-  · rw [if_neg c0] at h
-    have hempty : d.premiseGroups = [] := by
-      cases hpg : d.premiseGroups with
-      | nil => rfl
-      | cons x xs => rw [hpg] at c0; simp at c0
-    cases hW : d.witness with
-    | none => rw [hW] at h; exact absurd h (by intro hh; cases hh)
-    | some w =>
-      simp only [hW] at h
-      by_cases c1 : (!w.complete)
-      · rw [if_pos c1] at h; exact absurd h (by intro hh; cases hh)
-      · rw [if_neg c1] at h
-        by_cases c2 : w.members.isEmpty
-        · rw [if_pos c2] at h; exact absurd h (by intro hh; cases hh)
-        · rw [if_neg c2] at h
-          cases hP : d.conclusionProp with
-          | atom a => rw [hP] at h; exact absurd h (by intro hh; cases hh)
-          | conj ps => rw [hP] at h; exact absurd h (by intro hh; cases hh)
-          | allChecked pred ms =>
-            simp only [hP] at h
-            by_cases c3 : (ms != w.members)
-            · rw [if_pos c3] at h; exact absurd h (by intro hh; cases hh)
-            · rw [if_neg c3] at h
-              by_cases c4 : (w.scope != d.scope)
-              · rw [if_pos c4] at h; exact absurd h (by intro hh; cases hh)
-              · rw [if_neg c4] at h
-                by_cases c5 : (!footprintDeclares v d)
-                · rw [if_pos c5] at h; exact absurd h (by intro hh; cases hh)
-                · exact not_notB_eq c5
+theorem T13_absence_requires_empty_inventory {k : KB} {e : Context} {id : EnumerationId} {w : Witness} {r : Checked}
+    (h : checkWitness k e (.absent id w) = some r) :
+    ∃ z o a, enumerationEvidence k e id = some (z, o) ∧ z.members = [] ∧
+      Derives k e w a ∧ a.statement = ⟨.inventory z.id, z.scope, .positive⟩ := by
+  cases T04_checker_sound h with
+  | absent hz hw ha => exact ⟨_, _, _, hz, eq_of_beq (bool_and.mp ha).1, hw, eq_of_beq (bool_and.mp ha).2⟩
 
-theorem T12_footprint_declared {v : KbView} {ctx : EvalCtx} {d : Derivation}
-    (h : checkDerivationV v ctx d = Verdict.accepted) :
-    footprintDeclares v d = true := by
-  unfold checkDerivationV at h
-  by_cases g0 : (!enabledRules.contains d.rule)
-  · rw [if_pos g0] at h; exact absurd h (by intro hh; cases hh)
-  · rw [if_neg g0] at h
-    by_cases g1 : (!premisesResolve v d)
-    · rw [if_pos g1] at h; exact absurd h (by intro hh; cases hh)
-    · rw [if_neg g1] at h
-      by_cases g2 : (v.findClaim d.conclusion).isNone
-      · rw [if_pos g2] at h; exact absurd h (by intro hh; cases hh)
-      · rw [if_neg g2] at h
-        by_cases g3 : (!conclusionMatches v d)
-        · rw [if_pos g3] at h; exact absurd h (by intro hh; cases hh)
-        · rw [if_neg g3] at h
-          by_cases g4 : v.corrections.any (fun k => k.target == d.conclusion)
-          · rw [if_pos g4] at h; exact absurd h (by intro hh; cases hh)
-          · rw [if_neg g4] at h
-            by_cases g5 : v.corrections.any
-                (fun k => d.premiseGroups.any (fun g => g.contains k.target))
-            · rw [if_pos g5] at h; exact absurd h (by intro hh; cases hh)
-            · rw [if_neg g5] at h
-              cases hr : d.rule with
-              | andIntro =>
-                rw [show d.rule = RuleId.andIntro from hr] at h
-                exact T12_andIntro_footprint h
-              | specialize =>
-                rw [show d.rule = RuleId.specialize from hr] at h
-                exact T12_specialize_footprint h
-              | obsSupports =>
-                rw [show d.rule = RuleId.obsSupports from hr] at h
-                exact T12_obsSupports_footprint h
-              | allChecked =>
-                rw [show d.rule = RuleId.allChecked from hr] at h
-                exact T12_allChecked_footprint h
+/-- Unsupported arbitrary atoms cannot be fabricated by navigation or rule composition. -/
+theorem T14_no_arbitrary_atom {k : KB} {e : Context}
+    (h : EvidenceSound falseInterpretation k e) (w : Witness) (r : Checked)
+    (a : Atom) (s : Scope) (p : Polarity) (hr : r.statement = ⟨.atom a, s, p⟩) :
+    checkWitness k e w ≠ some r := unsupported_atom_impossible h w r a s p hr
 
+theorem T17_usable_policy {k : KB} {e : Context} {r : Ref}
+    (h : usableFor k e r = true) :
+    (assess k e r).applicable = true ∧
+    (e.policy.requireFresh = true → (assess k e r).freshness = .fresh) ∧
+    (e.policy.requireValidation = true → (assess k e r).validated = true) ∧
+    (e.policy.requireUncontested = true → (assess k e r).contested = false) := by
+  simp only [usableFor, assess, bool_and] at h ⊢
+  cases hf : e.policy.requireFresh <;> cases hv : e.policy.requireValidation <;> cases hu : e.policy.requireUncontested <;>
+    simp_all
 
-/-! Per-rule footprint guards (last check in each checker). -/
+theorem T18_transition_conditions {k : KB} {e : Context} {p : Proposal} {target : ProposalStatus}
+    (h : transition k e p target = true) :
+    legalTransition p.status target = true ∧ identPresent p.actor = true ∧
+    usableFor k e p.target = true ∧
+    ∀ id ∈ p.gates, ∃ r ∈ k.receipts, r.id = id ∧ reusable k e p.target r = true := by
+  simp only [transition, bool_and] at h
+  have allGates : p.gates.all (fun id => k.receipts.any (fun r => r.id == id && reusable k e p.target r)) = true := by
+    simp_all
+  refine ⟨?_, ?_, ?_, ?_⟩
+  · simp_all
+  · simp_all
+  · simp_all
+  · intro id hi
+    obtain ⟨r, hr, hg⟩ := List.any_eq_true.mp ((List.all_eq_true.mp allGates) id hi)
+    exact ⟨r, hr, eq_of_beq (bool_and.mp hg).1, (bool_and.mp hg).2⟩
 
-/-! ## T13: no coverage witness, no universal. -/
+theorem T18_authored_bound_gates {p : AuthoredProposal} {now : Nat}
+    (h : authoredTransition p .verified now = true) :
+    hasPhase p .deploy = true ∧ hasPhase p .use = true ∧
+    p.gateDefinitions.all (gatePassed p now) = true ∧ p.landedRefs ≠ [] := by
+  simp only [authoredTransition, authoredCandidateValid, bool_and] at h
+  simp_all [List.isEmpty_iff]
 
-theorem T13_witness_required {v : KbView} {ctx : EvalCtx} {d : Derivation}
-    (h : checkDerivationV v ctx d = Verdict.accepted)
-    (hrule : d.rule = RuleId.allChecked) :
-    ∃ w : CoverageWitness, d.witness = some w ∧ w.complete = true ∧ w.members ≠ [] := by
-  unfold checkDerivationV at h
-  simp only [hrule] at h
-  by_cases g0 : (!enabledRules.contains RuleId.allChecked)
-  · rw [if_pos g0] at h; exact absurd h (by intro hh; cases hh)
-  · rw [if_neg g0] at h
-    by_cases g1 : (!premisesResolve v d)
-    · rw [if_pos g1] at h; exact absurd h (by intro hh; cases hh)
-    · rw [if_neg g1] at h
-      by_cases g2 : (v.findClaim d.conclusion).isNone
-      · rw [if_pos g2] at h; exact absurd h (by intro hh; cases hh)
-      · rw [if_neg g2] at h
-        by_cases g3 : (!conclusionMatches v d)
-        · rw [if_pos g3] at h; exact absurd h (by intro hh; cases hh)
-        · rw [if_neg g3] at h
-          by_cases g4 : v.corrections.any (fun k => k.target == d.conclusion)
-          · rw [if_pos g4] at h; exact absurd h (by intro hh; cases hh)
-          · rw [if_neg g4] at h
-            by_cases g5 : v.corrections.any
-                (fun k => d.premiseGroups.any (fun g => g.contains k.target))
-            · rw [if_pos g5] at h; exact absurd h (by intro hh; cases hh)
-            · rw [if_neg g5] at h
-              unfold checkAllChecked at h
-              by_cases c0 : (!d.premiseGroups.isEmpty)
-              · rw [if_pos c0] at h; exact absurd h (by intro hh; cases hh)
-              · rw [if_neg c0] at h
-                have hempty : d.premiseGroups = [] := by
-                  cases hpg : d.premiseGroups with
-                  | nil => rfl
-                  | cons x xs => rw [hpg] at c0; simp at c0
-                cases hW : d.witness with
-                | none => rw [hW] at h; exact absurd h (by intro hh; cases hh)
-                | some w =>
-                  simp only [hW] at h
-                  by_cases c1 : (!w.complete)
-                  · rw [if_pos c1] at h; exact absurd h (by intro hh; cases hh)
-                  · rw [if_neg c1] at h
-                    by_cases c2 : w.members.isEmpty
-                    · rw [if_pos c2] at h; exact absurd h (by intro hh; cases hh)
-                    · rw [if_neg c2] at h
-                      refine Exists.intro w ⟨rfl, not_notB_eq c1, ?_⟩
-                      intro hcon
-                      rw [hcon] at c2
-                      simp at c2
+theorem T19_conclusion_conditions {i : Investigation} (h : conclude i = true) :
+    nonblank i.checkedAgainst = true ∧ nonblank i.scopeAndLimits = true ∧
+    ∀ hypothesis ∈ i.hypotheses, nonblank hypothesis.text = true ∧ hypothesis.status ≠ .open := by
+  simpa [conclude, List.all_eq_true, bool_and, and_assoc] using h
 
-/-! ## T14: nothing derives outside the enabled registry. -/
+theorem T20_expected_predecessor {k : KB} {e : Context} {js : List JournalEntry}
+    {p : Plan} {trusted : List VerifiedApproval}
+    (h : (applyPlan k e js p trusted).outcome = .applied) :
+    p.expectedSnapshot = k.snapshot := (applied_details h).1
 
-theorem T14_derives_only_enabled {ip : Interp} {v : KbView} {ctx : EvalCtx}
-    {d : Derivation} (h : Derives ip v ctx d) :
-    d.rule ∈ enabledRules := by
-  cases h <;> simp_all [enabledRules]
+theorem T20_rejection_unchanged {k : KB} {e : Context} {js : List JournalEntry}
+    {p : Plan} {trusted : List VerifiedApproval}
+    (h : (applyPlan k e js p trusted).outcome ≠ .applied) :
+    (applyPlan k e js p trusted).kb = k ∧ (applyPlan k e js p trusted).journal = js := by
+  unfold applyPlan at *
+  split <;> rename_i branch
+  · exact ⟨rfl, rfl⟩
+  · split
+    · exact ⟨rfl, rfl⟩
+    · split
+      · simp_all
+      · exact ⟨rfl, rfl⟩
 
-/-! ## T16: corrections never confer support. -/
+theorem T21_applied_replay {k : KB} {e : Context} {js : List JournalEntry}
+    {p : Plan} {trusted : List VerifiedApproval}
+    (h : (applyPlan k e js p trusted).outcome = .applied) :
+    let applied := applyPlan k e js p trusted
+    applyPlan applied.kb e applied.journal p [] = ⟨applied.kb, applied.journal, .alreadyApplied⟩ := by
+  have hd := (applied_details h).2.2.2
+  dsimp only
+  rw [hd]
+  simp [applyPlan, List.find?]
 
-def addCorrectionV (v : KbView) (c : Correction) : KbView :=
-  { v with corrections := v.corrections ++ [c] }
+theorem T21_changed_input_conflicts {k : KB} {e : Context} {js : List JournalEntry}
+    {p q : Plan} {trusted : List VerifiedApproval}
+    (h : (applyPlan k e js p trusted).outcome = .applied)
+    (hid : q.id = p.id) (changed : p ≠ q) :
+    let applied := applyPlan k e js p trusted
+    applyPlan applied.kb e applied.journal q [] = ⟨applied.kb, applied.journal, .inputConflict⟩ := by
+  have hd := (applied_details h).2.2.2
+  dsimp only
+  rw [hd]
+  simp [applyPlan, List.find?, hid, changed]
 
-/-- Acceptance survives correction removal: the checker consults corrections
-only through negative guards, and the per-rule checkers never consult them. -/
+theorem no_self_issued_authority (k : KB) (e : Context) (p : Plan) :
+    (applyPlan k e [] p []).outcome ≠ .applied := by
+  simp only [applyPlan, List.find?, authorized, List.any_nil, Bool.and_false]
+  split <;> simp
 
-theorem checkDerivationV_drop_correction {v : KbView} {ctx : EvalCtx} {d : Derivation}
-    {c : Correction}
-    (h : checkDerivationV (addCorrectionV v c) ctx d = Verdict.accepted) :
-    checkDerivationV v ctx d = Verdict.accepted := by
-  unfold checkDerivationV at h
-  unfold checkDerivationV at ⊢
-  have hp : premisesResolve (addCorrectionV v c) d = premisesResolve v d := rfl
-  have hc2 : (addCorrectionV v c).findClaim d.conclusion = v.findClaim d.conclusion := rfl
-  have hc3 : conclusionMatches (addCorrectionV v c) d = conclusionMatches v d := rfl
-  rw [hp, hc2, hc3] at h
-  by_cases g0 : (!enabledRules.contains d.rule)
-  · rw [if_pos g0] at h; exact absurd h (by intro hh; cases hh)
-  · rw [if_neg g0] at h ⊢
-    by_cases g1 : (!premisesResolve v d)
-    · rw [if_pos g1] at h; exact absurd h (by intro hh; cases hh)
-    · rw [if_neg g1] at h ⊢
-      by_cases g2 : (v.findClaim d.conclusion).isNone
-      · rw [if_pos g2] at h; exact absurd h (by intro hh; cases hh)
-      · rw [if_neg g2] at h ⊢
-        by_cases g3 : (!conclusionMatches v d)
-        · rw [if_pos g3] at h; exact absurd h (by intro hh; cases hh)
-        · rw [if_neg g3] at h ⊢
-          by_cases g4 : (addCorrectionV v c).corrections.any
-              (fun k => k.target == d.conclusion)
-          · rw [if_pos g4] at h; exact absurd h (by intro hh; cases hh)
-          · rw [if_neg g4] at h
-            have h4v : v.corrections.any (fun k => k.target == d.conclusion) = false := by
-              have h0 : (addCorrectionV v c).corrections.any
-                  (fun k => k.target == d.conclusion) = false := not_any_true_eq g4
-              simp only [addCorrectionV, List.any_append] at h0
-              cases hv : v.corrections.any (fun k => k.target == d.conclusion) with
-              | true => rw [hv] at h0; simp at h0
-              | false => rfl
-            rw [if_neg (show Not ((v.corrections.any (fun k => k.target == d.conclusion)) = true) from by
-                intro hcon
-                rw [hcon] at h4v
-                exact absurd h4v (by simp))] at ⊢
-            by_cases g5 : (addCorrectionV v c).corrections.any
-                (fun k => d.premiseGroups.any (fun g => g.contains k.target))
-            · rw [if_pos g5] at h; exact absurd h (by intro hh; cases hh)
-            · rw [if_neg g5] at h
-              have h5v : v.corrections.any
-                  (fun k => d.premiseGroups.any (fun g => g.contains k.target))
-                  = false := by
-                have h0 : (addCorrectionV v c).corrections.any
-                    (fun k => d.premiseGroups.any (fun g => g.contains k.target))
-                    = false := not_any_true_eq g5
-                simp only [addCorrectionV, List.any_append] at h0
-                cases hv : v.corrections.any
-                    (fun k => d.premiseGroups.any (fun g => g.contains k.target)) with
-                | true => rw [hv] at h0; simp at h0
-                | false => rfl
-              rw [if_neg (show Not ((v.corrections.any
-                    (fun k => d.premiseGroups.any (fun g => g.contains k.target))) = true) from by
-                intro hcon
-                rw [hcon] at h5v
-                exact absurd h5v (by simp))] at ⊢
-              cases hr : d.rule with
-              | andIntro => rw [show d.rule = RuleId.andIntro from hr] at h; exact h
-              | specialize => rw [show d.rule = RuleId.specialize from hr] at h; exact h
-              | obsSupports => rw [show d.rule = RuleId.obsSupports from hr] at h; exact h
-              | allChecked => rw [show d.rule = RuleId.allChecked from hr] at h; exact h
+theorem applied_authority_exact {k : KB} {e : Context} {js : List JournalEntry}
+    {p : Plan} {trusted : List VerifiedApproval}
+    (h : (applyPlan k e js p trusted).outcome = .applied) :
+    ∃ approval ∈ trusted, approval.plan = p := by
+  have ha := (bool_and.mp (applied_details h).2.1).2
+  obtain ⟨a, ha, he⟩ := List.any_eq_true.mp ha
+  exact ⟨a, ha, eq_of_beq he⟩
 
-theorem T16_add_correction_no_new_support {v : KbView} {ctx : EvalCtx}
-    {r : ClaimRef} {c : Correction}
-    (h : Supported (addCorrectionV v c) ctx r = true) :
-    Supported v ctx r = true := by
-  simp only [Supported, addCorrectionV] at h ⊢
-  obtain ⟨d, hd, hpd⟩ := List.any_eq_true.mp h
-  simp only [Bool.and_eq_true] at hpd
-  obtain ⟨hcon, hacc⟩ := hpd
-  refine List.any_eq_true.mpr ⟨d, hd, ?_⟩
-  simp only [Bool.and_eq_true]
-  refine ⟨hcon, ?_⟩
-  have hext : checkDerivationV (addCorrectionV v c) ctx d = Verdict.accepted :=
-    verdict_eq_of_beq hacc
-  rw [checkDerivationV_drop_correction hext]
-  rfl
+theorem T18_exact_signed_context {k : KB} {e : Context} {p : Plan}
+    (h : planValid k e p = true) :
+    p.authority.context = e ∧ p.authority.approved = p.candidate ∧
+    p.authority.approvals = p.candidate.claims.drop k.claims.length := by
+  simp only [planValid, bool_and] at h
+  simp_all
 
-/-! ## T17: UsableFor entails every mandatory condition. -/
+theorem T18_authored_candidate_conditions {p : AuthoredProposal} {target : AuthoredStatus} {now : Nat}
+    (h : authoredCandidateValid p target now = true) :
+    (target = .superseded → replacementValid p = true) ∧
+    (target = .applied → hasPhase p .land = true ∧
+      (p.gateDefinitions.filter (fun g => g.when == .land)).all (gatePassed p now) = true ∧ p.landedRefs ≠ []) ∧
+    (target = .verified → p.gateDefinitions.all (gatePassed p now) = true ∧
+      p.acceptedRevision = p.proposalRevision ∧ identPresent p.acceptedRevision = true) := by
+  cases target <;> simp_all [authoredCandidateValid, bool_and, List.isEmpty_iff]
+  rcases h with ⟨⟨⟨⟨⟨⟨hn, he⟩, _⟩, _⟩, _⟩, _⟩, _⟩
+  simpa [← he] using hn
 
-theorem T17_usable_conditions {v : KbView} {ctx : EvalCtx} {r : ClaimRef}
-    (h : UsableFor v ctx r = true) :
-    Supported v ctx r = true
-    ∧ (ctx.requireFreshEvidence = false ∨ hasFreshEvidence v ctx r = true)
-    ∧ (ctx.requireValidated = false ∨ validationCurrent v r = true)
-    ∧ (ctx.requireUncontested = false ∨ Contested v r = false) := by
-  simp only [UsableFor, Bool.and_eq_true, Bool.or_eq_true, Bool.not_eq_true'] at h ⊢
-  exact ⟨h.1.1.1, h.1.1.2, h.1.2, h.2⟩
+theorem T18_factual_execution_conditions {k : KB} {e : Context} {p : Proposal} {target : ProposalStatus}
+    (h : transition k e p target = true) :
+    (target = .applied → identPresent p.executor = true ∧ p.gates ≠ []) ∧
+    (target = .verified → identPresent p.executor = true ∧ identPresent p.acceptor = true ∧
+      p.executor ≠ p.acceptor ∧ p.gates ≠ []) := by
+  cases target <;> simp_all [transition, bool_and, List.isEmpty_iff]
 
-/-! ## T18: accepted proposal transitions satisfy their preconditions. -/
-
-theorem T18_transition_conditions {p : Proposal} {target : ProposalStatus}
-    {actor : Option String} {landedRefs : List String} {refsResolvable : Bool}
-    {p2 : Proposal}
-    (h : planTransition p target actor landedRefs refsResolvable = .planned p2) :
-    legalTransition p.status target = true
-    ∧ (target = .proposed → readyForProposed p = true)
-    ∧ (decidedStatus target = true → actor.isSome = true)
-    ∧ (target = .applied →
-        (p.landGatesPassed = true ∧ refsResolvable = true ∧ landedRefs.length > 0))
-    ∧ (target = .verified → p.deployUseGatesPassed = true)
-    ∧ p2.status = target := by
-  unfold planTransition at h
-  by_cases c0 : (!legalTransition p.status target)
-  · rw [if_pos c0] at h; exact absurd h (by intro hh; cases hh)
-  · rw [if_neg c0] at h
-    by_cases c1 : (target == .proposed && !readyForProposed p)
-    · rw [if_pos c1] at h; exact absurd h (by intro hh; cases hh)
-    · rw [if_neg c1] at h
-      by_cases c2 : (decidedStatus target && actor.isNone)
-      · rw [if_pos c2] at h; exact absurd h (by intro hh; cases hh)
-      · rw [if_neg c2] at h
-        by_cases c3 : (target == .applied
-            && !(p.landGatesPassed && refsResolvable && !landedRefs.isEmpty))
-        · rw [if_pos c3] at h; exact absurd h (by intro hh; cases hh)
-        · rw [if_neg c3] at h
-          by_cases c4 : (target == .verified && !p.deployUseGatesPassed)
-          · rw [if_pos c4] at h; exact absurd h (by intro hh; cases hh)
-          · rw [if_neg c4] at h
-            refine ⟨not_notB_eq c0, ?_, ?_, ?_, ?_, ?_⟩
-            · intro htp
-              rw [htp] at c1
-              simpa using c1
-            · intro hds
-              rw [hds] at c2
-              simpa [Option.isSome_iff_ne_none] using c2
-            · intro hta
-              rw [hta] at c3
-              have hc3 : (p.landGatesPassed && refsResolvable && !landedRefs.isEmpty) = true := by
-                simpa using c3
-              simp only [Bool.and_eq_true] at hc3
-              refine ⟨hc3.1.1, hc3.1.2, ?_⟩
-              cases landedRefs with
-              | nil => exact absurd hc3.2 (by simp)
-              | cons x xs => simp
-            · intro htv
-              rw [htv] at c4
-              simpa using c4
-            · cases PlanOutcome.planned.inj h
-              rfl
-
-/-! ## T19: investigation conclusion satisfies its requirements. -/
-
-theorem T19_conclude_conditions {i : Investigation} (h : canConclude i = true) :
-    (¬i.checkedAgainst.isEmpty) ∧ (¬i.scopeAndLimits.isEmpty)
-    ∧ ∀ hyp ∈ i.hypotheses,
-        hyp.status ≠ HypStatus.openH ∧ hyp.status ≠ HypStatus.malformedH := by
-  simp only [canConclude, Bool.and_eq_true, Bool.not_eq_true', List.any_eq_false] at h ⊢
-  refine ⟨by simpa using h.1.1, by simpa using h.1.2, ?_⟩
-  intro hyp hhyp
-  have hthis := h.2 hyp hhyp
-  constructor
-  · intro hopen
-    apply hthis
-    rw [hopen]
-    simp
-  · intro hmal
-    apply hthis
-    rw [hmal]
-    simp
-
-/-! ## T20: conditional application; rejection leaves state unchanged. -/
-
-theorem T20_predecessor_conflict {kb : KB} {journal : List JournalEntry} {op : Op}
-    (hfresh : ∀ e ∈ journal, e.id ≠ op.id)
-    (hhead : kb.head ≠ op.expectedHead) :
-    (commitOp kb journal op).1 = kb
-    ∧ (commitOp kb journal op).2 = CommitOutcome.predecessorConflict := by
-  unfold commitOp
-  have hfind : journal.find? (fun e => e.id == op.id) = none :=
-    List.find?_eq_none.mpr (fun e he => by
-      intro hbeq
-      have hid : e.id = op.id := eq_of_beq hbeq
-      exact hfresh e he hid)
-  simp only [hfind]
-  have hcond : (kb.head != op.expectedHead) = true := by simpa using hhead
-  simp only [if_pos hcond]
-  simp
-
-/-! ## T21: idempotent replay; conflicting replay is a conflict. -/
-
-theorem T21_replay_same {kb : KB} {op : Op} :
-    (commitOp kb [JournalEntry.mk op.id op.expectedHead op.inputDigest] op).2
-      = CommitOutcome.alreadyCommitted := by
-  unfold commitOp
-  have hfind : ([JournalEntry.mk op.id op.expectedHead op.inputDigest] : List JournalEntry).find?
-      (fun e => e.id == op.id)
-      = some (JournalEntry.mk op.id op.expectedHead op.inputDigest) := by
-    simp [List.find?]
-  simp only [hfind]
-  have hcond : ((JournalEntry.mk op.id op.expectedHead op.inputDigest).digest == op.inputDigest
-      && (JournalEntry.mk op.id op.expectedHead op.inputDigest).head == op.expectedHead) = true := by
-    simp
-  simp only [if_pos hcond]
-
-theorem T21_replay_conflict {kb : KB} {op : Op} {e : JournalEntry}
-    (hid : e.id = op.id) (hdiff : e.digest ≠ op.inputDigest) :
-    (commitOp kb [e] op).2 = CommitOutcome.inputConflict := by
-  unfold commitOp
-  have hfind : ([e] : List JournalEntry).find? (fun x => x.id == op.id) = some e := by
-    simp [List.find?, hid]
-  simp only [hfind]
-  have hcond : ¬((e.digest == op.inputDigest) && (e.head == op.expectedHead)) := by
-    intro hp
-    simp only [Bool.and_eq_true] at hp
-    exact hdiff (eq_of_beq hp.1)
-  simp only [if_neg hcond]
-
-/-! ## T22: determinism for identical explicit inputs. -/
-
-theorem T22_deterministic {v v2 : KbView} {ctx ctx2 : EvalCtx}
-    (hv : v = v2) (hc : ctx = ctx2) (d : Derivation) :
-    checkDerivationV v ctx d = checkDerivationV v2 ctx2 d := by
-  subst hv; subst hc; rfl
-
-theorem T22_commit_deterministic {kb kb2 : KB} {j j2 : List JournalEntry} {op : Op}
-    (hkb : kb = kb2) (hj : j = j2) :
-    commitOp kb j op = commitOp kb2 j2 op := by
-  subst hkb; subst hj; rfl
-
-/-! ## Non-vacuity: concrete positive inhabitants and negative examples.
-Everything below is evaluated by `decide` (kernel computation), so these are
-machine-checked, not paper claims. -/
-
-namespace NonVacuity
-
-open Kctx
-
-private def demoScope : Kctx.Scope := { project := "payments", extra := "" }
-
-private def demoClaim : Kctx.Claim where
-  id := { val := "c1" }
-  rev := "r1"
-  prop := .atom { subject := "batch-limit", predicate := "is", args := ["500"] }
-  scope := demoScope
-
-private def demoObs : Kctx.Observation where
-  id := { val := "o1" }
-  outcome := .ok
-  observedAt := 100
-  ttl := .expireAfter 50
-  system := "git"
-  locator := "repo"
-
-private def demoBinding : Kctx.Binding where
-  obs := { val := "o1" }
-  ref := { id := { val := "c1" }, rev := "r1" }
-  role := .supports
-
-private def demoDeriv : Kctx.Derivation where
-  id := "d1"
-  rule := .obsSupports
-  premiseGroups := []
-  conclusion := { id := { val := "c1" }, rev := "r1" }
-  conclusionProp := .atom { subject := "batch-limit", predicate := "is", args := ["500"] }
-  scope := demoScope
-  footprint := [
-    { kind := .kbRecord, target := "c1", digest := "" },
-    { kind := .kbRecord, target := "o1", digest := "" }
-  ]
-  evidence := some { val := "o1" }
-  witness := none
-
-private def demoView : Kctx.KbView where
-  observations := [demoObs]
-  claims := [demoClaim]
-  bindings := [demoBinding]
-  corrections := []
-  derivations := [demoDeriv]
-  validations := []
-
-private def demoCtx : Kctx.EvalCtx where
-  now := 120
-  requireFreshEvidence := true
-  requireValidated := false
-  requireUncontested := true
-
-/-- A nontrivial accepted derivation exists (T04/T08 preconditions inhabited). -/
-example : Kctx.checkDerivationV demoView demoCtx demoDeriv = Kctx.Verdict.accepted := by decide
-
-/-- The same derivation is rejected once its evidence goes stale. -/
-example : Kctx.checkDerivationV demoView
-    { demoCtx with now := 200 } demoDeriv
-    = Kctx.Verdict.rejected Kctx.Rejection.evidenceNotFresh := by decide
-
-/-- Supported and UsableFor succeed on the demo view. -/
-example : Kctx.Supported demoView demoCtx demoDeriv.conclusion = true := by decide
-example : Kctx.UsableFor demoView demoCtx demoDeriv.conclusion = true := by decide
-
-/-- Removing the sole derivation removes support, and does NOT establish the
-negated proposition (no derivation for any other ref exists either). -/
-example : Kctx.Supported { demoView with derivations := [] } demoCtx
-    demoDeriv.conclusion = false := by decide
-
-/-- T14 countermodel flavor: a contextualizes binding does not create support. -/
-example : Kctx.checkDerivationV
-    { demoView with bindings :=
-        [{ obs := { val := "o1" }, ref := demoDeriv.conclusion, role := .contextualizes }] }
-    demoCtx demoDeriv
-    = Kctx.Verdict.rejected Kctx.Rejection.evidenceNotOk := by decide
-
-/-- T16: adding a supersede correction cannot restore/produce support. -/
-example : Kctx.Supported
-    (Kctx.addCorrectionV { demoView with derivations := [] }
-      { kind := .supersede, target := demoDeriv.conclusion, recordedAt := 300 })
-    demoCtx demoDeriv.conclusion = false := by decide
-
-end NonVacuity
+theorem T22_deterministic (k : KB) (e : Context) (w : Witness) :
+    check k e w = check k e w := rfl
 
 end Kctx

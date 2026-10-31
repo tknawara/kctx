@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "corpus_version": "1.0.2",
+  "task_protocol_version": "1.0.0",
+  "task_protocol_sha256": "37110f972c6f49a9995ebd0f34393aba8465f8414f941f991fb61da40f7c2ff6",
+  "generator": "scripts/evaluate_kctx.py",
+  "generator_sha256": "18943370402763d2379d28d0dde9d99cb39a9964cc3264394d7cc77fd28cab5f",
+  "supersedes_generator_sha256": "9c9dd0e6f2770fedaea1b5d3c55b55eb8fd7abed63006be4aa1f5b025d368321",
+  "correction": "Retain the historical-blindness repair from 1.0.1. Add explicit nominal evidence_id metadata to each authored evidence record, distinct from the ticket citation target. The first 48 real model trials chose citation targets or omitted evidence IDs: 0/48 exact labels, but 48/48 outcome/scope/inference fields matched in both arms. Those receipts remain retained as failures. This repairs missing record-identity metadata, not answers: task prompts, expected labels, partitions, thresholds and the model system prompt/schema remain unchanged. Freeze this corpus revision before new measurements and calls.",
+  "previous_reports": "Prior mechanical runs and real model receipts are retained with their original failures and input hashes; never relabelled as passes."
+}

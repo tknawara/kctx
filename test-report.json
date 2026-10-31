@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "command": "python3 scripts/run_tests.py",
+  "generated": "2026-10-31T11:12:24.024924+00:00",
+  "implementation_revision": "984e7c8c2fa210b6acdc565c17bb07d8f8a58e57",
+  "source_fixture_sha256": "75cf3b480d8f500c2537280989f5f0372266a7a8e84c080d6c826868fe06f71b",
+  "tests_run": 662,
+  "passed": 662,
+  "failures": [],
+  "errors": [],
+  "skipped": [],
+  "result": "pass",
+  "qualification": "complete-fixture-run"
+}

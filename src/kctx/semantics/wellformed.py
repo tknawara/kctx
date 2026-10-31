@@ -1,120 +1,218 @@
-"""Well-formedness mirroring ``formal/Kctx/WellFormed.lean``.
-
-Structural predicate only — never "the checker accepted". Decoding success
-must imply well-formedness (T01), and committed operations must preserve it
-(T03)."""
+"""Whole-candidate invariants, independent of support and policy admission."""
 
 from __future__ import annotations
 
-from typing import Tuple
-
 from kctx.semantics.model import (
-    Claim,
+    KB,
+    SEMANTIC_VERSION,
+    All,
+    AllWitness,
+    AndWitness,
+    Atomic,
+    AttestationDependency,
+    AttestWitness,
+    ClaimDependency,
     ClaimRef,
-    Correction,
-    Derivation,
-    KbView,
-    Observation,
-    RuleId,
+    Conjunction,
+    Context,
+    CorrectionKind,
+    CorrectionsDependency,
+    Dependency,
+    EnumerationDependency,
+    Formula,
+    Inventory,
+    ObservationDependency,
+    Polarity,
+    Scope,
+    SpecializeWitness,
+    Statement,
+    Truth,
+    TruthWitness,
+    Ttl,
+    TtlTag,
+    Witness,
     find_claim,
-    find_obs,
+    find_observation,
 )
 
 
-def _all_unique(items) -> bool:
-    seen = set()
-    for x in items:
-        if x in seen:
-            return False
-        seen.add(x)
-    return True
+def nonempty(value: str) -> bool:
+    return bool(value)
 
 
-def record_wf_observation(o: Observation) -> bool:
-    return bool(o.id) and bool(o.system) and bool(o.locator)
+def natural(value: int) -> bool:
+    return type(value) is int and value >= 0
 
 
-def record_wf_claim(c: Claim) -> bool:
-    return bool(c.id) and bool(c.rev) and bool(c.scope.project)
+def ttl_wf(ttl: Ttl) -> bool:
+    if ttl.tag is TtlTag.EXPIRE_AFTER:
+        return ttl.secs is not None and natural(ttl.secs)
+    return ttl.secs is None
 
 
-def record_wf_derivation(d: Derivation) -> bool:
-    if not d.id or not d.conclusion.id or not d.conclusion.rev:
+def scope_wf(scope: Scope) -> bool:
+    return nonempty(scope.project.val)
+
+
+def formula_wf(formula: Formula, kb: KB) -> bool:
+    if isinstance(formula, Atomic):
+        return bool(formula.atom.subject and formula.atom.predicate)
+    if isinstance(formula, Truth):
+        return True
+    if isinstance(formula, Conjunction):
+        return formula_wf(formula.left, kb) and formula_wf(formula.right, kb)
+    return any(e.id == formula.enumeration for e in kb.enumerations) and (
+        not isinstance(formula, All) or bool(formula.predicate)
+    )
+
+
+def statement_wf(statement: Statement, kb: KB) -> bool:
+    return (
+        scope_wf(statement.scope)
+        and formula_wf(statement.formula, kb)
+        and (statement.polarity is Polarity.POSITIVE or isinstance(statement.formula, Atomic))
+    )
+
+
+def context_wf(context: Context) -> bool:
+    return (
+        context.semantic_version == SEMANTIC_VERSION
+        and natural(context.now)
+        and context.ruleset.val == "core-2"
+        and context.checker.val == "kctx-2"
+        and scope_wf(context.target)
+        and bool(context.intended_use)
+        and len({source.source for source in context.sources}) == len(context.sources)
+        and all(
+            source.source.val and source.revision.val and source.content.val
+            for source in context.sources
+        )
+        and len(set(context.policy.authorized_actors)) == len(context.policy.authorized_actors)
+        and all(actor.val for actor in context.policy.authorized_actors)
+        and ttl_wf(context.policy.ttl)
+    )
+
+
+def witness_wf(witness: Witness, kb: KB) -> bool:
+    if isinstance(witness, AttestWitness):
+        return any(a.id == witness.attestation for a in kb.attestations)
+    if isinstance(witness, TruthWitness):
+        return scope_wf(witness.scope)
+    if isinstance(witness, AndWitness):
+        return witness_wf(witness.left, kb) and witness_wf(witness.right, kb)
+    if isinstance(witness, SpecializeWitness):
+        return scope_wf(witness.scope) and witness_wf(witness.premise, kb)
+    return (
+        any(e.id == witness.enumeration for e in kb.enumerations)
+        and (not isinstance(witness, AllWitness) or bool(witness.predicate))
+        and witness_wf(witness.premise, kb)
+    )
+
+
+def dependency_wf(dependency: Dependency, kb: KB) -> bool:
+    if isinstance(dependency, ObservationDependency):
+        return dependency.value in kb.observations
+    if isinstance(dependency, ClaimDependency):
+        return dependency.value in kb.claims
+    if isinstance(dependency, AttestationDependency):
+        return dependency.value in kb.attestations
+    if isinstance(dependency, EnumerationDependency):
+        return dependency.value in kb.enumerations
+    if isinstance(dependency, CorrectionsDependency):
+        return find_claim(kb, dependency.target) is not None and all(
+            event in kb.corrections and event.target == dependency.target
+            for event in dependency.events
+        )
+    return context_wf(dependency.value) and dependency.value.now == 0
+
+
+def well_formed(kb: KB) -> bool:
+    """Unsupported claims are valid candidates, never automatically admissions."""
+    keys = (
+        tuple(o.id for o in kb.observations),
+        tuple(c.ref for c in kb.claims),
+        tuple(a.id for a in kb.attestations),
+        tuple(e.id for e in kb.enumerations),
+        tuple(d.id for d in kb.derivations),
+        tuple(c.id for c in kb.corrections),
+        tuple(r.id for r in kb.receipts),
+    )
+    if any(len(set(group)) != len(group) for group in keys):
         return False
-    for group in d.premise_groups:
-        for r in group:
-            if not r.id or not r.rev:
-                return False
-    if d.witness is not None and not d.witness.scope.project:
+    if any(
+        not (o.source.val and o.revision.val and o.content.val and natural(o.observed_at))
+        for o in kb.observations
+    ):
         return False
-    return True
-
-
-def record_wf_correction(c: Correction) -> bool:
-    return bool(c.target.id) and bool(c.target.rev)
-
-
-def premises_of(v: KbView, ref: ClaimRef) -> Tuple[ClaimRef, ...]:
-    out: list[ClaimRef] = []
-    for d in v.derivations:
-        if d.conclusion == ref:
-            for group in d.premise_groups:
-                out.extend(group)
-    return tuple(out)
-
-
-def reachable_in(v: KbView, fuel: int, ref: ClaimRef) -> Tuple[ClaimRef, ...]:
-    if fuel <= 0:
-        return ()
-    ps = premises_of(v, ref)
-    out = list(ps)
-    for p in ps:
-        out.extend(reachable_in(v, fuel - 1, p))
-    return tuple(out)
-
-
-def acyclic_deriv(v: KbView, d: Derivation) -> bool:
-    return d.conclusion not in reachable_in(v, len(v.derivations) + 1, d.conclusion)
-
-
-def view_well_formed(v: KbView) -> bool:
-    if not _all_unique(o.id for o in v.observations):
+    if any(not statement_wf(c.statement, kb) for c in kb.claims):
         return False
-    if not _all_unique((c.id, c.rev) for c in v.claims):
-        return False
-    if not _all_unique(d.id for d in v.derivations):
-        return False
-    if not all(record_wf_observation(o) for o in v.observations):
-        return False
-    if not all(record_wf_claim(c) for c in v.claims):
-        return False
-    if not all(record_wf_derivation(d) for d in v.derivations):
-        return False
-    if not all(record_wf_correction(c) for c in v.corrections):
-        return False
-    for b in v.bindings:
-        if find_obs(v, b.obs) is None or find_claim(v, b.ref) is None:
-            return False
-    for c in v.corrections:
-        if find_claim(v, c.target) is None:
-            return False
-    for d in v.derivations:
-        if find_claim(v, d.conclusion) is None:
-            return False
-        if any(
-            find_claim(v, r) is None
-            for group in d.premise_groups
-            for r in group
+    for attestation in kb.attestations:
+        claim = find_claim(kb, attestation.claim)
+        if (
+            claim is None
+            or claim.statement != attestation.statement
+            or not isinstance(attestation.statement.formula, (Atomic, Inventory))
+            or not attestation.authority.val
+            or find_observation(kb, attestation.observation) is None
         ):
             return False
-        if d.evidence is not None:
-            if find_obs(v, d.evidence) is None:
+        formula = attestation.statement.formula
+        if isinstance(formula, Inventory):
+            enumeration = next((e for e in kb.enumerations if e.id == formula.enumeration), None)
+            if (
+                enumeration is None
+                or attestation.statement.polarity is not Polarity.POSITIVE
+                or attestation.observation != enumeration.observation
+                or attestation.statement.scope != enumeration.scope
+            ):
                 return False
-        elif d.rule is RuleId.OBS_SUPPORTS:
+    for enumeration in kb.enumerations:
+        observation = find_observation(kb, enumeration.observation)
+        if (
+            observation is None
+            or observation.source != enumeration.source
+            or observation.revision != enumeration.revision
+            or not enumeration.query
+            or not enumeration.method
+            or not scope_wf(enumeration.scope)
+            or enumeration.members != enumeration.universe
+            or len(set(enumeration.members)) != len(enumeration.members)
+            or any(not member for member in enumeration.members)
+        ):
             return False
-        if not acyclic_deriv(v, d):
+    if any(
+        find_claim(kb, d.claim) is None or not witness_wf(d.witness, kb) for d in kb.derivations
+    ):
+        return False
+    for correction in kb.corrections:
+        if find_claim(kb, correction.target) is None or not natural(correction.recorded_at):
             return False
-    for ref, _digest in v.validations:
-        if find_claim(v, ref) is None:
+        if correction.kind is CorrectionKind.SUPERSEDE:
+            if correction.replacement is None or find_claim(kb, correction.replacement) is None:
+                return False
+        elif correction.replacement is not None:
+            return False
+    for start in (c.ref for c in kb.claims):
+        frontier = [start]
+        seen: set[ClaimRef] = set()
+        while frontier:
+            current = frontier.pop()
+            if current in seen:
+                continue
+            seen.add(current)
+            for correction in kb.corrections:
+                if correction.kind is CorrectionKind.SUPERSEDE and correction.target == current:
+                    if correction.replacement == start:
+                        return False
+                    if correction.replacement is not None:
+                        frontier.append(correction.replacement)
+    for receipt in kb.receipts:
+        if (
+            find_claim(kb, receipt.claim) is None
+            or not context_wf(receipt.context)
+            or not witness_wf(receipt.witness, kb)
+            or not natural(receipt.expires_at)
+            or any(not dependency_wf(dependency, kb) for dependency in receipt.dependencies)
+        ):
             return False
     return True

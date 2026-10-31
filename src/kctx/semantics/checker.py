@@ -1,280 +1,359 @@
-"""Executable derivation checker mirroring ``formal/Kctx/Checker.lean``.
-
-The rejection order is a wire contract with the Lean reference: the same
-derivation must be rejected with the same code in the same order on both
-sides. Guard order (mirrors ``checkDerivationV``):
-
-1. ruleNotEnabled
-2. missingPremise        (any premise ref unresolvable)
-3. missingConclusion
-4. conclusionPropMismatch
-5. contestedConclusion
-6. contestedPremise
-
-then per-rule shape checks in the order written in each ``_check_*``
-function. Do not reorder without a semantic-version bump.
-"""
+"""Recursive, finite support checking. Acquisition success alone proves nothing."""
 
 from __future__ import annotations
 
-from typing import Optional, Tuple
+from dataclasses import replace
 
+from kctx.domain.ids import ContentId
 from kctx.semantics.model import (
-    ENABLED_RULES,
-    Binding,
-    Claim,
-    ClaimProp,
+    KB,
+    Absent,
+    AbsentWitness,
+    All,
+    AndWitness,
+    Assessment,
+    Atomic,
+    AttestationDependency,
+    AttestWitness,
+    Checked,
+    ClaimDependency,
     ClaimRef,
-    CoverageWitness,
-    Dep,
-    DepKind,
-    Derivation,
-    EvalCtx,
-    KbView,
+    Conjunction,
+    Context,
+    ContextDependency,
+    CorrectionKind,
+    CorrectionsDependency,
+    Dependency,
+    EnumerationDependency,
+    Freshness,
+    Inventory,
+    Observation,
+    ObservationDependency,
     ObsOutcome,
-    RuleId,
-    Scope,
-    SupportRole,
+    Polarity,
+    Receipt,
+    ReceiptResult,
+    SpecializeWitness,
+    Statement,
+    Support,
+    Truth,
+    TruthWitness,
+    Witness,
     find_claim,
-    prop_of,
-    scope_of,
-    specializes,
+    find_observation,
+    member_formula,
+    narrower,
 )
 from kctx.semantics.time import assess_fresh
+from kctx.semantics.wellformed import context_wf
 
 
-class Rejection(Exception):
-    """Structured rejection (wire name mirrors Lean ``Rejection``)."""
-
-    NAMES = (
-        "ruleNotEnabled",
-        "missingPremise",
-        "missingConclusion",
-        "conclusionPropMismatch",
-        "contestedConclusion",
-        "contestedPremise",
-        "ruleShapeMismatch",
-        "evidenceNotOk",
-        "evidenceNotFresh",
-        "missingCoverage",
-        "coverageIncomplete",
-        "footprintIncomplete",
-    )
-
-    def __init__(self, name: str):
-        assert name in self.NAMES, name
-        super().__init__(name)
-        self.name = name
+def context_matches(kb: KB, context: Context) -> bool:
+    return kb.snapshot == context.snapshot and context_wf(context)
 
 
-def _premises_resolve(v: KbView, d: Derivation) -> bool:
-    return all(
-        find_claim(v, ref) is not None for group in d.premise_groups for ref in group
+def source_selected(context: Context, observation: Observation) -> bool:
+    return any(
+        source.source == observation.source
+        and source.revision == observation.revision
+        and source.content == observation.content
+        for source in context.sources
     )
 
 
-def _conclusion_matches(v: KbView, d: Derivation) -> bool:
-    c = find_claim(v, d.conclusion)
-    return c is not None and c.prop == d.conclusion_prop
+def inventory_content(members: tuple[str, ...]) -> ContentId:
+    return ContentId(
+        "inventory:" + "".join(f"{len(member.encode('utf-8'))}:{member}" for member in members)
+    )
 
 
-def _has_kb_record_dep(d: Derivation, target: str) -> bool:
-    return Dep(DepKind.KB_RECORD, target, "") in d.footprint
+def retracted(kb: KB, context: Context, ref: ClaimRef) -> bool:
+    return any(
+        c.kind is CorrectionKind.RETRACT and c.target == ref and c.recorded_at <= context.now
+        for c in kb.corrections
+    )
 
 
-def _has_discovery_dep(d: Derivation, target: str) -> bool:
-    return Dep(DepKind.DISCOVERY, target, "") in d.footprint
+def dependencies_union(
+    left: tuple[Dependency, ...], right: tuple[Dependency, ...]
+) -> tuple[Dependency, ...]:
+    return tuple(dict.fromkeys((*left, *right)))
 
 
-def footprint_declares(v: KbView, d: Derivation) -> bool:
-    """Every consulted record identity must be declared in the footprint
-    (T12). Mirrors Lean ``footprintDeclares``."""
-    conclusion_dep = _has_kb_record_dep(d, d.conclusion.id)
-    if d.rule is RuleId.AND_INTRO:
-        return conclusion_dep and all(
-            _has_kb_record_dep(d, ref.id)
-            for group in d.premise_groups
-            for ref in group
-        )
-    if d.rule is RuleId.SPECIALIZE:
-        if len(d.premise_groups) == 1 and len(d.premise_groups[0]) == 1:
-            return conclusion_dep and _has_kb_record_dep(d, d.premise_groups[0][0].id)
-        return False
-    if d.rule is RuleId.OBS_SUPPORTS:
-        return conclusion_dep and (
-            d.evidence is not None and Dep(DepKind.KB_RECORD, d.evidence, "") in d.footprint
-        )
-    if d.rule is RuleId.ALL_CHECKED:
-        return conclusion_dep and (
-            d.witness is not None and _has_discovery_dep(d, d.witness.scope.project)
-        )
-    raise AssertionError(d.rule)
-
-
-def and_intro_atoms(v: KbView, group: Tuple[ClaimRef, ...]) -> Tuple:
-    from kctx.semantics.model import Atom
-
-    out = []
-    for ref in group:
-        a = prop_of(v, ref).as_atom()
-        if a is not None:
-            out.append(a)
-    return tuple(out)
-
-
-def _check_and_intro(v: KbView, d: Derivation) -> None:
-    if len(d.premise_groups) != 1:
-        raise Rejection("ruleShapeMismatch")
-    group = d.premise_groups[0]
-    if not group:
-        raise Rejection("ruleShapeMismatch")
-    if any(
-        (a := prop_of(v, ref).as_atom()) is None for ref in group
-    ):
-        raise Rejection("ruleShapeMismatch")
-    if any(scope_of(v, ref) != d.scope for ref in group):
-        raise Rejection("ruleShapeMismatch")
-    if d.conclusion_prop != ClaimProp.conj(and_intro_atoms(v, group)):
-        raise Rejection("ruleShapeMismatch")
-    if not footprint_declares(v, d):
-        raise Rejection("footprintIncomplete")
-
-
-def _check_specialize(v: KbView, d: Derivation) -> None:
-    if not (
-        len(d.premise_groups) == 1 and len(d.premise_groups[0]) == 1
-    ):
-        raise Rejection("ruleShapeMismatch")
-    ref = d.premise_groups[0][0]
-    src = find_claim(v, ref)
-    tgt = find_claim(v, d.conclusion)
-    if src is None or tgt is None:
-        raise Rejection("missingPremise")
-    if src.prop != tgt.prop:
-        raise Rejection("ruleShapeMismatch")
-    if not specializes(tgt.scope, src.scope):
-        raise Rejection("ruleShapeMismatch")
-    if d.scope != tgt.scope:
-        raise Rejection("ruleShapeMismatch")
-    if not footprint_declares(v, d):
-        raise Rejection("footprintIncomplete")
-
-
-def _check_obs_supports(v: KbView, ctx: EvalCtx, d: Derivation) -> None:
-    if d.premise_groups:
-        raise Rejection("ruleShapeMismatch")
-    if d.evidence is None:
-        raise Rejection("ruleShapeMismatch")
-    o = next((x for x in v.observations if x.id == d.evidence), None)
-    if o is None:
-        raise Rejection("missingPremise")
-    if scope_of(v, d.conclusion) != d.scope:
-        raise Rejection("ruleShapeMismatch")
-    if d.conclusion_prop.as_atom() is None:
-        raise Rejection("ruleShapeMismatch")
-    if o.outcome is not ObsOutcome.OK:
-        raise Rejection("evidenceNotOk")
-    wanted = Binding(d.evidence, d.conclusion, SupportRole.SUPPORTS)
-    if wanted not in v.bindings:
-        raise Rejection("evidenceNotOk")
-    if assess_fresh(o.ttl, o.observed_at, ctx.now).value != "fresh":
-        raise Rejection("evidenceNotFresh")
-    if not footprint_declares(v, d):
-        raise Rejection("footprintIncomplete")
-
-
-def _check_all_checked(v: KbView, d: Derivation) -> None:
-    if d.premise_groups:
-        raise Rejection("ruleShapeMismatch")
-    w = d.witness
-    if w is None:
-        raise Rejection("missingCoverage")
-    if not w.complete:
-        raise Rejection("coverageIncomplete")
-    if not w.members:
-        raise Rejection("coverageIncomplete")
-    if d.conclusion_prop.tag != "allChecked":
-        raise Rejection("ruleShapeMismatch")
-    if d.conclusion_prop.members != w.members:
-        raise Rejection("ruleShapeMismatch")
-    if w.scope != d.scope:
-        raise Rejection("ruleShapeMismatch")
-    if not footprint_declares(v, d):
-        raise Rejection("footprintIncomplete")
-
-
-def check_derivation_v(v: KbView, ctx: EvalCtx, d: Derivation) -> str:
-    """Executable checker. Returns ``"accepted"`` or ``["rejected", code]``
-    (exactly the Lean ``Verdict`` wire form)."""
-    try:
-        if d.rule not in ENABLED_RULES:
-            raise Rejection("ruleNotEnabled")
-        if not _premises_resolve(v, d):
-            raise Rejection("missingPremise")
-        if find_claim(v, d.conclusion) is None:
-            raise Rejection("missingConclusion")
-        if not _conclusion_matches(v, d):
-            raise Rejection("conclusionPropMismatch")
-        if any(c.target == d.conclusion for c in v.corrections):
-            raise Rejection("contestedConclusion")
-        if any(
-            c.target in group for c in v.corrections for group in d.premise_groups
+def _check(kb: KB, context: Context, witness: Witness) -> Checked | None:
+    if not context_matches(kb, context):
+        return None
+    if isinstance(witness, AttestWitness):
+        attestation = next((a for a in kb.attestations if a.id == witness.attestation), None)
+        if attestation is None or retracted(kb, context, attestation.claim):
+            return None
+        claim = find_claim(kb, attestation.claim)
+        observation = find_observation(kb, attestation.observation)
+        if (
+            claim is None
+            or claim.statement != attestation.statement
+            or not isinstance(attestation.statement.formula, (Atomic, Inventory))
+            or not attestation.authority.val
+            or observation is None
+            or observation.outcome is not ObsOutcome.OK
+            or observation.observed_at > context.now
+            or not source_selected(context, observation)
         ):
-            raise Rejection("contestedPremise")
-        if d.rule is RuleId.AND_INTRO:
-            _check_and_intro(v, d)
-        elif d.rule is RuleId.SPECIALIZE:
-            _check_specialize(v, d)
-        elif d.rule is RuleId.OBS_SUPPORTS:
-            _check_obs_supports(v, ctx, d)
-        else:
-            _check_all_checked(v, d)
-    except Rejection as r:
-        return ["rejected", r.name]
-    return "accepted"
+            return None
+        dependencies: tuple[Dependency, ...] = (
+            ObservationDependency(observation),
+            ClaimDependency(claim),
+            AttestationDependency(attestation),
+            correction_dependency(kb, context, attestation.claim),
+        )
+        formula = attestation.statement.formula
+        if isinstance(formula, Inventory):
+            enumeration = next((e for e in kb.enumerations if e.id == formula.enumeration), None)
+            if (
+                enumeration is None
+                or attestation.statement.polarity is not Polarity.POSITIVE
+                or attestation.observation != enumeration.observation
+                or attestation.statement.scope != enumeration.scope
+            ):
+                return None
+            dependencies = (*dependencies, EnumerationDependency(enumeration))
+        return Checked(attestation.statement, dependencies)
+    if isinstance(witness, TruthWitness):
+        return Checked(Statement(Truth(), witness.scope), ())
+    if isinstance(witness, AndWitness):
+        left = _check(kb, context, witness.left)
+        right = _check(kb, context, witness.right)
+        if (
+            left is None
+            or right is None
+            or left.statement.scope != right.statement.scope
+            or left.statement.polarity is not Polarity.POSITIVE
+            or right.statement.polarity is not Polarity.POSITIVE
+        ):
+            return None
+        return Checked(
+            Statement(
+                Conjunction(left.statement.formula, right.statement.formula), left.statement.scope
+            ),
+            dependencies_union(left.dependencies, right.dependencies),
+        )
+    if isinstance(witness, SpecializeWitness):
+        premise = _check(kb, context, witness.premise)
+        if premise is None or not narrower(witness.scope, premise.statement.scope):
+            return None
+        return Checked(replace(premise.statement, scope=witness.scope), premise.dependencies)
+    enumeration = next((e for e in kb.enumerations if e.id == witness.enumeration), None)
+    if enumeration is None:
+        return None
+    observation = find_observation(kb, enumeration.observation)
+    if (
+        observation is None
+        or observation.outcome is not ObsOutcome.OK
+        or observation.observed_at > context.now
+        or not source_selected(context, observation)
+        or observation.content != inventory_content(enumeration.universe)
+        or observation.source != enumeration.source
+        or observation.revision != enumeration.revision
+        or enumeration.members != enumeration.universe
+        or len(set(enumeration.members)) != len(enumeration.members)
+        or not enumeration.method
+        or not enumeration.query
+    ):
+        return None
+    if isinstance(witness, AbsentWitness):
+        premise = _check(kb, context, witness.premise)
+        if (
+            enumeration.members
+            or premise is None
+            or premise.statement != Statement(Inventory(enumeration.id), enumeration.scope)
+        ):
+            return None
+        return Checked(
+            Statement(Absent(enumeration.id), enumeration.scope),
+            dependencies_union(
+                premise.dependencies,
+                (ObservationDependency(observation), EnumerationDependency(enumeration)),
+            ),
+        )
+    premise = _check(kb, context, witness.premise)
+    expected = Statement(
+        Conjunction(
+            Inventory(enumeration.id), member_formula(enumeration.members, witness.predicate)
+        ),
+        enumeration.scope,
+    )
+    if premise is None or premise.statement != expected or not witness.predicate:
+        return None
+    return Checked(
+        Statement(All(enumeration.id, witness.predicate), enumeration.scope),
+        dependencies_union(
+            premise.dependencies,
+            (ObservationDependency(observation), EnumerationDependency(enumeration)),
+        ),
+    )
 
 
-def supported(v: KbView, ctx: EvalCtx, ref: ClaimRef) -> bool:
+def correction_dependency(kb: KB, context: Context, ref: ClaimRef) -> CorrectionsDependency:
+    return CorrectionsDependency(
+        ref, tuple(c for c in kb.corrections if c.target == ref and c.recorded_at <= context.now)
+    )
+
+
+def check(kb: KB, context: Context, witness: Witness) -> Checked | None:
+    result = _check(kb, context, witness)
+    if result is None:
+        return None
+    return replace(
+        result,
+        dependencies=dependencies_union(
+            result.dependencies, (ContextDependency(replace(context, now=0)),)
+        ),
+    )
+
+
+def accepted(kb: KB, context: Context, ref: ClaimRef) -> tuple[tuple[Witness, Checked], ...]:
+    claim = find_claim(kb, ref)
+    if claim is None or retracted(kb, context, ref):
+        return ()
+    results: list[tuple[Witness, Checked]] = []
+    for derivation in kb.derivations:
+        if derivation.claim == ref:
+            result = _check(kb, context, derivation.witness)
+            if result is not None and result.statement == claim.statement:
+                result = replace(
+                    result,
+                    dependencies=dependencies_union(
+                        result.dependencies,
+                        (
+                            ClaimDependency(claim),
+                            correction_dependency(kb, context, ref),
+                            ContextDependency(replace(context, now=0)),
+                        ),
+                    ),
+                )
+                results.append((derivation.witness, result))
+    return tuple(results)
+
+
+def supported(kb: KB, context: Context, ref: ClaimRef, polarity: Polarity) -> bool:
+    claim = find_claim(kb, ref)
+    if claim is None:
+        return False
+    if polarity is claim.statement.polarity:
+        return bool(accepted(kb, context, ref))
+    if not isinstance(claim.statement.formula, Atomic):
+        return False
+    statement = replace(claim.statement, polarity=polarity)
+    return any(c.statement == statement and accepted(kb, context, c.ref) for c in kb.claims)
+
+
+def same_context(left: Context, right: Context) -> bool:
+    return replace(left, now=right.now) == right
+
+
+def reusable(kb: KB, context: Context, ref: ClaimRef, receipt: Receipt) -> bool:
+    if (
+        receipt.claim != ref
+        or receipt.result is not ReceiptResult.PASS
+        or not same_context(receipt.context, context)
+        or not receipt.context.now <= context.now <= receipt.expires_at
+    ):
+        return False
     return any(
-        d.conclusion == ref and check_derivation_v(v, ctx, d) == "accepted"
-        for d in v.derivations
+        witness == receipt.witness and checked.dependencies == receipt.dependencies
+        for witness, checked in accepted(kb, context, ref)
     )
 
 
-def has_fresh_evidence(v: KbView, ctx: EvalCtx, ref: ClaimRef) -> bool:
-    return any(
-        d.conclusion == ref
-        and d.rule is RuleId.OBS_SUPPORTS
-        and check_derivation_v(v, ctx, d) == "accepted"
-        for d in v.derivations
+def witness_freshness(context: Context, dependencies: tuple[Dependency, ...]) -> Freshness:
+    observations = tuple(d.value for d in dependencies if isinstance(d, ObservationDependency))
+    if not observations:
+        return Freshness.UNKNOWN
+    states = tuple(
+        assess_fresh(context.policy.ttl, o.observed_at, context.now) for o in observations
     )
+    if Freshness.STALE in states:
+        return Freshness.STALE
+    if Freshness.UNKNOWN in states:
+        return Freshness.UNKNOWN
+    return Freshness.FRESH
 
 
-def contested(v: KbView, ref: ClaimRef) -> bool:
-    return any(c.target == ref for c in v.corrections)
+def policy_allows(
+    supported_positive: bool,
+    fresh: bool,
+    validated: bool,
+    uncontested: bool,
+    require_fresh: bool,
+    require_validated: bool,
+    require_uncontested: bool,
+) -> bool:
+    """T17 Boolean leaf; Nagini verifies only this leaf, not recursive checking."""
+    if not supported_positive:
+        return False
+    if require_fresh and not fresh:
+        return False
+    if require_validated and not validated:
+        return False
+    if require_uncontested and not uncontested:
+        return False
+    return True
 
 
-def validation_current(v: KbView, ref: ClaimRef) -> bool:
-    return any(p[0] == ref for p in v.validations)
-
-
-def usable_for(v: KbView, ctx: EvalCtx, ref: ClaimRef) -> bool:
-    """T17: ``UsableFor`` is exactly the conjunction of the policy's
-    mandatory conditions."""
-    return (
-        supported(v, ctx, ref)
-        and (not ctx.require_fresh_evidence or has_fresh_evidence(v, ctx, ref))
-        and (not ctx.require_validated or validation_current(v, ref))
-        and (not ctx.require_uncontested or not contested(v, ref))
+def assess(kb: KB, context: Context, ref: ClaimRef) -> Assessment:
+    claim = find_claim(kb, ref)
+    positive = supported(kb, context, ref, Polarity.POSITIVE)
+    negative = supported(kb, context, ref, Polarity.NEGATIVE)
+    support = (
+        Support.BOTH
+        if positive and negative
+        else Support.POSITIVE
+        if positive
+        else Support.NEGATIVE
+        if negative
+        else Support.NONE
     )
-
-
-def deps_satisfied(observed: list[Dep], required: Tuple[Dep, ...]) -> bool:
-    return all(dep in observed for dep in required)
-
-
-def reusable(v: KbView, ctx: EvalCtx, d: Derivation, observed: list[Dep]) -> bool:
-    """T06: accepted check + complete declared footprint matched."""
-    return check_derivation_v(v, ctx, d) == "accepted" and deps_satisfied(
-        observed, d.footprint
+    applicable = (
+        claim is not None
+        and context_matches(kb, context)
+        and narrower(context.target, claim.statement.scope)
     )
+    alternatives = tuple(result for _, result in accepted(kb, context, ref))
+    states = tuple(witness_freshness(context, result.dependencies) for result in alternatives)
+    freshness = (
+        Freshness.FRESH
+        if Freshness.FRESH in states
+        else Freshness.STALE
+        if states and all(s is Freshness.STALE for s in states)
+        else Freshness.UNKNOWN
+    )
+    validated = any(reusable(kb, context, ref, r) for r in kb.receipts)
+    selected_support = (
+        negative
+        if claim is not None and claim.statement.polarity is Polarity.NEGATIVE
+        else positive
+    )
+    contrary_support = (
+        positive
+        if claim is not None and claim.statement.polarity is Polarity.NEGATIVE
+        else negative
+    )
+    contested = contrary_support or any(
+        c.target == ref and c.kind is CorrectionKind.DISPUTE and c.recorded_at <= context.now
+        for c in kb.corrections
+    )
+    available = positive or negative
+    usable = applicable and policy_allows(
+        selected_support,
+        freshness is Freshness.FRESH,
+        validated,
+        not contested,
+        context.policy.require_fresh,
+        context.policy.require_validation,
+        context.policy.require_uncontested,
+    )
+    return Assessment(support, applicable, freshness, validated, contested, available, usable)
+
+
+def usable_for(kb: KB, context: Context, ref: ClaimRef) -> bool:
+    return assess(kb, context, ref).usable

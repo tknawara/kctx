@@ -1,146 +1,144 @@
-# The kctx calculus — nouns and verbs
+# Calculus card: version 2
 
-This is the reference card for the proved decision layer of kctx: the small
-formal language specified and proved in Lean (`formal/Kctx`, toolchain-pinned,
-no mathlib), implemented as a pure Python core (`src/kctx/semantics`), and
-cross-checked case-by-case against a Lean reference evaluator
-(`formal/.lake/build/bin/kctxref`) by `scripts/conformance_check.py`.
+**Semantic version `2.0.0`; wire schema `2`.** This is the current finite-witness
+calculus, not the historical v1 described in the original
+[handover](handover.md). The reason for replacement and required guarantees are
+in [calculus-revision.md](calculus-revision.md). Qualification evidence belongs
+in [gates.md](gates.md); this card makes no current gate-pass claim.
 
-Everything here is semantic version **1.0.0**. The wire format is positional
-JSON arrays; field order is the contract. Rejection codes and their order are
-a contract. Time is an explicit integer (epoch seconds) — the core never
-reads a clock, never does IO, and evaluates deterministically (T22).
+## Language and scope
 
-## The shape of every decision
+A claim has a nominal `ClaimId`, immutable `ClaimRevision`, and a statement:
+formula, scope, polarity. A scope is `(project, selector)`. Narrowing requires the
+same project and either an empty source selector or equal selectors. It is not
+string-prefix, path-prefix, or arbitrary set containment.
 
-Every verb is a **pure function** of explicit inputs:
+| Formula | Meaning and witness |
+| --- | --- |
+| `Atomic(Atom(subject, predicate, args))` | Exact structured proposition. `AttestWitness` names an attestation binding this claim revision/statement to an observation and actor. |
+| `Truth` | Logical truth in a named scope, constructed by `TruthWitness`; not evidence for arbitrary atoms. |
+| `Conjunction(left, right)` | `AndWitness` recursively checks both positive premises in the same scope. |
+| `Inventory(enumeration)` | Attested finite discovery inventory, not a free completeness boolean. |
+| `All(enumeration, predicate)` | `AllWitness` checks inventory plus the recursively constructed conjunction of every member's predicate. |
+| `Absent(enumeration)` | `AbsentWitness` checks an inventory premise and an empty, successfully enumerated declared domain. |
 
-```
-verdict = verb(view, context, subject, …)
-```
+`SpecializeWitness` preserves the premise formula and polarity while explicitly
+narrowing its scope. Witnesses are finite recursive trees, not graph navigation
+edges. Alternative derivations remain separate; every accepted witness must
+match the exact recorded conclusion, scope and polarity.
 
-- **view** — a read-only projection of the knowledge base (`KbView`): the
-  observations, claims, bindings, corrections, derivations, and validations
-  the checker is allowed to consult. Nothing else. (T07: the checker provably
-  queries *only* the identities named in a derivation's footprint.)
-- **context** (`EvalCtx`) — an explicit evaluation instant plus the policy
-  flags (`require_fresh_evidence`, `require_validated`,
-  `require_uncontested`). No ambient "now".
-- **subject** — the derivation, claim reference, or proposal under decision.
+An observation records source, revision, retained content identity, time and
+`ok | timeout | partial | truncated | denied | unavailable`. Successful capture
+alone establishes no atomic truth. An attestation is an explicit interpretation
+of that capture, not automatic prose extraction. Enumeration checking binds
+source/revision, query, scope, method, successful observation and inventory
+content; members must equal the declared universe without duplicates. Its
+`inventory:` identity is a length-delimited UTF-8 member encoding. Soundness is
+relative to that declared finite domain, not an assertion that every possible
+real-world object was discovered.
 
-Because inputs are explicit, the same inputs always give the same verdict —
-which is what makes reuse safe: an agent may rely on an assessment while its
-recorded context holds, and must re-evaluate the moment anything in the
-verdict's declared footprint changes (T06, T08, T11).
+## Assessment is not a status string
 
-## Nouns (the records)
+`assess(kb, context, ref)` returns:
 
-| Noun | Fields (wire order) | Notes |
-| --- | --- | --- |
-| `Observation` | id, outcome, observedAt, ttl, system, locator | An acquisition *attempt*: `ok / timedOut / partialResult / truncated / denied / unavailable` are all meaningful outcomes. |
-| `Claim` | ref(id, rev), prop, scope | Content-addressed by revision; a stable id alone never identifies a historical proposition. |
-| `Binding` | obs, ref, role | `supports / contradicts / contextualizes` — a mention is not support. |
-| `Derivation` | id, rule, premiseGroups, conclusion, conclusionProp, scope, footprint, evidence, witness | A rule application with its declared dependencies. |
-| `Dep` | kind, target, digest | One footprint entry: `sourceContent / kbRecord / policy / checker / correction / discovery`. |
-| `CoverageWitness` | scope, members, complete | Proof a required set was enumerated; universal claims are impossible without one (T13). |
-| `Correction` | kind, target, recordedAt | `retract / dispute / supersede` against an identified revision. |
-| `Scope` | project, extra | Empty `extra` = whole project; specialization narrows, never widens. |
-| `ClaimProp` | atom / conj(atoms) / allChecked(pred, members) | v1 conjunctions are over flat atoms. |
+- `support`: `none`, `positive`, `negative`, or `both`;
+- `applicable`: exact context and target scope compatibility;
+- `freshness`: `fresh`, `stale`, or `unknown`;
+- `validated`, `contested`, `available`, and policy-dependent `usable`.
 
-## The four derivation rules
+Positive and negative interpretations are independent. Lack of support is not
+negation. A dispute preserves evidence and marks contestation; contrary support
+also contests. Retraction suppresses the targeted revision's current evidence;
+supersession does not transfer support or validation. Historical evaluation
+selects a retained snapshot: changing a timestamp on the current database is
+not historical replay. Correction times are interpreted within that selected KB.
 
-The enabled registry is closed — nothing else derives (T14, with a
-kernel-decided countermodel for a tempting `contextualizes` inference).
+Support checking does not erase old evidence merely because its TTL expired.
+Freshness examines actual observation dependencies: a composed witness is stale
+if any observation is stale, unknown if no observations or an unknown remains,
+otherwise fresh. Across alternatives a fresh witness wins; all-stale alternatives
+are stale; otherwise freshness is unknown. `now == observed_at + ttl` is fresh;
+future observations and missing TTL are unknown. The selected statement's
+polarity, applicability and policy requirements determine usability.
 
-| Rule | Shape it accepts | Declarative meaning |
-| --- | --- | --- |
-| `obsSupports` | no premises; declared evidence observation; an ok, fresh, `supports`-bound observation; conclusion is an atom in scope | The bound observation vouches for the conclusion *at this evaluation instant* (evidence-veridicality is a declared interpretation clause, not an axiom). |
-| `andIntro` | one premise group; every premise an in-scope atom | The conclusion is exactly the conjunction of the premise atoms, in order. |
-| `specialize` | exactly one premise | Same proposition, narrower-or-equal scope (checked, never assumed). |
-| `allChecked` | a complete, non-empty coverage witness | The predicate held for *every* member of a finite, explicitly witnessed set. No witness, no universal (T13). |
+## Explicit context, receipts and operations
 
-Every rule must also declare its consulted record identities in its
-footprint (T12) — a derivation may not silently depend on something it does
-not declare.
+`Context` binds snapshot, semantic version, ruleset, checker, complete policy,
+explicit time, target scope, intended use, and exact source selections
+`(source, revision, content)`. The checker constructs dependencies from actual
+observations, claims, attestations, enumerations, relevant corrections and
+context. It does not trust an unrelated caller-supplied digest as a footprint.
+A passing receipt names claim, context, witness, exact dependencies and inclusive
+expiry. Reuse checks these bindings and the accepted witness again.
 
-## Verbs
+A semantic `Plan` binds expected snapshot, full candidate KB, authority, claim
+and witness. `VerifiedApproval` is an adapter capability, not proof that an
+arbitrary Python constructor authenticated a signer. Production admission
+verifies the operator's Ed25519 signature, canonical plan identity, trusted
+policy, intended use and predecessor before publishing. Replays distinguish
+already-applied, changed-input, predecessor-conflict and rejection. The pure
+semantic journal records applied operations; the storage adapter additionally
+has durable **prepared/candidate/manifest/published** recovery phases. A prepared
+storage journal is not an admitted semantic journal entry.
 
-### Assessment verbs (queries — decide, never mutate)
+Retained-release selection is a new authorized forward operation with a new
+snapshot. It changes selected claims without deleting accumulated records or
+later corrections. Historical query of the old release is a different operation.
+See [storage and retrieval flows](flows.md).
 
-| Verb | Asks | Answers | Anchors |
-| --- | --- | --- | --- |
-| `assess_fresh(ttl, observedAt, now)` | Is the recency condition met at `now`? | `fresh / stale / unknown` | T11 — advancing the clock can never revive expired evidence; a missing TTL policy is `unknown`, never fresh; a future observation is `unknown`, never fresh |
-| `check_derivation(view, ctx, d)` | Is this derivation admissible right now? | `accepted` or `rejected <code>` | T04 (structure), T05 (per-rule semantics), T12 (footprint declared), T13 (witness required) |
-| `supported(view, ctx, ref)` | Does some accepted derivation conclude this claim? | Bool | T09, T10 — alternatives survive independently; removing all support yields unsupported, *not* a proof of the opposite |
-| `has_fresh_evidence(view, ctx, ref)` | Is there fresh direct evidence? | Bool | feeds `usable_for` under its flag |
-| `contested(view, ref)` | Does any correction target this claim? | Bool | corrections gate but never confer (T16) |
-| `validation_current(view, ref)` | Is there a recorded validation for this claim? | Bool | — |
-| `usable_for(view, ctx, ref)` | May an agent *act* on this claim under the policy? | Bool | T17 — exactly the conjunction of: supported, and each enabled mandatory condition |
-| `reusable(view, ctx, d, observed)` | May a prior verdict be reused? | Bool | T06 — accepted check **and** every declared footprint dependency matched exactly; T08 — one missing dependency kills reuse for that derivation (alternatives unaffected) |
+## Exact wire examples
 
-### Planning verbs (commands — pure; persistence executes them conditionally)
+These JSONL records are copied from `tests/conformance/cases.jsonl`:
 
-| Verb | Decides | Outcomes | Anchors |
-| --- | --- | --- | --- |
-| `plan_transition(proposal, target, actor, landedRefs, resolvable)` | Is this lifecycle move legal and ready? | `planned` / `refused illegalTransition · notReady · missingActor · gatesNotPassed · landedRefsUnresolved` | T18 — one readiness predicate for *both* filing paths; decided statuses need an actor; `applied` needs land gates + resolved landed refs; `verified` needs deploy/use gates |
-| `can_conclude(investigation)` | May this investigation conclude? | Bool | T19 — non-empty checked-against and scope sections, no open *or malformed* hypothesis |
-| `commit_op(kb, journal, op)` | Apply this operation against the expected predecessor? | `committed · alreadyCommitted · predecessorConflict · inputConflict · rejectedInvalid` | T20 — rejection leaves state unchanged; T21 — same-input replay is idempotent, different input conflicts; T03 — a commit preserves well-formedness or is refused |
-
-### State actions (what plans are made of)
-
-`addClaim · addObservation · addDerivation · addCorrection · addValidation`
-build the change list inside an `Op`. Their safety properties are the
-theorems above: well-formedness is preserved (T03), corrections only gate
-(T16), and additions whose identities lie outside a derivation's consulted
-footprint cannot change that derivation's verdict (T07, both as
-query-agreement and as record-extension). Historical evaluation is stable:
-`T15_supported_ext` — pin the derivation list (the historical context), and
-unrelated later additions neither create nor destroy what it concluded.
-
-## The rejection vocabulary
-
-`check_derivation` refuses, in this exact order (a wire contract mirrored on
-both hosts):
-
-```
-ruleNotEnabled → missingPremise → missingConclusion → conclusionPropMismatch
-→ contestedConclusion → contestedPremise → ruleShapeMismatch → evidenceNotOk
-→ evidenceNotFresh → missingCoverage → coverageIncomplete → footprintIncomplete
+```jsonl
+{"schema_version":2,"semantic_version":"2.0.0","id":"version-v2","op":"semantic_version","expected":"2.0.0"}
+{"schema_version":2,"semantic_version":"2.0.0","id":"ttl-inclusive-boundary","op":"fresh","now":110,"observed_at":100,"ttl":10,"expected":"fresh"}
 ```
 
-Failure is always named, never a boolean. An unknown is an unknown —
-`assess_fresh` says `unknown` rather than guessing fresh; a truncated search
-can never establish absence (T13); losing all support is not negation (T10).
+The development reference protocol is versioned, object-shaped JSONL, not a
+positional production IPC API. Production Python imports the semantic functions.
+The public engine is separately JSON-RPC 2.0 over JSONL (`kctx serve`, initialize
+with `protocol_version: 1`); its protocol version is not the calculus version.
 
-## Calling it
-
-**Python (production):** `from kctx.semantics import check_derivation_v,
-usable_for, assess_fresh …` — pure functions, stdlib-only, no clock, no IO.
-
-**Any language (reference protocol):** JSONL over stdin/stdout against the
-Lean-built reference evaluator — one request per line, one response per line:
+The following exact component shapes come from
+`KnowledgeAdmissionTests.candidate` in `tests/test_knowledge.py`:
 
 ```json
-{"id":"1","op":"assess_fresh","ttl":["expireAfter",50],"observedAt":100,"now":120}
-{"id":"2","op":"check_derivation","kb":[…],"ctx":[120,true,false,true],"derivation":[…]}
-{"id":"3","op":"usable","kb":[…],"ctx":[200,true,false,true],"ref":["c1","r1"]}
+{
+  "claim": {"id": "reviewed", "revision": "r1"},
+  "witness": {"tag": "attest", "attestation": "attestation-1"},
+  "authority_key": "reviewer-key"
+}
 ```
 
 ```json
-{"id":"1","ok":true,"result":"fresh"}
-{"id":"2","ok":true,"result":["accepted"]}
-{"id":"3","ok":true,"result":false}
+{
+  "formula": {"tag": "atom", "atom": {"subject": "service", "predicate": "reviewed", "args": []}},
+  "scope": {"project": "test-kb", "selector": ""},
+  "polarity": "positive"
+}
 ```
 
-(The third case: same claim, evidence gone stale — `usable_for` says no,
-even though `supported` alone would say yes. Freshness is an assessment,
-not a stored property.)
+These are components, not a complete admission request. The fixture constructs
+`kb`, `capture_ids`, `context`, `claim`, `witness`, `authority_key` together using
+the **returned** retained capture IDs and content identities. Never paste a
+made-up capture hash into a real candidate. [Workflows](workflows.md) describes
+the service request lifecycle.
 
-## Where the proofs live
+## Assurance boundaries and ownership
 
-`formal/theorems.json` maps every T-number above to its theorem names,
-assumptions, and executable entry point; `formal/proof-report.json` records
-the axiom audit (standard Lean logical axioms only — `propext`,
-`Classical.choice`, `Quot.sound`); `conformance-report.json` records the
-Lean↔Python case agreement. Assurance label, honestly stated: **model proved,
-Python conformance checked.**
+| Boundary | Owner | What it does not establish |
+| --- | --- | --- |
+| Model proofs | `formal/Kctx/Model.lean`, `Semantics.lean`, `Checker.lean`, `Theorems.lean`, `Theorems2.lean`, `NonVacuity.lean`, `Selection.lean`, `Workflow.lean` | Truth of arbitrary observations, filesystem safety, network trust or Python refinement. |
+| Python conformance | `src/kctx/semantics/`, `tests/semantics/`, `tests/conformance/cases.jsonl` | Universal equivalence from finite examples alone. |
+| Nominal types/codecs | `domain/ids.py`, `semantics/wire.py`, Lean `Ids.lean` and codec modules | Authenticity of external data just because it decoded. |
+| Adapter trust | `services/knowledge.py`, Git/Dolt/files adapters | A theorem about every possible external implementation. |
+| Authored workflow decisions | `semantics/workflow.py`, proposal/investigation/run services | Natural-language truth inferred from structural readiness. |
+
+The model uses local evidence-soundness premises and recursive derivability,
+not a global hypothesis that successful acquisition proves everything. Nagini
+qualification is restricted to named Boolean/time leaves and their runtime
+bridges, not a whole-core refinement proof. Reject the older shortcut of
+conflating fresh support, validation, admission and contestation. Named regression
+pointers include `tests/test_knowledge.py`, `tests/test_gates_rev.py`,
+`tests/test_observation_quality.py`, and `tests/test_storage_publication.py`.

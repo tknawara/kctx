@@ -18,13 +18,15 @@ from kctx.domain.targets import (  # noqa: E402
     parse_use_target,
     search_strings,
 )
+from kctx.domain.ids import EvidenceId, SignatureId, InvestigationId
+from kctx.errors import KctxError
 
 
 class ParseUseTargetTests(unittest.TestCase):
     def test_evidence(self):
         t = parse_use_target("ev:2026/inv-1/ev-3")
         self.assertIsInstance(t, EvidenceRef)
-        self.assertEqual((t.home, t.stem), ("2026/inv-1", "ev-3"))
+        self.assertEqual((t.home, t.stem), ("2026/inv-1", EvidenceId("ev-3")))
         self.assertEqual(search_strings(t), ("ev:2026/inv-1/ev-3",))
 
     def test_sig_and_inv_widen_to_bare(self):
@@ -57,11 +59,21 @@ class ParseUseTargetTests(unittest.TestCase):
 
     def test_sum_is_closed_over_variants(self):
         # every parse result is one of the six variants; nothing else leaks
-        for raw in ["ev:a/b", "sig:x", "inv:x", "proposal/k/d-s", "r@s:p:1", "bare"]:
+        for raw in ["ev:a/b", "sig:x", "inv:x", "proposal/config/2026-01-02-thing", "r@s:p:1", "bare"]:
             t = parse_use_target(raw)
             self.assertIsInstance(
                 t, (EvidenceRef, SigRef, InvRef, ProposalRef, AssetRef, CodeLocator)
             )
+
+    def test_reference_id_namespaces_are_nominal(self):
+        self.assertEqual(parse_use_target("sig:x").id, SignatureId("x"))
+        self.assertEqual(parse_use_target("inv:x").id, InvestigationId("x"))
+        self.assertNotEqual(SignatureId("x"), InvestigationId("x"))
+        self.assertNotEqual(SignatureId("x"), "x")
+
+    def test_malformed_evidence_rejected_at_boundary(self):
+        with self.assertRaises(KctxError):
+            parse_use_target("ev:missing-home")
 
 
 if __name__ == "__main__":

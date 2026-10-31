@@ -23,14 +23,21 @@ import json
 import re
 import tarfile
 from pathlib import Path, PurePosixPath
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TypedDict
 
-from errors import KctxError
-
-from kctx.graph.cite_loader import load_cite_module
-from kctx.graph.identity import canonical_repo
-from kctx.graph.models import Edge, Node
-from kctx.graph.observability import get_logger, run_logged, span
+from kctx.adapters.git.citations import ORG_REPO_RE
+from kctx.citations.syntax import CITE_LINE_RE, is_illustrative, parse_cite_body
+from kctx.codecs.frontmatter import read_frontmatter, split_commas_respecting_brackets
+from kctx.domain.json import JsonObject, JsonValue, object_value, optional_text, texts
+from kctx.errors import KctxError
+from kctx.graph.identity import RepositoryIdentity, canonical_repo, capture_repository_identity
+from kctx.graph.models import Edge, ExtractionDiagnostic, GraphEdgeId, GraphNodeId, Node
+from kctx.graph.source_tokens import (
+    decode_json_source,
+    iter_source_tokens,
+    json_field_string_sources,
+)
+from kctx.observability import get_logger, run_logged, span
 
 # Mirrors nav._uses_boundary_pattern's id-character class exactly (kept as
 # its own copy rather than importing nav, which is being edited concurrently
@@ -38,11 +45,26 @@ from kctx.graph.observability import get_logger, run_logged, span
 # docstring for the false-positive/false-negative reasoning this matches).
 _ID_CHARS = "A-Za-z0-9_./-"
 
+MAX_SOURCE_FILES = 100_000
+MAX_SOURCE_BYTES = 256 * 1024 * 1024
+MAX_FILE_BYTES = 16 * 1024 * 1024
+MAX_GRAPH_NODES = 1_000_000
+MAX_GRAPH_EDGES = 1_000_000
+MAX_MENTION_WORK = 10_000_000
+MAX_DIAGNOSTICS = 100_000
+
+
+def _check_source_size(path: str, size: int, count: int, total: int) -> None:
+    if count > MAX_SOURCE_FILES:
+        raise KctxError("malformed", f"source file count exceeds limit {MAX_SOURCE_FILES}")
+    if size > MAX_FILE_BYTES:
+        raise KctxError("malformed", f"{path}: source bytes exceed limit {MAX_FILE_BYTES}")
+    if total > MAX_SOURCE_BYTES:
+        raise KctxError("malformed", f"aggregate source bytes exceed limit {MAX_SOURCE_BYTES}")
+
 
 def _boundary_pattern(s: str) -> "re.Pattern[str]":
-    return re.compile(
-        rf"(?<![{_ID_CHARS}]){re.escape(s)}(?![A-Za-z0-9_/-])(?!\.[A-Za-z0-9_])"
-    )
+    return re.compile(rf"(?<![{_ID_CHARS}]){re.escape(s)}(?![A-Za-z0-9_/-])(?!\.[A-Za-z0-9_])")
 
 
 SHORT_LOCATOR_RE = re.compile(
@@ -54,41 +76,85 @@ PROPOSAL_ID_RE = re.compile(r"^[\w-]+/\d{4}-\d{2}-\d{2}-[\w-]+$")
 
 
 def edge_id(
-    src_node: str, dst_node: str, rel: str, src_path: Optional[str], src_line: Optional[int],
-    ordinal: Optional[int] = None,
-) -> str:
+    src_node: GraphNodeId,
+    dst_node: GraphNodeId,
+    rel: str,
+    src_path: str | None,
+    src_line: int | None,
+    ordinal: int | None = None,
+) -> GraphEdgeId:
     """Includes src_path/src_line (unlike the prototype's edge_id, which
     collapsed every citation from the same src/dst/rel into one row -- see
     RESULTS.md gotcha 5) so two separate citations of the same target from
     the same record each get their own binding row, per handover-v2 S6.2."""
-    key = f"{src_node}|{dst_node}|{rel}|{src_path or ''}|{src_line or ''}|{'' if ordinal is None else ordinal}"
-    return hashlib.sha256(key.encode()).hexdigest()[:20]
+    key = f"{src_node.val}|{dst_node.val}|{rel}|{src_path or ''}|{src_line or ''}|{'' if ordinal is None else ordinal}"
+    return GraphEdgeId(hashlib.sha256(key.encode()).hexdigest()[:20])
 
 
 class ExtractStats:
-    def __init__(self):
+    def __init__(self) -> None:
         self.files_scanned = 0
         self.cite_tokens_seen = 0
         self.cite_tokens_illus = 0
-        self.cite_tokens_dropped: List[Dict[str, str]] = []
-        self.unresolved_repo_aliases: List[str] = []
+        self.diagnostics: list[ExtractionDiagnostic] = []
+        self.unresolved_repo_aliases: list[str] = []
+
+    def add_diagnostic(self, item: ExtractionDiagnostic) -> None:
+        if len(self.diagnostics) >= MAX_DIAGNOSTICS:
+            raise KctxError(
+                "malformed", f"extraction diagnostic count exceeds limit {MAX_DIAGNOSTICS}"
+            )
+        self.diagnostics.append(item)
+
+    @property
+    def cite_tokens_dropped(self) -> list[JsonObject]:
+        """Historical skip payload; diagnostics are the authoritative records."""
+        return [
+            {
+                "src_path": item.src_path,
+                "line": item.src_line,
+                "reason": item.reason,
+                "illus": item.illus,
+                "raw": item.raw,
+            }
+            for item in self.diagnostics
+            if item.category == "citation-skip"
+        ]
 
 
 class GraphBuilder:
-    def __init__(self, kb_sha: str, seen_date: str):
+    def __init__(self, kb_sha: str, seen_date: str) -> None:
         self.kb_sha = kb_sha
         self.seen_date = seen_date
-        self.nodes: Dict[str, Node] = {}
-        self.edges: Dict[str, Edge] = {}
-        self.known_ids: set = set()
+        self.nodes: dict[GraphNodeId, Node] = {}
+        self.edges: dict[GraphEdgeId, Edge] = {}
+        self.known_ids: set[GraphNodeId] = set()
         self.stats = ExtractStats()
 
-    def add_node(self, nid: str, kind: str, label: Optional[str] = None, home_path: Optional[str] = None) -> None:
+    def add_node(
+        self, nid: str, kind: str, label: str | None = None, home_path: str | None = None
+    ) -> None:
         if not nid:
             return
-        if nid not in self.nodes:
-            self.nodes[nid] = Node(id=nid, kind=kind, label=label or nid, home_path=home_path)
-        self.known_ids.add(nid)
+        node_id = GraphNodeId(nid)
+        if node_id not in self.nodes:
+            if len(self.nodes) >= MAX_GRAPH_NODES:
+                raise KctxError("malformed", f"graph node count exceeds limit {MAX_GRAPH_NODES}")
+            self.nodes[node_id] = Node(
+                id=node_id, kind=kind, label=label or nid, home_path=home_path
+            )
+        elif home_path is not None:
+            existing = self.nodes[node_id]
+            if existing.home_path is not None and existing.home_path != home_path:
+                raise KctxError(
+                    "malformed",
+                    f"ambiguous graph identity {nid!r}: {existing.home_path!r} and {home_path!r}",
+                )
+            if existing.home_path is None:
+                self.nodes[node_id] = Node(
+                    id=node_id, kind=kind, label=label or nid, home_path=home_path
+                )
+        self.known_ids.add(node_id)
 
     def add_edge(
         self,
@@ -96,32 +162,38 @@ class GraphBuilder:
         dst_node: str,
         rel: str,
         *,
-        src_path: Optional[str] = None,
-        src_line: Optional[int] = None,
-        cite_kind: Optional[str] = None,
-        rev: Optional[str] = None,
-        blob_sha: Optional[str] = None,
-        span_: Optional[str] = None,
-        seen: Optional[str] = None,
-        state: Optional[str] = None,
+        src_path: str | None = None,
+        src_line: int | None = None,
+        cite_kind: str | None = None,
+        rev: str | None = None,
+        blob_sha: str | None = None,
+        span_: str | None = None,
+        line_selector: str | None = None,
+        seen: str | None = None,
+        state: str | None = None,
         illus: bool = False,
-        ordinal: Optional[int] = None,
-        raw: Optional[str] = None,
+        ordinal: int | None = None,
+        raw: str | None = None,
     ) -> None:
         if not src_node or not dst_node:
             return
-        eid = edge_id(src_node, dst_node, rel, src_path, src_line, ordinal)
+        source = GraphNodeId(src_node)
+        target = GraphNodeId(dst_node)
+        eid = edge_id(source, target, rel, src_path, src_line, ordinal)
+        if eid not in self.edges and len(self.edges) >= MAX_GRAPH_EDGES:
+            raise KctxError("malformed", f"graph edge count exceeds limit {MAX_GRAPH_EDGES}")
         self.edges[eid] = Edge(
             edge_id=eid,
-            src_node=src_node,
+            src_node=source,
             src_path=src_path,
             src_line=src_line,
-            dst_node=dst_node,
+            dst_node=target,
             rel=rel,
             cite_kind=cite_kind,
             rev=rev,
             blob_sha=blob_sha,
             span=span_,
+            line_selector=line_selector,
             seen=seen or self.seen_date,
             state=state,
             illus=illus,
@@ -132,14 +204,48 @@ class GraphBuilder:
 # --------------------------------------------------------------------------
 # git plumbing: read every tracked .md/.json file at one sha, in memory
 # --------------------------------------------------------------------------
-def read_tree_at_sha(kb_root: Path, sha: str) -> Dict[str, str]:
+def read_tree_at_sha(kb_root: Path, sha: str) -> dict[str, str]:
     with span("extract.read_tree", sha=sha):
-        proc = run_logged(
-            ["git", "-C", str(kb_root), "archive", "--format=tar", sha],
+        metadata = run_logged(
+            ["git", "-C", str(kb_root), "ls-tree", "-r", "-l", "-z", sha],
             check=True,
             text=False,
         )
-        files: Dict[str, str] = {}
+        total = 0
+        count = 0
+        suffixes: set[str] = set()
+        for record in metadata.stdout.split(b"\0"):
+            if not record:
+                continue
+            header, raw_path = record.split(b"\t", 1)
+            path = raw_path.decode("utf-8", errors="replace")
+            if not path.endswith((".md", ".json")):
+                continue
+            fields = header.split()
+            if fields[1] != b"blob":
+                continue
+            size = int(fields[3])
+            count += 1
+            total += size
+            _check_source_size(path, size, count, total)
+            suffixes.add(PurePosixPath(path).suffix)
+        if not suffixes:
+            return {}
+        proc = run_logged(
+            [
+                "git",
+                "-C",
+                str(kb_root),
+                "archive",
+                "--format=tar",
+                sha,
+                "--",
+                *(f"*{suffix}" for suffix in sorted(suffixes)),
+            ],
+            check=True,
+            text=False,
+        )
+        files: dict[str, str] = {}
         with tarfile.open(fileobj=io.BytesIO(proc.stdout), mode="r:") as tf:
             for member in tf.getmembers():
                 if not member.isfile():
@@ -149,10 +255,7 @@ def read_tree_at_sha(kb_root: Path, sha: str) -> Dict[str, str]:
                 data = tf.extractfile(member)
                 if data is None:
                     continue
-                try:
-                    files[member.name] = data.read().decode("utf-8", errors="replace")
-                except Exception:
-                    continue
+                files[member.name] = data.read().decode("utf-8", errors="replace")
     return files
 
 
@@ -166,17 +269,27 @@ def commit_date(kb_root: Path, sha: str) -> str:
     return proc.stdout.strip()
 
 
-def first_parent_record_commits(kb_root: Path, limit: Optional[int] = None) -> List[Tuple[str, str, str]]:
+def first_parent_record_commits(
+    kb_root: Path, limit: int | None = None
+) -> list[tuple[str, str, str]]:
     """(sha, iso_date, subject) for first-parent commits touching *.md/*.json,
     oldest first. `limit` keeps only the last N (closest to HEAD)."""
     proc = run_logged(
         [
-            "git", "-C", str(kb_root), "log", "--first-parent", "--reverse",
-            "--format=%H\x1f%cI\x1f%s", "--", "*.md", "*.json",
+            "git",
+            "-C",
+            str(kb_root),
+            "log",
+            "--first-parent",
+            "--reverse",
+            "--format=%H\x1f%cI\x1f%s",
+            "--",
+            "*.md",
+            "*.json",
         ],
         check=True,
     )
-    commits = []
+    commits: list[tuple[str, str, str]] = []
     for line in proc.stdout.splitlines():
         if not line.strip():
             continue
@@ -188,56 +301,66 @@ def first_parent_record_commits(kb_root: Path, limit: Optional[int] = None) -> L
 
 
 # --------------------------------------------------------------------------
-# frontmatter helpers (kb's flat `key: value` block, same shape storage.py's
-# read_frontmatter parses -- reimplemented here since extraction works on
-# in-memory git-archive text, not files on disk).
+# Frontmatter uses the same ambiguity-refusing codec as document reads.
 # --------------------------------------------------------------------------
-def split_frontmatter(text: str) -> Tuple[Dict[str, str], str]:
-    if not text.startswith("---\n") and not text.startswith("---\r\n"):
-        return {}, text
-    end = text.find("\n---", 3)
-    if end == -1:
-        return {}, text
-    fm_text = text[4:end]
-    body = text[end + 4:].lstrip("\n")
-    fm: Dict[str, str] = {}
-    for line in fm_text.splitlines():
-        if ":" in line:
-            k, _, v = line.partition(":")
-            fm[k.strip()] = v.strip()
-    return fm, body
+def split_frontmatter(text: str) -> tuple[dict[str, str], str]:
+    fm = read_frontmatter(text)
+    lines = text.splitlines(keepends=True)
+    if not lines or lines[0].strip() != "---":
+        return fm, text
+    for index, line in enumerate(lines[1:], 1):
+        if line.strip() == "---":
+            return fm, "".join(lines[index + 1 :])
+    return fm, text
 
 
-def parse_list_value(v: Optional[str]) -> List[str]:
+def parse_list_value(v: str | None) -> list[str]:
     v = (v or "").strip()
     if not v or v == "[]":
         return []
     if v.startswith("[") and v.endswith("]"):
         v = v[1:-1]
-    parts = [p.strip() for p in v.split(",")]
-    return [p for p in parts if p]
+    return split_commas_respecting_brackets(v)
 
 
 # --------------------------------------------------------------------------
-# citation-token extraction (reuses cite.py's own parser, not a reimplementation)
+# Citation-token extraction uses the built-in citation syntax parser.
 # --------------------------------------------------------------------------
+class CitationFields(TypedDict, total=False):
+    rev: str | None
+    blob_sha: str | None
+    span_: str | None
+    line_selector: str | None
+    seen: str | None
+    state: str | None
+
+
 def _cite_target(
-    f: Dict[str, str], kind: str, kb_root: Path, cite_mod
-) -> Tuple[Optional[str], str, Optional[str], Dict[str, Any]]:
+    f: dict[str, str], kind: str, repository_identity: RepositoryIdentity
+) -> tuple[str | None, str, str | None, CitationFields]:
     """Returns (dst_node_id, dst_kind, label, extra_edge_fields) for one
     parsed ⟦cite ...⟧ body, or (None, ..., ...) only when the body genuinely
     carries no usable identity (never for a merely-uncommon kind -- those
     fall through to the generic hash-keyed branch at the end so nothing is
     silently dropped, per G1)."""
     if kind == "code":
-        repo = canonical_repo(f.get("repo"), f.get("url"), kb_root, cite_mod)
+        repo = canonical_repo(f.get("repo"), f.get("url"), repository_identity)
         path = f.get("path", "")
         dst = f"code:{repo}:{path}"
-        return dst, "code", f"{repo}:{path}", {
-            "rev": f.get("rev"), "blob_sha": f.get("blob"), "span_": f.get("span"), "seen": f.get("seen"),
-        }
+        return (
+            dst,
+            "code",
+            f"{repo}:{path}",
+            {
+                "rev": f.get("rev"),
+                "blob_sha": f.get("blob"),
+                "span_": f.get("span"),
+                "line_selector": f.get("L"),
+                "seen": f.get("seen"),
+            },
+        )
     if kind == "commit":
-        repo = canonical_repo(f.get("repo"), f.get("url"), kb_root, cite_mod)
+        repo = canonical_repo(f.get("repo"), f.get("url"), repository_identity)
         dst = f"code:{repo}@{f.get('rev')}"
         return dst, "code", dst, {"rev": f.get("rev"), "seen": f.get("seen")}
     if kind == "ev":
@@ -251,7 +374,7 @@ def _cite_target(
         dst = f"{kind}:{url}" + (f"#{f.get('section')}" if f.get("section") else "")
         return dst, kind, url, {"seen": f.get("seen")}
     if kind == "pr":
-        repo = canonical_repo(f.get("repo"), f.get("url"), kb_root, cite_mod)
+        repo = canonical_repo(f.get("repo"), f.get("url"), repository_identity)
         n = f.get("n", "")
         dst = f"pr:{repo}#{n}"
         return dst, "pr", dst, {"state": f.get("state"), "seen": f.get("seen")}
@@ -278,36 +401,85 @@ def _cite_target(
     return dst, kind, " ".join(f"{k}={v}" for k, v in sorted(f.items())), {"seen": f.get("seen")}
 
 
-def scan_cites(
-    b: GraphBuilder, src_node: str, src_path: str, text: str, kb_root: Path, cite_mod
+def _record_unresolved_repo(
+    b: GraphBuilder,
+    repo: str,
+    path: str,
+    line: int | None,
+    raw: str,
+    *,
+    illus: bool = False,
 ) -> None:
-    for ordinal, m in enumerate(cite_mod.CITE_LINE_RE.finditer(text)):
-        body = m.group("body")
+    if ORG_REPO_RE.fullmatch(repo):
+        return
+    if repo not in b.stats.unresolved_repo_aliases:
+        b.stats.unresolved_repo_aliases.append(repo)
+    b.stats.add_diagnostic(
+        ExtractionDiagnostic(
+            category="unresolved-repo",
+            src_path=path,
+            src_line=line,
+            reason=f"repository alias {repo!r} has no canonical org/repo identity",
+            raw=raw,
+            illus=illus,
+        )
+    )
+
+
+def scan_cites(
+    b: GraphBuilder,
+    src_node: str,
+    src_path: str,
+    text: str,
+    repository_identity: RepositoryIdentity,
+) -> None:
+    for token in iter_source_tokens(src_path, text):
         b.stats.cite_tokens_seen += 1
-        illus = cite_mod.is_illustrative(body)
-        if illus:
-            b.stats.cite_tokens_illus += 1
-        f = cite_mod.parse_cite_body(body)
-        kind = f.get("kind")
-        if not kind:
-            b.stats.cite_tokens_dropped.append({
-                "src_path": src_path, "line": text.count("\n", 0, m.start()) + 1,
-                "reason": "no kind= field", "illus": illus, "raw": m.group(0)[:120],
-            })
+        illus = is_illustrative(token.body)
+        b.stats.cite_tokens_illus += int(illus)
+        try:
+            if not token.complete:
+                raise KctxError("malformed", "unterminated citation token")
+            fields = parse_cite_body(token.body)
+            kind = fields.get("kind")
+            if not kind:
+                raise KctxError("malformed", "no kind= field")
+            dst, dst_kind, label, extra = _cite_target(fields, kind, repository_identity)
+            if dst is None:
+                raise KctxError("malformed", f"unresolvable kind={kind}")
+        except KctxError as exc:
+            b.stats.add_diagnostic(
+                ExtractionDiagnostic(
+                    category="citation-skip",
+                    src_path=src_path,
+                    src_line=token.src_line,
+                    reason=str(exc),
+                    illus=illus,
+                    raw=token.raw,
+                )
+            )
             continue
-        line_no = text.count("\n", 0, m.start()) + 1
-        dst, dst_kind, label, extra = _cite_target(f, kind, kb_root, cite_mod)
-        if dst is None:
-            b.stats.cite_tokens_dropped.append({
-                "src_path": src_path, "line": line_no,
-                "reason": f"unresolvable kind={kind}", "illus": illus, "raw": m.group(0)[:120],
-            })
-            continue
+        if kind in ("code", "commit", "pr"):
+            repo = canonical_repo(fields.get("repo"), fields.get("url"), repository_identity)
+            _record_unresolved_repo(b, repo, src_path, token.src_line, token.raw, illus=illus)
         b.add_node(dst, dst_kind, label)
-        b.add_edge(src_node, dst, "cites", src_path=src_path, src_line=line_no, cite_kind=kind, illus=illus, ordinal=ordinal, raw=m.group(0)[:500], **extra)
+        b.add_edge(
+            src_node,
+            dst,
+            "cites",
+            src_path=src_path,
+            src_line=token.src_line,
+            cite_kind=kind,
+            illus=illus,
+            ordinal=token.ordinal,
+            raw=token.raw,
+            **extra,
+        )
 
 
-def build_mention_index(known_ids: set) -> List[Tuple[str, str, "re.Pattern[str]"]]:
+def build_mention_index(
+    known_ids: set[GraphNodeId],
+) -> list[tuple[GraphNodeId, str, "re.Pattern[str]"]]:
     """Precompiles every (node id, its candidate strings, boundary pattern)
     once per snapshot, not once per (candidate, document) pair. The mentions
     pass below is O(candidates x documents) by nature -- every known id has
@@ -316,11 +488,11 @@ def build_mention_index(known_ids: set) -> List[Tuple[str, str, "re.Pattern[str]
     module did) turned a few-thousand-row kb into a multi-minute `kctx graph
     sync --history N`, almost entirely CPU time re-compiling the same
     pattern over and over. Precompiling drops that to one compile per id."""
-    index = []
+    index: list[tuple[GraphNodeId, str, re.Pattern[str]]] = []
     for cid in known_ids:
-        bare = cid.split(":", 1)[1] if ":" in cid else cid
-        candidates = [cid]
-        if bare and bare != cid:
+        bare = cid.val.split(":", 1)[1] if ":" in cid.val else cid.val
+        candidates = [cid.val]
+        if bare and bare != cid.val:
             candidates.append(bare)
         for cand in candidates:
             index.append((cid, cand, _boundary_pattern(cand)))
@@ -328,8 +500,11 @@ def build_mention_index(known_ids: set) -> List[Tuple[str, str, "re.Pattern[str]
 
 
 def scan_mentions(
-    b: GraphBuilder, src_node: str, src_path: str, text: str,
-    mention_index: List[Tuple[str, str, "re.Pattern[str]"]], cite_mod,
+    b: GraphBuilder,
+    src_node: str,
+    src_path: str,
+    text: str,
+    mention_index: list[tuple[GraphNodeId, str, "re.Pattern[str]"]],
 ) -> None:
     """Literal id mentions outside ⟦cite ...⟧ spans, using an id-boundary
     regex (not a plain substring check -- see _boundary_pattern's docstring
@@ -339,26 +514,26 @@ def scan_mentions(
     candidates that don't even appear in a given document this way, before
     ever invoking the regex engine, is the other half of what keeps this
     pass fast at kb's real scale (see build_mention_index's docstring)."""
-    stripped = cite_mod.CITE_LINE_RE.sub(" ", text)
-    matched: set = set()
+    stripped = CITE_LINE_RE.sub(" ", text)
+    matched: set[GraphNodeId] = set()
     for cid, cand, pattern in mention_index:
-        if cid == src_node or cid in matched:
+        if cid.val == src_node or cid in matched:
             continue
         if cand not in stripped:
             continue
         if pattern.search(stripped):
-            b.add_edge(src_node, cid, "mentions", src_path=src_path)
+            b.add_edge(src_node, cid.val, "mentions", src_path=src_path)
             matched.add(cid)
 
 
 # --------------------------------------------------------------------------
 # per-record-kind extraction, generalized over the whole tree
 # --------------------------------------------------------------------------
-def _path_parts(path: str) -> List[str]:
+def _path_parts(path: str) -> list[str]:
     return list(PurePosixPath(path).parts)
 
 
-def _ev_id_for_path(path: str) -> Optional[str]:
+def _ev_id_for_path(path: str) -> str | None:
     parts = _path_parts(path)
     if "evidence" not in parts:
         return None
@@ -370,30 +545,87 @@ def _ev_id_for_path(path: str) -> Optional[str]:
     return f"ev:{home}/{stem}"
 
 
-def extract_graph(files: Dict[str, str], kb_sha: str, seen_date: str, kb_root: Path) -> GraphBuilder:
-    cite_mod = load_cite_module()
+def extract_graph(
+    files: dict[str, str],
+    kb_sha: str,
+    seen_date: str,
+    kb_root: Path,
+    *,
+    repository_identity: RepositoryIdentity | None = None,
+) -> GraphBuilder:
     b = GraphBuilder(kb_sha, seen_date)
+    total = 0
+    for count, (path, text) in enumerate(files.items(), 1):
+        size = len(text.encode("utf-8"))
+        total += size
+        _check_source_size(path, size, count, total)
+    identity = repository_identity or capture_repository_identity(kb_root)
+    b.stats.files_scanned = len(files)
+    json_records: dict[str, JsonValue] = {}
+    markdown_records: dict[str, tuple[dict[str, str], str]] = {}
+    malformed_markdown: set[str] = set()
+    for path, text in files.items():
+        if path.endswith(".md"):
+            try:
+                markdown_records[path] = split_frontmatter(text)
+            except KctxError as exc:
+                markdown_records[path] = ({}, text)
+                malformed_markdown.add(path)
+                b.stats.add_diagnostic(
+                    ExtractionDiagnostic(
+                        category="record-malformed",
+                        src_path=path,
+                        src_line=1,
+                        reason=str(exc),
+                        raw=text,
+                    )
+                )
+        if not path.endswith(".json"):
+            continue
+        try:
+            json_records[path] = decode_json_source(text)
+        except (json.JSONDecodeError, KctxError) as exc:
+            b.stats.add_diagnostic(
+                ExtractionDiagnostic(
+                    category="record-malformed",
+                    src_path=path,
+                    src_line=exc.lineno if isinstance(exc, json.JSONDecodeError) else 1,
+                    reason=str(exc),
+                    raw=text,
+                )
+            )
 
-    asset_ids: set = set()
-    relationship_paths: List[str] = []
-    dossier_paths: List[str] = []
-    sig_paths: List[str] = []
-    inv_paths: List[str] = []
-    proposal_paths: List[str] = []
-    ev_paths: List[str] = []
-    other_paths: List[str] = []
+    asset_ids: set[str] = set()
+    relationship_paths: list[str] = []
+    dossier_paths: list[str] = []
+    sig_paths: list[str] = []
+    inv_paths: list[str] = []
+    proposal_paths: list[str] = []
+    ev_paths: list[str] = []
+    other_paths: list[str] = []
 
     for path in sorted(files):
+        if path in malformed_markdown:
+            other_paths.append(path)
+            continue
         parts = _path_parts(path)
         if path.startswith("inventory/assets/") and path.endswith(".json"):
             continue  # pass 1 below
         if path.startswith("inventory/relationships/") and path.endswith(".json"):
             relationship_paths.append(path)
-        elif path.startswith("inventory/dossiers/") and path.endswith(".md") and PurePosixPath(path).name != "README.md":
+        elif (
+            path.startswith("inventory/dossiers/")
+            and path.endswith(".md")
+            and PurePosixPath(path).name != "README.md"
+        ):
             dossier_paths.append(path)
         elif path.startswith("signatures/") and path.endswith(".md"):
             sig_paths.append(path)
-        elif len(parts) >= 2 and parts[0] == "investigations" and PurePosixPath(path).name == "README.md":
+        elif (
+            len(parts) >= 2
+            and parts[0] == "investigations"
+            and PurePosixPath(path).name == "README.md"
+        ):
             inv_paths.append(path)
         elif path.startswith("proposals/") and PurePosixPath(path).name == "proposal.md":
             proposal_paths.append(path)
@@ -405,45 +637,99 @@ def extract_graph(files: Dict[str, str], kb_sha: str, seen_date: str, kb_root: P
     # pass 1: assets (other node kinds reference these by id)
     for path in sorted(files):
         if path.startswith("inventory/assets/") and path.endswith(".json"):
-            b.stats.files_scanned += 1
-            try:
-                obj = json.loads(files[path])
-            except json.JSONDecodeError:
+            if path not in json_records:
+                other_paths.append(path)
                 continue
-            aid = obj.get("id")
-            if not aid:
+            try:
+                obj = object_value(json_records[path], path)
+                aid = optional_text(obj.get("id"), "asset.id")
+                if not aid:
+                    raise KctxError("malformed", "asset.id is required and must not be empty")
+                name = optional_text(obj.get("name", aid), "asset.name")
+            except KctxError as exc:
+                b.stats.add_diagnostic(
+                    ExtractionDiagnostic(
+                        category="record-malformed",
+                        src_path=path,
+                        src_line=1,
+                        reason=str(exc),
+                        raw=files[path],
+                    )
+                )
+                other_paths.append(path)
                 continue
             asset_ids.add(aid)
-            b.add_node(aid, "asset", obj.get("name", aid), home_path=path)
+            b.add_node(aid, "asset", name, home_path=path)
+            scan_cites(b, aid, path, files[path], identity)
 
     # pass 2: typed relationships
     for path in relationship_paths:
-        b.stats.files_scanned += 1
-        try:
-            obj = json.loads(files[path])
-        except json.JSONDecodeError:
+        if path not in json_records:
+            other_paths.append(path)
             continue
-        src, dst, rtype = obj.get("from"), obj.get("to"), obj.get("type")
-        if not (src and dst and rtype):
+        try:
+            obj = object_value(json_records[path], path)
+            src = optional_text(obj.get("from"), "relationship.from")
+            dst = optional_text(obj.get("to"), "relationship.to")
+            rtype = optional_text(obj.get("type"), "relationship.type")
+            if not (src and dst and rtype):
+                raise KctxError(
+                    "malformed", "relationship.from, to and type are required and must not be empty"
+                )
+            state = optional_text(obj.get("status"), "relationship.status")
+            texts(obj.get("evidence", []), "relationship.evidence")
+        except KctxError as exc:
+            b.stats.add_diagnostic(
+                ExtractionDiagnostic(
+                    category="record-malformed",
+                    src_path=path,
+                    src_line=1,
+                    reason=str(exc),
+                    raw=files[path],
+                )
+            )
+            other_paths.append(path)
             continue
         rel = rtype.replace("-", "_")
         if dst not in asset_ids:
             b.add_node(dst, "asset", dst)
         b.add_node(src, "asset", src)
-        b.add_edge(src, dst, rel, src_path=path, state=obj.get("status"))
-        for loc in obj.get("evidence", []) or []:
-            m = SHORT_LOCATOR_RE.match(loc)
-            if m:
-                repo = canonical_repo(m.group("repo"), None, kb_root, cite_mod)
-                code_dst = f"code:{repo}:{m.group('path')}"
+        b.add_edge(src, dst, rel, src_path=path, state=state)
+        text = files[path]
+        scan_cites(b, src, path, text, identity)
+        # Retain source escapes and physical lines instead of reserializing JSON.
+        for source in json_field_string_sources(text, "evidence"):
+            loc = source.text
+            match = SHORT_LOCATOR_RE.fullmatch(loc)
+            if match:
+                repo = canonical_repo(match.group("repo"), None, identity)
+                code_dst = f"code:{repo}:{match.group('path')}"
                 b.add_node(code_dst, "code", loc)
-                b.add_edge(src, code_dst, "cites", src_path=path, cite_kind="code", rev=m.group("rev"))
+                start = source.offset(0)
+                _record_unresolved_repo(
+                    b,
+                    repo,
+                    path,
+                    text.count("\n", 0, start) + 1,
+                    text[start : source.offset(len(source.text))],
+                )
+                b.add_edge(
+                    src,
+                    code_dst,
+                    "cites",
+                    src_path=path,
+                    src_line=text.count("\n", 0, start) + 1,
+                    cite_kind="code",
+                    rev=match.group("rev"),
+                    line_selector=match.group("L"),
+                    raw=text[start : source.offset(len(source.text))],
+                    ordinal=-(start + 1),
+                )
 
     # pass 3: dossiers
     for path in dossier_paths:
-        b.stats.files_scanned += 1
         text = files[path]
-        fm, body = split_frontmatter(text)
+        fm, body = markdown_records[path]
         asset = fm.get("asset")
         if not asset:
             other_paths.append(path)
@@ -453,13 +739,12 @@ def extract_graph(files: Dict[str, str], kb_sha: str, seen_date: str, kb_root: P
         if asset not in asset_ids:
             b.add_node(asset, "asset", asset)
         b.add_edge(did, asset, "dossier_of", src_path=path)
-        scan_cites(b, did, path, text, kb_root, cite_mod)
+        scan_cites(b, did, path, text, identity)
 
     # pass 4: signatures
     for path in sig_paths:
-        b.stats.files_scanned += 1
         text = files[path]
-        fm, body = split_frontmatter(text)
+        fm, body = markdown_records[path]
         sid_raw = fm.get("id")
         if not sid_raw:
             other_paths.append(path)
@@ -476,13 +761,12 @@ def extract_graph(files: Dict[str, str], kb_sha: str, seen_date: str, kb_root: P
                 prid = f"pr:{fixref}"
                 b.add_node(prid, "pr", fixref)
                 b.add_edge(sid, prid, "mentions", src_path=path, cite_kind="pr")
-        scan_cites(b, sid, path, text, kb_root, cite_mod)
+        scan_cites(b, sid, path, text, identity)
 
     # pass 5: investigations
     for path in inv_paths:
-        b.stats.files_scanned += 1
         text = files[path]
-        fm, body = split_frontmatter(text)
+        fm, body = markdown_records[path]
         iid_raw = fm.get("id")
         if not iid_raw:
             other_paths.append(path)
@@ -505,13 +789,12 @@ def extract_graph(files: Dict[str, str], kb_sha: str, seen_date: str, kb_root: P
             tid = f"ticket:{t}"
             b.add_node(tid, "ticket", t)
             b.add_edge(iid, tid, "mentions", src_path=path)
-        scan_cites(b, iid, path, text, kb_root, cite_mod)
+        scan_cites(b, iid, path, text, identity)
 
     # pass 6: proposals
     for path in proposal_paths:
-        b.stats.files_scanned += 1
         text = files[path]
-        fm, body = split_frontmatter(text)
+        fm, body = markdown_records[path]
         pid_raw = fm.get("id")
         if not pid_raw:
             other_paths.append(path)
@@ -519,24 +802,74 @@ def extract_graph(files: Dict[str, str], kb_sha: str, seen_date: str, kb_root: P
         pid = f"proposal:{pid_raw}"
         b.add_node(pid, "proposal", fm.get("title", pid_raw), home_path=path)
         state = fm.get("status")
-        for ref in parse_list_value(fm.get("references")):
+        reference_field = re.search(r"(?m)^\s*references:", text)
+        reference_offset = reference_field.end() if reference_field else 0
+        for ordinal, ref in enumerate(parse_list_value(fm.get("references"))):
+            start = text.find(ref, reference_offset)
+            if start < 0:
+                raise KctxError("malformed", f"{path}: reference has no authored source location")
+            reference_offset = start + len(ref)
+            reference_line = text.count("\n", 0, start) + 1
             m = SHORT_LOCATOR_RE.match(ref)
             if m:
-                repo = canonical_repo(m.group("repo"), None, kb_root, cite_mod)
+                repo = canonical_repo(m.group("repo"), None, identity)
+                _record_unresolved_repo(b, repo, path, reference_line, ref)
                 dst = f"code:{repo}:{m.group('path')}"
                 b.add_node(dst, "code", ref)
-                b.add_edge(pid, dst, "references", src_path=path, cite_kind="code", rev=m.group("rev"), state=state)
+                b.add_edge(
+                    pid,
+                    dst,
+                    "references",
+                    src_path=path,
+                    src_line=reference_line,
+                    cite_kind="code",
+                    rev=m.group("rev"),
+                    line_selector=m.group("L"),
+                    state=state,
+                    raw=ref,
+                    ordinal=ordinal,
+                )
             elif ref.startswith("http://") or ref.startswith("https://"):
                 dst = f"web:{ref}"
                 b.add_node(dst, "web", ref)
-                b.add_edge(pid, dst, "references", src_path=path, cite_kind="web", state=state)
+                b.add_edge(
+                    pid,
+                    dst,
+                    "references",
+                    src_path=path,
+                    src_line=reference_line,
+                    cite_kind="web",
+                    state=state,
+                    raw=ref,
+                    ordinal=ordinal,
+                )
             elif PROPOSAL_ID_RE.match(ref):
                 dst = f"proposal:{ref}"
                 b.add_node(dst, "proposal", ref)
-                b.add_edge(pid, dst, "references", src_path=path, cite_kind="proposal", state=state)
+                b.add_edge(
+                    pid,
+                    dst,
+                    "references",
+                    src_path=path,
+                    src_line=reference_line,
+                    cite_kind="proposal",
+                    state=state,
+                    raw=ref,
+                    ordinal=ordinal,
+                )
             elif ref.startswith("ev:"):
                 b.add_node(ref, "ev", ref)
-                b.add_edge(pid, ref, "references", src_path=path, cite_kind="ev", state=state)
+                b.add_edge(
+                    pid,
+                    ref,
+                    "references",
+                    src_path=path,
+                    src_line=reference_line,
+                    cite_kind="ev",
+                    state=state,
+                    raw=ref,
+                    ordinal=ordinal,
+                )
             # else: an unparsed reference form -- not invented, not dropped
             # from the graph as a whole (the proposal node and its other
             # edges still land), just not turned into a typed `references`
@@ -546,65 +879,68 @@ def extract_graph(files: Dict[str, str], kb_sha: str, seen_date: str, kb_root: P
             dst = f"proposal:{sup}"
             b.add_node(dst, "proposal", sup)
             b.add_edge(pid, dst, "supersedes", src_path=path)
-        scan_cites(b, pid, path, text, kb_root, cite_mod)
+        scan_cites(b, pid, path, text, identity)
 
     # pass 7: evidence records (their own node, so they're addressable and
     # so anything they themselves cite gets scanned with the right src_node)
     for path in ev_paths:
-        b.stats.files_scanned += 1
         text = files[path]
-        fm, body = split_frontmatter(text)
+        fm, body = markdown_records[path]
         eid = _ev_id_for_path(path)
         if not eid:
             other_paths.append(path)
             continue
         b.add_node(eid, "ev", fm.get("title", eid), home_path=path)
-        scan_cites(b, eid, path, text, kb_root, cite_mod)
+        scan_cites(b, eid, path, text, identity)
 
     # pass 8: every other tracked .md/.json file -- the scope fix. Keyed by
     # path (handover-v2 design item 5's "else path" fallback), always
     # scanned for ⟦cite⟧ tokens regardless of structure.
     for path in sorted(set(other_paths)):
-        b.stats.files_scanned += 1
         text = files[path]  # full text, frontmatter included: a cite token can live in a
         # frontmatter list field (e.g. a proposal's `references:`), not just in prose body.
         did = f"doc:{path}"
         b.add_node(did, "doc", path, home_path=path)
-        scan_cites(b, did, path, text, kb_root, cite_mod)
+        scan_cites(b, did, path, text, identity)
 
     # mentions pass needs the full known_ids set from every record type, so
     # it runs last, over every src this snapshot produced a node+body for.
-    pending: List[Tuple[str, str, str]] = []
+    pending: list[tuple[str, str, str]] = []
     for path in dossier_paths:
         if path in files:
-            fm, body = split_frontmatter(files[path])
+            fm, body = markdown_records[path]
             if fm.get("asset"):
                 pending.append((f"dossier:{fm['asset']}", path, body))
     for path in sig_paths:
-        fm, body = split_frontmatter(files[path])
+        fm, body = markdown_records[path]
         if fm.get("id"):
             pending.append((f"sig:{fm['id']}", path, body))
     for path in inv_paths:
-        fm, body = split_frontmatter(files[path])
+        fm, body = markdown_records[path]
         if fm.get("id"):
             pending.append((f"inv:{fm['id']}", path, body))
     for path in proposal_paths:
-        fm, body = split_frontmatter(files[path])
+        fm, body = markdown_records[path]
         if fm.get("id"):
             pending.append((f"proposal:{fm['id']}", path, body))
     for path in ev_paths:
         eid = _ev_id_for_path(path)
         if eid:
-            _, body = split_frontmatter(files[path])
+            _, body = markdown_records[path]
             pending.append((eid, path, body))
     for path in sorted(set(other_paths)):
         text = files[path]
-        body = split_frontmatter(text)[1] if path.endswith(".md") else text
+        body = markdown_records[path][1] if path.endswith(".md") else text
         pending.append((f"doc:{path}", path, body))
 
+    candidate_count = sum(1 + int(bool(cid.val.partition(":")[2])) for cid in b.known_ids)
+    if candidate_count * len(pending) > MAX_MENTION_WORK:
+        raise KctxError(
+            "malformed", f"mention candidate/document work exceeds limit {MAX_MENTION_WORK}"
+        )
     mention_index = build_mention_index(b.known_ids)
     for src_node, src_path, body in pending:
-        scan_mentions(b, src_node, src_path, body, mention_index, cite_mod)
+        scan_mentions(b, src_node, src_path, body, mention_index)
 
     log = get_logger()
     log.debug(

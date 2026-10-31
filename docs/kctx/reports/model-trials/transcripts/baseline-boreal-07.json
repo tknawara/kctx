@@ -1,0 +1,16 @@
+{
+  "invocation_id": "cmp-15bba9ab09011d27",
+  "input_sha256": "392f9654a1ac23ee8af1947c40c2ec91977b37cc1627e0189dc3147db651015b",
+  "model": "omp routing alias default; resolved model not exposed",
+  "harness": "omp completion API; stateless schema-constrained calls; no tools or history",
+  "output": {
+    "outcome": "unknown",
+    "scope": "boreal/production",
+    "evidence_ids": [],
+    "unsupported_inference": false
+  },
+  "input_path": "docs/kctx/reports/qualification-corpus-1.0.1/evaluation/trials/baseline/boreal-07.json",
+  "system_prompt_sha256": "a56c1026b3ac72fc5a73a60756da6bd17094b5d94083180c179314db9fcb995a",
+  "tool_config_sha256": "3c6c2fe4d39f7eec8b241623f0e8d5da3f10867ca5ae8c039864998b836258f9",
+  "execution": "actual omp completion call; returned structured output; no task tools"
+}

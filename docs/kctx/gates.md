@@ -1,48 +1,115 @@
 # kctx gate report
 
-Working record of `docs/kctx/handover.md` §13 gates. A gate passes only with
-recorded evidence tied to an implementation revision; required-skipped tests
-mean *unqualified*, not passed. Everything here was executed in this
-repository on the revision recorded below.
+This report supersedes the earlier v1 “22/22” delivery claim. The audit found
+substantive semantic and persistence defects; the current implementation uses
+semantic version **2.0.0**, nominal Python/Lean identities, authenticated admission,
+immutable native snapshots, and one Click/stdio application.
 
-## Evidence index
+A kernel build, host correspondence, adapter qualification, and model usefulness
+are different evidence. A fixture name or a skipped capability is not a pass.
+Enterprise endpoint qualification is explicitly owned by the user's work agent;
+local native transports do not stand in for it.
 
-| Gate | Status | Evidence |
+## Verified checkpoint
+
+The complete Compose `verify` job exited zero and printed `VERIFY_ALL_OK`:
+
+- Ruff lint/format and strict Pyright: **127 files, zero diagnostics**.
+- Python boundary contracts: valid consumer accepted; **10 ID/enum misuse sites rejected**.
+- Behavioral suite: **662 passed, zero failures/errors/skips** (`test-report.json`).
+- Clean Lean 4.21.0 build: T01–T22 mapped, **194 registered declarations audited**,
+  no open obligations or unapproved axioms (`formal/proof-report.json`).
+- Six Lean namespace/nonempty misuse fixtures rejected.
+- Lean/Python: **280 cases, zero mismatches** — 149 reviewed fixtures,
+  112 generated cases, 19 stateful cases; **7/7 semantic mutants killed**.
+- Real CLI/Dolt smoke checks exact source, target, revision and citation bytes.
+- Nagini/Viper: two annotated leaves verified; twin-body guards pass; production
+  equivalence grids pass **100 freshness cases and 128 policy inputs**, no skipped corners.
+- Installed runtime without Lean/Lake/Elan/Docker/formal files passes the ordinary
+  CLI smoke and real TTY/JSON/JSON-RPC stream probes. Evidence: [runtime-ui.json](reports/runtime-ui.json).
+
+Execution reports record the checkout parent revision plus source/fixture digests;
+those digests identify the tested working tree, not the parent revision alone.
+The behavioral source/fixture SHA256 is
+`75cf3b480d8f500c2537280989f5f0372266a7a8e84c080d6c826868fe06f71b`.
+The clean formal source SHA256 is
+`50e7b86725191aed583861a33aa73a2aba28aa5d6d0d4b7a8d043a154ad82b68`.
+
+## G00–G18 disposition
+
+| Gate | Current disposition | Evidence and boundary |
 | --- | --- | --- |
-| G00 Baseline | **pass** | `docs/kctx/discovery.md` (zip SHA verified, env inventory, 266-test baseline, authority map). |
-| G01 Toolchains | **pass (compose)** | One command runs the whole pinned stack — `docker compose --profile verify run --build --rm verify`: python suite + contracts + Lean proofs/audit + conformance + real-dolt integration smoke (Lean 4.21.0 via elan, pydantic/structlog, Dolt CLI v2.6.1 — all in the image, nothing on the host). Verified end-to-end in-container: exit 0, all five stages. The 24 skips are cite-skill-dependent tests (dotfiles checkout is a work-environment artifact), surfaced not silent. | Lean pinned `leanprover/lean4:v4.21.0` via elan + `formal/lean-toolchain`; `formal/scripts/proof_check.sh` runs clean from checkout (build + axiom audit + report + reference smoke). Python dev tooling (Ruff/Pyright via `uv`) and the pinned Docker image build are *not yet wired* — no network-pullable base image was available in this environment; `formal/Dockerfile` + `compose.yaml` are written but unbuilt. |
-| G02 Types | **partial (typing slice 6 landed)** | `src/kctx/domain/ids.py` adds nominal validated ids at the legacy boundary (asset/evidence/relationship namespaces, per-namespace patterns, parse-once semantics; `tests/test_domain_ids.py`). `kctx.semantics` fully typed. | `src/kctx/semantics` introduces nominal identity (`Ident` with `IdKind`), `ClaimRef`, tagged-union `ClaimProp`, frozen dataclasses, explicit rejection unions; negative fixtures reject id mix indirectly via wire decoding. The *existing* CLI modules are not yet routed through these types (staged per handover §16 M2). |
-| G03 Language | **pass** | Vocabulary, scope/time/coverage contracts and positive/negative examples reviewed alongside this implementation (Lean model + `formal/theorems.json` assumptions fields). |
-| G04 Proofs | **pass (22/22)** | T01–T22 all discharged, including T07 (`Kctx.T07_checkDerivationV_agree` + `_ext` in `formal/Kctx/Locality.lean`) and T15 (`Kctx.T15_supported_ext`). Axiom audit clean (propext/Classical.choice/Quot.sound only; `formal/proof-report.json`, `open_obligations: []`); non-vacuity examples kernel-decided. |
-| G05 Correspondence | **pass (Nagini leaf added)** | Lean↔Python 35/35 (`conformance-report.json`). PLUS: the freshness leaf is now Viper-verified via Nagini in compose (`docker compose --profile nagini run --rm nagini`): contracts proved on the annotated twin, a drift guard asserts the executed runtime twin is token-identical to the verified one, and a 100-case equivalence grid ties it to production `assess_fresh`. Honest label: implementation verification for ONE leaf (freshness); the rest of the core remains conformance-checked. | `scripts/conformance_check.py`: 35 reviewed cases, Lean reference evaluator vs actual Python `kctx.semantics` functions, **0 mismatches** (`conformance-report.json`). |
-| G06 Workflows | **partial (2 slices landed)** | Pure `plan_transition`/`can_conclude` in both hosts with one readiness predicate, covered by conformance + 28 unit tests. CLI cutover slices landed: `storage.is_past_ttl` routes through the proved core (boundary fixtures pinned), and `proposals.set_status` now enforces the same readiness predicate on draft→proposed (the bypass fixture was intentionally updated). Corrections ordering fixed (slice 3: durable event written first against pinned pre-mutation state; target update is the recoverable projection — `tests/test_corrections.py`). Gate results are now revision-bound (slice 4: `gates.gates_rev` digests the gate *definitions*; selection skips results bound to an older table; legacy no-rev results keep old semantics; unrelated edits don't invalidate — `tests/test_gates_rev.py`). Admit cursor now persists pending judgment work (slice 5: scanned-through sha and completed admission are separate; pending items ride in the cursor, merge idempotently, and survive no-change replays and rewrite blocks — `tests/test_admit.py::PendingJudgmentPersistenceTest`). All five handover §8 source-observation rows now have landed fixes. |
-| G07 Compatibility | **partial** | Existing 266-test suite still green (291 total with semantics tests, 30 skips = absent graph deps). Frozen compatibility fixtures for legacy Markdown/citations not yet extracted (needs work-KB corpus). |
-| G08 Persistence | **not started** | Modeled conditional commit proved (T20/T21) and unit-tested; filesystem adapters untouched. |
-| G09 CLI/agent use | **not started** | No CLI changes yet (deliberate: typed core first, cutover later). |
-| G10 Migration | **not started** | Requires corpus (absent locally). |
-| G11–G13 Graph/Dolt/Remote | **not started** | Requires Dolt binary + bbgithub access (absent locally). |
-| G14 Restore/history | **not started** | — |
-| G15 Cost/usefulness | **not started** | Needs held-out corpus. |
-| G16 Runtime separation | **pass** | `src/kctx/semantics` is stdlib-only (asserted by `scripts/check_contracts.py`); tests + conformance Python side ran in an environment with no Lean/Docker on PATH for the CLI. Lean artifacts live only under `formal/`. |
-| G17 Cutover | **not applicable yet** | No authority change made; files remain canonical. |
-| G18 Delivery | **in progress** | Regular commits pushed to `tknawara/kctx`; this report is part of the delivery evidence. |
+| G00 Baseline | Pass | [Discovery](discovery.md), original archive identity and compatibility inventory retained. |
+| G01 Toolchains | Pass on Linux amd64 Compose | Locked Python quality job, Lean 4.21.0, native Dolt 2.6.1; no required dependency skips. Git and the GitHub CLI ship in images. |
+| G02 Types | Pass on migrated package | Frozen nominal IDs, plain enums, strict codecs, whole-package strict typing, Python negative consumers and Lean compile-fail fixtures. Unknown optional identities are `None`/`Option`, never empty valid IDs. |
+| G03 Language | Pass for declared v2 vocabulary | [Calculus](calculus.md), [revision decisions](calculus-revision.md), independent derivability/interpretation, exact inventory certificates, four-valued support and inhabited negative examples. No source/provider/Dolt primitives in the kernel. |
+| G04 Proofs | Pass for registered bounded contracts | Clean registry-driven proof report. [Theorem registry](../../formal/theorems.json) states each meaning and assumption; it does not claim Python, signatures or durable storage are kernel-proved. |
+| G05 Correspondence | Pass | `conformance-report.json`: full response/cardinality/identity checking, reviewed/generated/stateful fixtures, mutation campaign; separate Nagini leaf assurance. |
+| G06 Workflows | Pass for implemented operations | Real proposal/gate/landed-ref, investigation, correction, run/provenance and authenticated knowledge tests in the 662-case suite; services use shared semantic predicates. Acquisition, structural completion, admission and usability remain separate. |
+| G07 Compatibility | Pass with documented intentional changes | Built-in citation grammar replaces supplied external script; lossless Markdown/CRLF/unknown-section edits, legacy layouts and explicit schema refusal exercised. v1 semantic wire is replaced by strict v2; old citation executable and argparse shims are removed. Native Click global options precede commands. |
+| G08 Persistence | Final process qualification running | Real concurrent publication and failure/recovery regressions pass in the suite; final source-bound fault campaign is `reports/qualification-final/storage/report.json`. POSIX/cooperating-writer scope, not a cross-store transaction or hostile-writer filesystem proof. |
+| G09 CLI/agent use | Pass for current CLI and protocol | Installed Click commands and JSON-RPC initialize/citation/signed admission/retrieval/graph-refresh/EOF paths exercised. Structured errors, bounded contexts, honest completeness, explicit config roots, terminal escaping and clean machine streams. |
+| G10 Migration | Final process qualification running | Implemented account/quarantine/stage/apply/repeat/restore and retained selection; representative synthetic legacy-copy campaign is part of final storage qualification, not a claim that the user's production KB was migrated. |
+| G11 Graph snapshots | Pass regressions; final fault campaign running | Complete installed-package fingerprints, config/schema/engine/repository identity, isolated candidates, pinned reads, exact binding parity, real native recovery tests. Module-shortlist omission reproduced and repaired. |
+| G12 Dolt backend | Pass native integration; final campaign running | Native Dolt 2.6.1, normalized typed rows, immutable commits, managed read-only SQL sessions and publication checks. No mock SQL/storage semantics counted as native qualification. |
+| G13 Remote | Local transports passed; enterprise user-owned | Final local report exercises independent Git/native-Dolt clients and interrupted pushes. Actual enterprise authentication/policy/retention remains with the work agent by explicit user decision; no enterprise-pass claim. |
+| G14 Restore/history | Final process qualification running | Independent native restore, retained historical objects and authorized rollback/rollforward are exercised by the final storage campaign. Missing objects fail explicitly; normal Git clone alone is not a complete restore. |
+| G15 Cost/usefulness | Corrected-corpus final evaluation pending | Frozen task protocol retained. Prior mechanical thresholds passed; first real model trials exposed ambiguous evidence identity metadata. The corrected corpus is frozen as 1.0.2 before new measurements/calls; original failures are retained, never relabelled. |
+| G16 Runtime separation | Pass on installed Linux artifact | Runtime contains Python/Git/Dolt/gh, not Lean/Docker/formal files. Installed and module CLI paths, citation RPC and human/machine output probes pass. |
+| G17 Cutover | Local capability qualification being finalized | Authored files remain authoritative for authored records; native structured knowledge is authoritative only through authenticated completed releases. No two independent writers for a field, no silent legacy adapter fallback. Remote deployment is not promoted by local evidence. |
+| G18 Delivery | Verified implementation checkpoint; final receipts pending | Source, current operator/design docs, proof/conformance results and runtime evidence are being committed together. Final process/evaluation receipts will complete the gate table. |
 
-## Reproduction
+## Material findings retained
 
-```bash
-# Python-only (no Lean/Docker needed)
-python3 -m unittest discover -s tests
-python3 scripts/check_contracts.py
-python3 scripts/conformance_check.py          # Lean side required; --skip-lean exits 3
+- v1's blanket evidence-truth premise and nonrecursive support were not a sound
+  knowledge-admission model. V2 requires exact proposition-specific attestation
+  leaves, recursive witnesses and independent finite-domain interpretation.
+- False coverage, scope widening, incomplete replay identity and self-issued
+  approval were repaired in both hosts and exercised with independent expectations.
+- Mutable Dolt working-state reads, null/incomplete “current” snapshots, cross-KB
+  ownership, destructive rebuild history and count-only parity were repaired.
+  [Original native counterexamples](reports/dolt-before-repair.json) remain retained.
+- Historical citation coordinates and originating times are no longer rewritten
+  into current observations; current checks use separate advisory fields.
+- Acquisition helpers now reject source escapes and repository-controlled helpers;
+  regex redaction is isolated/bounded; signing/recovery revalidate complete inputs.
+- Lone UTF-16 surrogate escapes previously diverged between Lean and Python;
+  both now reject them. Deep malformed RPC arrays no longer terminate the server.
+- A changed installed JSON decoder previously left graph identity unchanged.
+  Complete package fingerprints now include it and newly added modules without
+  importing those modules just to hash them.
 
-# Proof environment (elan with the pinned toolchain, or compose --profile formal)
-cd formal && ./scripts/proof_check.sh         # writes formal/proof-report.json
+## Evaluation identity correction
+
+The first 48 real stateless model calls matched all outcome/scope/inference
+fields but failed every exact result because the source notes did not explicitly
+name an evidence-record ID separately from their ticket citation target. Raw
+receipts and the failing importer result are retained under
+[model-trials](reports/model-trials/validation/report.json).
+
+Corpus 1.0.2 adds validated `evidence_id` metadata to the authored notes. It does
+not change task prompts, expected labels, partitions, thresholds or the model
+system prompt/schema. The correction and generator digest are frozen in
+`fixtures/qualification/corpus-lock.json`. Both attempts remain distinguishable.
+The completion harness exposes its `default` routing alias and invocation IDs,
+not a resolved provider-model identity; this limitation is recorded, not invented.
+Byte/IO/context proxies are labelled as proxies, never actual model-token usage.
+
+## Reproduce
+
+```sh
+docker compose --profile verify run --build --rm verify
+docker compose --profile nagini run --build --rm nagini
+docker compose --profile verify run --build --rm runtime
+
+docker compose --profile verify run --rm verify python scripts/qualify_storage.py \
+  --section all --output docs/kctx/reports/qualification-final/storage
+docker compose --profile verify run --rm verify python scripts/qualify_remote.py \
+  --local-only --output docs/kctx/reports/qualification-final/remote
+docker compose --profile verify run --rm verify python scripts/evaluate_kctx.py \
+  --output docs/kctx/reports/qualification-final/evaluation
 ```
 
-## Open obligations and blockers
-
-1. **G01 Docker image** — needs a network-reachable base image pull
-   (unavailable in this environment); files are in place.
-3. **G10/G11 corpora and Dolt** — require the work environment (real KB,
-   `cite` provider, Dolt, bbgithub). None can be qualified from this machine,
-   and none were faked.
+Proof and conformance are required, not silent optional jobs. Failed or blocked
+qualification cases return nonzero. Reports retain exact commands, input/source
+identities and raw failures; only explicitly exercised scopes receive pass claims.

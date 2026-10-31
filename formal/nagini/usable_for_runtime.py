@@ -1,4 +1,4 @@
-"""Runtime twin of kctx.semantics.checker.usable_for (plain, executable).
+"""Runtime twin of kctx.semantics.checker.policy_allows (conjunction leaf only).
 
 Executed by the equivalence grid; twin_drift_check.py asserts this body is
 token-identical to the Viper-verified one in usable_for_contracts.py.

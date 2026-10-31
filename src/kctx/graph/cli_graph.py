@@ -1,75 +1,87 @@
-"""argparse wiring for `kctx graph ...`, called from cli.py's own
-build_parser()/dispatch() via the one registration hunk added there. Kept
-here (not inlined into cli.py) so cli.py's own diff stays a single small
-addition: import this module, call add_graph_subparser(sub) while building
-the parser, and call dispatch(args, root) when args.command == "graph".
-"""
+"""Native Click commands for the immutable citation graph."""
 
-import argparse
-from pathlib import Path
-from typing import Any, Tuple
+import click
 
-from errors import KctxError
-
-from graph import queries as queries_mod
-from graph import sync as sync_mod
+from kctx.cli.context import CliState
+from kctx.cli.help import RichGroup
+from kctx.cli.result import Reply
+from kctx.domain.json import object_value
+from kctx.graph import queries, sync
+from kctx.graph.models import GraphNodeId
 
 
-def add_graph_subparser(sub: "argparse._SubParsersAction") -> None:
-    graph_p = sub.add_parser(
-        "graph", help="M2 shadow-mode citation/relationship graph (Dolt); files remain authoritative"
+@click.group(cls=RichGroup)
+def graph() -> None:
+    """Inspect and synchronize the citation graph; files remain authoritative."""
+
+
+@graph.command("sync")
+@click.option("--rebuild", is_flag=True, help="Re-extract fully while retaining graph history.")
+@click.option("--history", type=click.IntRange(1, 1000), metavar="N")
+@click.pass_obj
+def synchronize(state: CliState, rebuild: bool, history: int | None) -> Reply:
+    """Extract tracked files and publish a complete graph generation."""
+    return Reply(sync.sync(state.root, rebuild=rebuild, history=history))
+
+
+@graph.command()
+@click.pass_obj
+def status(state: CliState) -> Reply:
+    """Show synchronization state and node/edge counts."""
+    return Reply(queries.status(state.root))
+
+
+@graph.command()
+@click.argument("target")
+@click.option("--limit", type=click.IntRange(1, queries.MAX_QUERY_LIMIT), default=50)
+@click.option("--include-illus", is_flag=True)
+@click.pass_obj
+def uses(state: CliState, target: str, limit: int, include_illus: bool) -> Reply:
+    """Find direct inbound edges grouped by relationship."""
+    result = queries.uses(
+        GraphNodeId(target), kb_root=state.root, limit=limit, include_illus=include_illus
     )
-    graph_sub = graph_p.add_subparsers(dest="graph_command", required=True)
+    return Reply(result, 0 if result["total"] else 2)
 
-    sync_p = graph_sub.add_parser("sync", help="extract the graph from tracked files and replay into Dolt")
-    sync_p.add_argument("--rebuild", action="store_true", help="delete and recreate the Dolt db first")
-    sync_p.add_argument(
-        "--history", type=int, default=None, metavar="N",
-        help="also replay the last N first-parent kb commits, so as-of/diff work immediately",
+
+@graph.command()
+@click.argument("target")
+@click.option("--depth", type=int, default=3)
+@click.option("--rel", multiple=True, help="Restrict traversal to these relationship types.")
+@click.option("--limit", type=click.IntRange(1, queries.MAX_QUERY_LIMIT), default=100)
+@click.pass_obj
+def impact(state: CliState, target: str, depth: int, rel: tuple[str, ...], limit: int) -> Reply:
+    """Find transitive inbound dependents."""
+    result = queries.impact(
+        GraphNodeId(target),
+        kb_root=state.root,
+        depth=depth,
+        rel=list(rel) if rel else None,
+        limit=limit,
     )
+    return Reply(result, 0 if result["total"] else 2)
 
-    graph_sub.add_parser("status", help="sync state, node/edge counts, whether the graph is current")
 
-    uses_p = graph_sub.add_parser("uses", help="direct inbound edges into an id, grouped by relationship")
-    uses_p.add_argument("target")
-    uses_p.add_argument("--limit", type=int, default=50)
-    uses_p.add_argument("--include-illus", action="store_true", help="include illustrative citations")
+@graph.command()
+@click.argument("kb_sha_a")
+@click.argument("kb_sha_b")
+@click.option("--limit", type=click.IntRange(1, queries.MAX_QUERY_LIMIT), default=200)
+@click.pass_obj
+def diff(state: CliState, kb_sha_a: str, kb_sha_b: str, limit: int) -> Reply:
+    """Compare edges at two immutable knowledge-base revisions."""
+    return Reply(queries.diff(kb_sha_a, kb_sha_b, kb_root=state.root, limit=limit))
 
-    impact_p = graph_sub.add_parser("impact", help="transitive inbound dependents of an id")
-    impact_p.add_argument("target")
-    impact_p.add_argument("--depth", type=int, default=3)
-    impact_p.add_argument("--rel", action="append", default=None, help="restrict traversal to these rel types")
-    impact_p.add_argument("--limit", type=int, default=100)
 
-    diff_p = graph_sub.add_parser("diff", help="edges added/removed/modified between two kb shas")
-    diff_p.add_argument("kb_sha_a")
-    diff_p.add_argument("kb_sha_b")
-    diff_p.add_argument("--limit", type=int, default=200)
-
-    check_p = graph_sub.add_parser(
-        "check", help="shadow-parity: binding count vs a direct cite.py parse, plus a uses() comparison"
+@graph.command()
+@click.option("--sample", "sample_ids", multiple=True, help="Compare direct uses for an ID.")
+@click.pass_obj
+def check(state: CliState, sample_ids: tuple[str, ...]) -> Reply:
+    """Compare exact graph bindings against authoritative files."""
+    result = queries.check(
+        state.root, sample_ids=[GraphNodeId(value) for value in sample_ids] if sample_ids else None
     )
-    check_p.add_argument(
-        "--sample", dest="sample_ids", action="append", default=None,
-        help="an id to compare `kctx graph uses` against `kctx uses` for (repeatable)",
-    )
+    return Reply(result, 0 if object_value(result["parity"], "parity")["match"] else 2)
 
 
-def dispatch(args: argparse.Namespace, root: Path) -> Tuple[Any, int]:
-    cmd = args.graph_command
-    if cmd == "sync":
-        return sync_mod.sync(root, rebuild=args.rebuild, history=args.history), 0
-    if cmd == "status":
-        return queries_mod.status(root), 0
-    if cmd == "uses":
-        res = queries_mod.uses(args.target, limit=args.limit, include_illus=args.include_illus)
-        return res, (0 if res["total"] else 2)
-    if cmd == "impact":
-        res = queries_mod.impact(args.target, depth=args.depth, rel=args.rel, limit=args.limit)
-        return res, (0 if res["total"] else 2)
-    if cmd == "diff":
-        return queries_mod.diff(args.kb_sha_a, args.kb_sha_b, limit=args.limit), 0
-    if cmd == "check":
-        res = queries_mod.check(root, sample_ids=args.sample_ids)
-        return res, (0 if res["parity"]["match"] else 2)
-    raise KctxError("malformed", f"unhandled graph subcommand {cmd!r}")
+def register(root: click.Group) -> None:
+    root.add_command(graph)

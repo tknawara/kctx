@@ -1,189 +1,190 @@
-import Kctx.Codec
+import Kctx.AuthoredCodec
 import Kctx.Theorems2
+import Kctx.SelectionCodec
 
 set_option autoImplicit false
-set_option maxHeartbeats 1000000
-
-/-! Reference evaluator (CI conformance oracle).
-
-Reads JSONL on stdin: one request object per line, each of the shape
-`{"id": "...", "op": "...", "kb": <kb>, "ctx": <ctx>, ...op fields...}`.
-Writes one response line per request:
-`{"id": "...", "ok": true, "result": <json>}` or
-`{"id": "...", "ok": false, "error": "..."}`.
-
-The wire format is the positional-array codec from `Kctx.Codec` (field order
-is the contract; see `kctx/semantics/wire.py` for the Python mirror). Both
-sides carry `SEMANTIC_VERSION`. -/
-
+set_option maxRecDepth 4096
 namespace Kctx.Reference
-
 open Lean
 
-def field (j : Json) (k : String) : Except String Json := do
-  match j with
-  | .obj _ => j.getObjVal? k
-  | _ => throw "expected object request"
+def baseFields : List String := ["schema_version", "semantic_version", "id", "op"]
+def requestFields (j : Json) (extra : List String) : Except String Unit := fields j (baseFields ++ extra)
 
-def reqId (j : Json) : String :=
-  match field j "id" with
-  | .ok (.str s) => s
-  | _ => ""
-
-def getKB (j : Json) : Except String KB := do
-  let kbj ← field j "kb"
-  decKB kbj
-
-def getCtx (j : Json) : Except String EvalCtx := do
-  let cj ← field j "ctx"
-  decEvalCtx cj
-
-def getDerivation (j : Json) : Except String Derivation := do
-  let dj ← field j "derivation"
-  decDerivation dj
-
-def getClaimRef (j : Json) : Except String ClaimRef := do
-  let rj ← field j "ref"
-  decClaimRef rj
-
-def getObserved (j : Json) : Except String (List Dep) := do
-  let oj ← field j "observed"
-  decList decDep oj
-
-def freshToJson (f : Fresh) : Json :=
-  match f with
-  | .fresh => .str "fresh"
-  | .stale => .str "stale"
-  | .unknown => .str "unknown"
-
-def verdictToJson (v : Verdict) : Json :=
-  match v with
-  | .accepted => .arr #[.str "accepted"]
-  | .rejected r => .arr #[.str "rejected", rejectionToJson r]
-where rejectionToJson (r : Rejection) : Json :=
-  match r with
-  | .ruleNotEnabled => .str "ruleNotEnabled"
-  | .missingPremise => .str "missingPremise"
-  | .missingConclusion => .str "missingConclusion"
-  | .conclusionPropMismatch => .str "conclusionPropMismatch"
-  | .contestedConclusion => .str "contestedConclusion"
-  | .contestedPremise => .str "contestedPremise"
-  | .ruleShapeMismatch => .str "ruleShapeMismatch"
-  | .evidenceNotOk => .str "evidenceNotOk"
-  | .evidenceNotFresh => .str "evidenceNotFresh"
-  | .missingCoverage => .str "missingCoverage"
-  | .coverageIncomplete => .str "coverageIncomplete"
-  | .footprintIncomplete => .str "footprintIncomplete"
-
-def commitOutcomeToJson (o : CommitOutcome) : Json :=
-  match o with
-  | .committed => .str "committed"
-  | .alreadyCommitted => .str "alreadyCommitted"
-  | .predecessorConflict => .str "predecessorConflict"
-  | .inputConflict => .str "inputConflict"
-  | .rejectedInvalid => .str "rejectedInvalid"
-
-def planOutcomeToJson (o : PlanOutcome) : Json :=
-  match o with
-  | .planned _ => .arr #[.str "planned"]
-  | .refused e =>
-    .arr #[.str "refused", .str (match e with
-      | .illegalTransition => "illegalTransition"
-      | .notReady => "notReady"
-      | .missingActor => "missingActor"
-      | .gatesNotPassed => "gatesNotPassed"
-      | .landedRefsUnresolved => "landedRefsUnresolved")]
-
-def decOptNull {a : Type} (g : Json -> Except String a) : Json -> Except String (Option a)
-  | .null => pure none
-  | j@(.str _) => some <$> g j
-  | j@(.arr _) => decOpt g j
-  | j => decOpt g j
-
-def handle (j : Json) : Except String Json := do
-  let op ← field j "op" >>= fun o => o.getStr?
+def evaluate (j : Json) (trusted : List VerifiedApproval := [])
+    (selections : List VerifiedSelectionApproval := []) (retained : List KB := []) : Except String Json := do
+  let schema ← field j "schema_version" >>= decNat
+  let version ← field j "semantic_version" >>= decStr
+  let _ ← field j "id" >>= decStr
+  if schema != 2 || version != semanticVersion then throw "invalid_request"
+  let op ← field j "op" >>= decStr
+  if op == "semantic_version" then
+    requestFields j []
+    return .str semanticVersion
+  if op == "fresh" then
+    requestFields j ["now", "observed_at", "ttl"]
+    let now ← field j "now" >>= decNat
+    let observed ← field j "observed_at" >>= decNat
+    let ttl ← field j "ttl" >>= decTtlPolicy
+    return encFresh (assessFresh ttl observed now)
+  if op == "validate" then
+    requestFields j ["kb"]
+    let _ ← field j "kb" >>= decKB
+    return .bool true
+  if op == "conclude" then
+    requestFields j ["investigation"]
+    return .bool (conclude (← field j "investigation" >>= decInvestigation))
+  if op == "authored_transition" then
+    requestFields j ["proposal", "target_status", "now"]
+    return .bool (authoredTransition (← field j "proposal" >>= decAuthoredProposal)
+      (← field j "target_status" >>= decAuthoredStatus) (← field j "now" >>= decNat))
+  if op == "authored_candidate_valid" then
+    requestFields j ["proposal", "target_status", "now"]
+    return .bool (authoredCandidateValid (← field j "proposal" >>= decAuthoredProposal)
+      (← field j "target_status" >>= decAuthoredStatus) (← field j "now" >>= decNat))
+  if op == "select" then
+    requestFields j ["state", "context", "journal", "plan"]
+    let state ← field j "state" >>= decSelectionState
+    let context ← field j "context" >>= decContext
+    let journal ← field j "journal" >>= decList decSelectionJournalEntry
+    let plan ← field j "plan" >>= decSelectionPlan
+    return encSelectionResult (applySelection state context journal plan selections retained)
+  if op == "retrieve_selected" then
+    requestFields j ["state", "context", "offset", "limit"]
+    let state ← field j "state" >>= decSelectionState
+    let context ← field j "context" >>= decContext
+    if !contextValid state.kb context then throw "invalid_request"
+    return encRetrieval (retrieveSelected state context (← field j "offset" >>= decNat) (← field j "limit" >>= decNat))
+  let k ← field j "kb" >>= decKB
+  let e ← field j "context" >>= decContext
   match op with
-  | "semantic_version" => pure (.str SEMANTIC_VERSION)
-  | "assess_fresh" =>
-    let tj ← field j "ttl"
-    let oj ← field j "observedAt"
-    let nj ← field j "now"
-    let t ← decTtl tj
-    let o ← decInt oj
-    let n ← decInt nj
-    pure (freshToJson (assessFresh t o n))
-  | "check_derivation" =>
-    let kb ← getKB j
-    let ctx ← getCtx j
-    let d ← getDerivation j
-    pure (verdictToJson (checkDerivationV kb.view ctx d))
+  | "check" =>
+      requestFields j ["kb", "context", "witness"]
+      return encOpt encChecked (check k e (← field j "witness" >>= decWitness))
   | "supported" =>
-    let kb ← getKB j
-    let ctx ← getCtx j
-    let r ← getClaimRef j
-    pure (Json.bool (Supported kb.view ctx r))
+      requestFields j ["kb", "context", "claim", "polarity"]
+      return .bool (supported k e (← field j "claim" >>= decRef) (← field j "polarity" >>= decPolarity))
+  | "assess" =>
+      requestFields j ["kb", "context", "claim"]
+      return encAssessment (assess k e (← field j "claim" >>= decRef))
   | "usable" =>
-    let kb ← getKB j
-    let ctx ← getCtx j
-    let r ← getClaimRef j
-    pure (Json.bool (UsableFor kb.view ctx r))
-  | "reusable" =>
-    let kb ← getKB j
-    let ctx ← getCtx j
-    let d ← getDerivation j
-    let observed ← getObserved j
-    pure (Json.bool (Reusable kb.view ctx d observed))
-  | "plan_transition" =>
-    let pj ← field j "proposal"
-    let target ← field j "target" >>= fun x => decProposalStatus x
-    let researchPresent ← field pj "researchPresent" >>= fun x => decBool x
-    let researchJustifiedSkip ← field pj "researchJustifiedSkip" >>= fun x => decBool x
-    let alternativesCount ← field pj "alternativesCount" >>= fun x => decInt x
-    let gatesTablePresent ← field pj "gatesTablePresent" >>= fun x => decBool x
-    let legacyProfile ← field pj "legacyProfile" >>= fun x => decBool x
-    let landGatesPassed ← field pj "landGatesPassed" >>= fun x => decBool x
-    let deployUseGatesPassed ← field pj "deployUseGatesPassed" >>= fun x => decBool x
-    let actor ← field j "actor" >>= fun x => decOptNull decStr x
-    let landedRefs ← field j "landedRefs" >>= fun x => decList decStr x
-    let refsResolvable ← field j "refsResolvable" >>= fun x => decBool x
-    let pid ← field pj "id" >>= fun x => decStr x
-    let status ← field pj "status" >>= fun x => decProposalStatus x
-    let p : Proposal :=
-      { id := ⟨pid⟩, status, researchPresent, researchJustifiedSkip,
-        alternativesCount, gatesTablePresent, legacyProfile, decidedBy := none,
-        landedRefs, landGatesPassed, deployUseGatesPassed }
-    pure (planOutcomeToJson (planTransition p target actor landedRefs refsResolvable))
-  | "conclude_investigation" =>
-    let ij ← field j "investigation"
-    let checkedAgainst ← field ij "checkedAgainst" >>= fun x => decStr x
-    let scopeAndLimits ← field ij "scopeAndLimits" >>= fun x => decStr x
-    let hyps ← field ij "hypotheses" >>= fun x =>
-      decList (fun h => do
-        let text ← field h "text" >>= fun y => decStr y
-        let st ← field h "status" >>= fun y => decHypStatus y
-        pure ({ text, status := st } : Hypothesis)) x
-    let i : Investigation := { id := ⟨"inv"⟩, checkedAgainst, scopeAndLimits, hypotheses := hyps }
-    pure (Json.bool (canConclude i))
-  | _ => throw ("unknown op: " ++ op)
+      requestFields j ["kb", "context", "claim"]
+      return .bool (usableFor k e (← field j "claim" >>= decRef))
+  | "reuse" =>
+      requestFields j ["kb", "context", "claim", "receipt"]
+      return .bool (reusable k e (← field j "claim" >>= decRef) (← field j "receipt" >>= decReceipt))
+  | "retrieve" =>
+      requestFields j ["kb", "context", "offset", "limit"]
+      if !contextValid k e then throw "invalid_request"
+      return encRetrieval (retrieve k e (← field j "offset" >>= decNat) (← field j "limit" >>= decNat))
+  | "admit" =>
+      requestFields j ["kb", "context", "plan"]
+      return encApplyResult (applyPlan k e [] (← field j "plan" >>= decPlan) trusted)
+  | "sequence" =>
+      requestFields j ["kb", "context", "journal", "plans"]
+      if !contextValid k e then throw "invalid_request"
+      return encSequenceResult (applySequence k e (← field j "journal" >>= decList decJournalEntry)
+        trusted (← field j "plans" >>= decList decPlan))
+  | "transition" =>
+      requestFields j ["kb", "context", "proposal", "target_status"]
+      return .bool (transition k e (← field j "proposal" >>= decProposal) (← field j "target_status" >>= decProposalStatus))
+  | _ => throw "invalid_request"
 
-def handleLine (line : String) : String :=
-  let j := Json.parse line.trim
-  match j with
-  | .error e =>
-    toString (Json.mkObj [("id", .str ""), ("ok", Json.bool False), ("error", .str ("parse: " ++ e))]).compress
-  | .ok req =>
-    match handle req with
-    | .error e =>
-      toString (Json.mkObj [("id", .str (reqId req)), ("ok", Json.bool False), ("error", .str e)]).compress
-    | .ok res =>
-      toString (Json.mkObj [("id", .str (reqId req)), ("ok", Json.bool True), ("result", res)]).compress
+/-- Reference-only authenticated environment fixture. Ordinary requests cannot
+manufacture VerifiedApproval; production adapters obtain these after verification. -/
+def unwrap (j : Json) : Except String (Json × List VerifiedApproval × List VerifiedSelectionApproval × List KB) := do
+  match field j "request" with
+  | .error _ => pure (j, [], [], [])
+  | .ok request =>
+      fields j ["request", "trusted_environment"]
+      let env ← field j "trusted_environment"
+      fields env ["approvals", "selections", "retained"]
+      let approvals ← field env "approvals" >>= decList decVerifiedApproval
+      let selections ← field env "selections" >>= decList decVerifiedSelectionApproval
+      let retained ← field env "retained" >>= decList decKB
+      if !unique (retained.map (·.snapshot)) then throw "invalid_request"
+      return (request, approvals, selections, retained)
+
+def response (j : Json) : Json :=
+  match unwrap j with
+  | .error _ => Json.mkObj [("id", .str ""), ("ok", .bool false), ("error", .str "invalid_request")]
+  | .ok (request, trusted, selections, retained) =>
+      let id := (field request "id" >>= decStr).toOption.getD ""
+      match evaluate request trusted selections retained with
+      | .ok result => Json.mkObj [("id", .str id), ("ok", .bool true), ("result", result)]
+      | .error _ => Json.mkObj [("id", .str id), ("ok", .bool false), ("error", .str "invalid_request")]
+
+structure ObjectFrame where
+  object : Bool
+  keys : List String
+  expectsKey : Bool
+
+/-- JSON escape syntax may contain UTF-16 pairs, but never lone surrogates.
+Lean's parser replaces lone surrogates; the wire contract rejects them instead. -/
+private def scalarEscapes : List Char → Bool
+  | '\\' :: 'u' :: a :: b :: _c :: _d :: rest =>
+      if (a == 'd' || a == 'D') && ['8', '9', 'a', 'A', 'b', 'B'].contains b then
+        match rest with
+        | '\\' :: 'u' :: e :: f :: _g :: _h :: following =>
+            (e == 'd' || e == 'D') && ['c', 'C', 'd', 'D', 'e', 'E', 'f', 'F'].contains f &&
+              scalarEscapes following
+        | _ => false
+      else if (a == 'd' || a == 'D') && ['c', 'C', 'd', 'D', 'e', 'E', 'f', 'F'].contains b then false
+      else scalarEscapes rest
+  | '\\' :: _ :: rest => scalarEscapes rest
+  | _ :: rest => scalarEscapes rest
+  | [] => true
+
+/-- Preserve duplicate-key rejection before Json.parse normalizes object maps.
+Keys are decoded before comparison, so escaped aliases are duplicates too. -/
+def quoted : List Char → Bool → List Char → Option (String × List Char)
+  | [], _, _ => none
+  | c :: cs, escaped, acc =>
+      if escaped then quoted cs false (c :: acc)
+      else if c == '\\' then quoted cs true (c :: acc)
+      else if c == '"' then some (String.mk ((c :: acc).reverse), cs)
+      else quoted cs false (c :: acc)
+
+def uniqueKeys : Nat → List Char → List ObjectFrame → Bool
+  | 0, _, _ => false
+  | _ + 1, [], _ => true
+  | n + 1, c :: cs, stack =>
+      if c == '"' then
+        match quoted cs false ['"'] with
+        | none => false
+        | some (raw, rest) =>
+            if !scalarEscapes raw.toList then false else
+            match stack with
+            | f :: fs =>
+                if f.object && f.expectsKey then
+                  match Json.parse raw >>= decStr with
+                  | .error _ => false
+                  | .ok key => !f.keys.contains key && uniqueKeys n rest ({ f with keys := key :: f.keys, expectsKey := false } :: fs)
+                else uniqueKeys n rest stack
+            | [] => uniqueKeys n rest stack
+      else if c == '{' then uniqueKeys n cs (⟨true, [], true⟩ :: stack)
+      else if c == '[' then uniqueKeys n cs (⟨false, [], false⟩ :: stack)
+      else if c == '}' || c == ']' then uniqueKeys n cs stack.tail
+      else if c == ',' then
+        match stack with
+        | f :: fs => uniqueKeys n cs ({ f with expectsKey := f.object } :: fs)
+        | [] => false
+      else uniqueKeys n cs stack
+
+def processLine (line : String) : Json :=
+  let parsed := Json.parse line
+  if uniqueKeys (line.length + 1) line.toList [] then
+    match parsed with
+    | .ok j => response j
+    | .error _ => Json.mkObj [("id", .str ""), ("ok", .bool false), ("error", .str "invalid_request")]
+  else Json.mkObj [("id", .str ""), ("ok", .bool false), ("error", .str "invalid_request")]
 
 end Kctx.Reference
 
 def main : IO Unit := do
-  let stdin ← IO.getStdin
-  let mut line ← stdin.getLine
-  while !line.isEmpty do
+  let input ← IO.getStdin
+  let output ← IO.getStdout
+  repeat
+    let line ← input.getLine
+    if line.isEmpty then break
     if !line.trim.isEmpty then
-      IO.println (Kctx.Reference.handleLine line)
-    line ← stdin.getLine
+      output.putStrLn ((Kctx.Reference.processLine line).compress)

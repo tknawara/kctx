@@ -8,7 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from errors import KctxError  # noqa: E402
+from kctx.errors import KctxError  # noqa: E402
 from kctx.config import Config, config_path, write_config  # noqa: E402
 
 
@@ -57,15 +57,15 @@ class ConfigLoadTests(unittest.TestCase):
         # source points at the (empty but existing) file
         self.assertEqual(cfg.source, Path(os.environ['KCTX_CONFIG']))
 
-    def test_all_keys_parse_to_paths(self):
+    def test_path_settings_parse_to_paths(self):
         self._write(
             self.tmp,
-            'root = "/kb"\ncite_py = "/c/cite.py"\ncite_bin = "/c/cite"\n'
+            'root = "/kb"\ncache_dir = "/c/cache"\ngh_bin = "/c/gh"\n'
             'dolt_bin = "/usr/bin/dolt"\ngraph_dir = "/g"\nlog_dir = "/l"\n',
         )
         cfg = Config.load()
         self.assertEqual(cfg.root, Path("/kb"))
-        self.assertEqual(cfg.cite_py, Path("/c/cite.py"))
+        self.assertEqual(cfg.cache_dir, Path("/c/cache"))
         self.assertEqual(cfg.dolt_bin, Path("/usr/bin/dolt"))
         self.assertEqual(cfg.get("graph_dir"), Path("/g"))
 
@@ -100,8 +100,22 @@ class ConfigLoadTests(unittest.TestCase):
         self._write(self.tmp, 'root = "/kb"\n')
         eff = Config.load().effective()
         self.assertEqual(eff["root"]["origin"], "config")
-        self.assertEqual(eff["cite_py"]["origin"], "discovery")
+        self.assertEqual(eff["cache_dir"]["origin"], "discovery")
         self.assertIsNotNone(eff["config_file"])
+
+    def test_citation_acquisition_uses_typed_config_values(self):
+        self._write(self.tmp, 'git_url_template = "/remotes/{org}/{repo}"\nfetch_interval_seconds = 0\ngithub_host = "github.example"\n')
+        cfg = Config.load()
+        self.assertEqual(cfg.git_url_template, "/remotes/{org}/{repo}")
+        self.assertEqual(cfg.fetch_interval_seconds, 0)
+        self.assertEqual(cfg.github_host, "github.example")
+
+    def test_invalid_fetch_interval_and_removed_cite_binary_are_rejected(self):
+        for text in ('fetch_interval_seconds = true', 'fetch_interval_seconds = -1', 'cite_bin = "/legacy/cite"', 'cite_py = "/legacy/cite.py"'):
+            with self.subTest(text=text):
+                self._write(self.tmp, text)
+                with self.assertRaises(KctxError):
+                    Config.load()
 
 
 class ConfigLocationTests(unittest.TestCase):

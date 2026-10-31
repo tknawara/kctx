@@ -1,6 +1,451 @@
 {
-  "cases": 35,
+  "cases": 280,
+  "coverage": {
+    "fixture_scenarios": 149,
+    "generated_scenarios": 112,
+    "qualification": "golden-generated-stateful-full-response",
+    "stateful_scenarios": 19
+  },
+  "errors": [],
+  "evidence": {
+    "digest_algorithm": "sha256",
+    "fixtures": {
+      "files": {
+        "tests/conformance/cases.jsonl": "0a4955c3738942607469374f4bc805afc2080f68cfb1c39646b6a16b65342cad"
+      },
+      "sha256": "ca835f4c94aec5cee30f054fbba4470847969c080bd1d498069bc6b7412948a4"
+    },
+    "lean_sources": {
+      "files": {
+        "formal/Kctx.lean": "854107a79d78cca2db43062cb50719417548201a3078b96008bd15d3fa541000",
+        "formal/Kctx/AuthoredCodec.lean": "0a2df62e8862874e4ff32bdbdee3f6189a23479ee07ad0b33aaf1c078110acb5",
+        "formal/Kctx/Checker.lean": "744e298eb2994694feb3e546429bebab7ac7084e4cfa2eab1e9e3eace011c03c",
+        "formal/Kctx/Codec.lean": "143f7d8b103227996cf525ce192f50fb7b9ef5cc785dec7e4b233b72421378ad",
+        "formal/Kctx/CodecProofs.lean": "d93c83ebde3ad5080bad98bd3a69adc9bc2e186d5877b2f00bba271fb2874f06",
+        "formal/Kctx/CodecRecords.lean": "529756d377b2b9d781d2b58398737bf49294e30e32024aad223301c81723a8f9",
+        "formal/Kctx/CompositionLaws.lean": "6c9ae61b8a29a5ea95c81f9b63f6c0a84c6962d7504499bf70841cb71f62799e",
+        "formal/Kctx/Footprint.lean": "e045fb60fb069d9f75fb360d6720fe9ab8126ef07eff02d1a475ae2bc592ca5d",
+        "formal/Kctx/Ids.lean": "bc1e42186ce03ed1e0e4b58503d9eb2b53377e51d23254efdd0f579674e81f9a",
+        "formal/Kctx/Locality.lean": "391070961bf50bdad7ddf1474d983bceca62391ba8e09c8e8ff88554ab19cd81",
+        "formal/Kctx/Model.lean": "bb5c0952086607c94d2e32f9309378c384aae38bc0efe63cdf1ff3072b295ac3",
+        "formal/Kctx/NonVacuity.lean": "2a64f0c308f1a6581290677af6dc17e6737d59e953262054159c9d6ece5f8f6d",
+        "formal/Kctx/Reference.lean": "7c2b3ae81074f2d06b97ec1b41846a338ca8d9f89506a478ee21bc12648b4b5a",
+        "formal/Kctx/Selection.lean": "b86b662a2789d6eee187f38cc01aba7212b3dfe26872bbf164f482ce0eb1359c",
+        "formal/Kctx/SelectionCodec.lean": "a7189659dad4a7ca39062a93e1bc804e75424f1770c8bce99cc591a076915c80",
+        "formal/Kctx/Semantics.lean": "2534f96772cfbdbb587c71e104a577d9bb1156256262586b6fd1a9076d5e00d0",
+        "formal/Kctx/Theorems.lean": "f73abce561950689d29e702e2da5100c287d89df557263870be2d6e1c9790183",
+        "formal/Kctx/Theorems2.lean": "75bd4a8ed56bd76ee36a20b106b60f770c387da0ccdad09bc1baeaa160aee063",
+        "formal/Kctx/Time.lean": "04762ca1c0e6694611222ff7bb948954477a3bd7ec8bcd8fbe9190ee814ffed7",
+        "formal/Kctx/WellFormed.lean": "ac783b7d07db7db75ce58ca21363b45bd50dadff8ec1b43a4e10a1c57624b254",
+        "formal/Kctx/Workflow.lean": "e1d1ee37c9fe1e41a659122dbb09ab2b0a9f818db33d2c3c876ad5d915f814a3",
+        "formal/Kctx/WorkflowCodecProofs.lean": "189ee1ce18ef36cf089c0bc1c71d4e685b989a260ceeb4306928fea3882ce213",
+        "formal/Kctx/WorkflowWireObjects.lean": "b6dc870131067c64b2e1be3ce20a104b4b9a3717ff8fcbb132382fda0eaa05cc",
+        "formal/lake-manifest.json": "d166d37a8c85c291fbb128494da9d71477ea80dbedbe0f74557a50616413757d",
+        "formal/lakefile.toml": "0cf694f8f5984f4eded5b00a674fcbbc5181d4c3f6a70b0d4f7fccb6b0071fc1",
+        "formal/lean-toolchain": "d24fed434d3b13adfaab57724a0a7f270ea8bf1c818b5ae5cf25cbce24dd685c"
+      },
+      "sha256": "216e5861e15617d2d46beddb0d5ca2284d9c9a0fe9d1c1a9a12af849ed2608e3"
+    },
+    "python_sources": {
+      "files": {
+        "scripts/conformance_check.py": "b1e4d0ff9d736d64e0f5b369e44bad3513f31e0642fe0a5ba0c53c9e2e041628",
+        "scripts/semantic_cases.py": "9427d308ea4bdda807f4488498122e7363421c03b4e4620732c1cb2e064a9246",
+        "scripts/semantic_mutations.py": "604c54e3345900ffc84d90db13575fb9a8b8d53545b6ac37e4915d33470901b9",
+        "src/kctx/domain/ids.py": "183ffac3a677855699ea3d45c65d36b68684ec7bf96a12f77a4917837f5b224b",
+        "src/kctx/errors.py": "7525192b5e1a7a084b6a5b80c94beafb83b379cd71294ce5ec467297413504d0",
+        "src/kctx/semantics/__init__.py": "4e12ad82720a923437d623c46e5a27a068ea8da79509cf23ee9da5707f7e677b",
+        "src/kctx/semantics/checker.py": "196aeaf161ca107db7ce05469789cf893784d2c579fdc3757334978005859c18",
+        "src/kctx/semantics/model.py": "4fa9a05d7d1b64992200e32874c4ec252f976a0fc3f59f02d7b1cc121df9ceda",
+        "src/kctx/semantics/time.py": "eea9776469088e289be1c7536107d3a9822d418bfff5c45fbcc752cb4346669e",
+        "src/kctx/semantics/wellformed.py": "d05794e489ea94afef934c3d9aec33942fd12b491e096e6891b9a89c11447602",
+        "src/kctx/semantics/wire.py": "fe571e5718fd51081a19d37cfc264853ebc6513fdcef5017fbed23b99596669b",
+        "src/kctx/semantics/workflow.py": "ebc086d96256ad7d912317eee61821783789ecd1d3968c1fd3e46e725a7f7a46",
+        "tests/semantics/examples.py": "471758a3d412b92e31e527322bfbd602b6b474cf32d12facba63416226189def"
+      },
+      "sha256": "d6c422fd4f7f6afffb30a3a05ab0976ab2e733844404a3d9d7fa9a14eddf56db"
+    },
+    "python_version": "3.12.3",
+    "reference": {
+      "path": "/work/kctx/formal/.lake/build/bin/kctxref",
+      "sha256": "d17b80ad90a213c46b05d47f20374b42d28dd3d30fa13da1ac41d7eac302ee69"
+    }
+  },
+  "handshake": {
+    "expected_version": "2.0.0",
+    "reference_version": "2.0.0",
+    "result": "pass"
+  },
   "mismatches": 0,
-  "semantic_version": "1.0.0",
-  "result": "pass"
+  "mutations": {
+    "killed": 7,
+    "mutants": [
+      {
+        "baseline": {
+          "id": "inclusive-evidence-ttl",
+          "ok": true,
+          "result": true
+        },
+        "fixture": "inclusive-evidence-ttl",
+        "killed": true,
+        "mutated": {
+          "id": "inclusive-evidence-ttl",
+          "ok": true,
+          "result": false
+        },
+        "mutation": "ttl-boundary"
+      },
+      {
+        "baseline": {
+          "id": "retained-footprint-complete",
+          "ok": true,
+          "result": {
+            "dependencies": [
+              {
+                "tag": "observation",
+                "value": {
+                  "content": "sha256:retained-bytes",
+                  "id": "observation-1",
+                  "observed_at": 100,
+                  "outcome": "ok",
+                  "revision": "commit-1",
+                  "source": "repo:payments"
+                }
+              },
+              {
+                "tag": "claim",
+                "value": {
+                  "id": "limit",
+                  "revision": "r1",
+                  "statement": {
+                    "formula": {
+                      "atom": {
+                        "args": [
+                          "500"
+                        ],
+                        "predicate": "limit",
+                        "subject": "batch"
+                      },
+                      "tag": "atom"
+                    },
+                    "polarity": "positive",
+                    "scope": {
+                      "project": "payments",
+                      "selector": ""
+                    }
+                  }
+                }
+              },
+              {
+                "tag": "attestation",
+                "value": {
+                  "authority": "reviewer-key",
+                  "claim": {
+                    "id": "limit",
+                    "revision": "r1"
+                  },
+                  "id": "attestation-1",
+                  "observation": "observation-1",
+                  "statement": {
+                    "formula": {
+                      "atom": {
+                        "args": [
+                          "500"
+                        ],
+                        "predicate": "limit",
+                        "subject": "batch"
+                      },
+                      "tag": "atom"
+                    },
+                    "polarity": "positive",
+                    "scope": {
+                      "project": "payments",
+                      "selector": ""
+                    }
+                  }
+                }
+              },
+              {
+                "events": [],
+                "tag": "corrections",
+                "target": {
+                  "id": "limit",
+                  "revision": "r1"
+                }
+              },
+              {
+                "tag": "context",
+                "value": {
+                  "checker": "kctx-2",
+                  "intended_use": "review",
+                  "now": 0,
+                  "policy": {
+                    "authorized_actors": [
+                      "reviewer-key",
+                      "independent-reviewer"
+                    ],
+                    "id": "review-policy",
+                    "require_fresh": true,
+                    "require_uncontested": true,
+                    "require_validation": false,
+                    "ttl": 10
+                  },
+                  "ruleset": "core-2",
+                  "semantic_version": "2.0.0",
+                  "snapshot": "snapshot-1",
+                  "sources": [
+                    {
+                      "content": "sha256:retained-bytes",
+                      "revision": "commit-1",
+                      "source": "repo:payments"
+                    }
+                  ],
+                  "target": {
+                    "project": "payments",
+                    "selector": ""
+                  }
+                }
+              }
+            ],
+            "statement": {
+              "formula": {
+                "atom": {
+                  "args": [
+                    "500"
+                  ],
+                  "predicate": "limit",
+                  "subject": "batch"
+                },
+                "tag": "atom"
+              },
+              "polarity": "positive",
+              "scope": {
+                "project": "payments",
+                "selector": ""
+              }
+            }
+          }
+        },
+        "fixture": "retained-footprint-complete",
+        "killed": true,
+        "mutated": {
+          "id": "retained-footprint-complete",
+          "ok": true,
+          "result": {
+            "dependencies": [
+              {
+                "tag": "claim",
+                "value": {
+                  "id": "limit",
+                  "revision": "r1",
+                  "statement": {
+                    "formula": {
+                      "atom": {
+                        "args": [
+                          "500"
+                        ],
+                        "predicate": "limit",
+                        "subject": "batch"
+                      },
+                      "tag": "atom"
+                    },
+                    "polarity": "positive",
+                    "scope": {
+                      "project": "payments",
+                      "selector": ""
+                    }
+                  }
+                }
+              },
+              {
+                "tag": "attestation",
+                "value": {
+                  "authority": "reviewer-key",
+                  "claim": {
+                    "id": "limit",
+                    "revision": "r1"
+                  },
+                  "id": "attestation-1",
+                  "observation": "observation-1",
+                  "statement": {
+                    "formula": {
+                      "atom": {
+                        "args": [
+                          "500"
+                        ],
+                        "predicate": "limit",
+                        "subject": "batch"
+                      },
+                      "tag": "atom"
+                    },
+                    "polarity": "positive",
+                    "scope": {
+                      "project": "payments",
+                      "selector": ""
+                    }
+                  }
+                }
+              },
+              {
+                "events": [],
+                "tag": "corrections",
+                "target": {
+                  "id": "limit",
+                  "revision": "r1"
+                }
+              },
+              {
+                "tag": "context",
+                "value": {
+                  "checker": "kctx-2",
+                  "intended_use": "review",
+                  "now": 0,
+                  "policy": {
+                    "authorized_actors": [
+                      "reviewer-key",
+                      "independent-reviewer"
+                    ],
+                    "id": "review-policy",
+                    "require_fresh": true,
+                    "require_uncontested": true,
+                    "require_validation": false,
+                    "ttl": 10
+                  },
+                  "ruleset": "core-2",
+                  "semantic_version": "2.0.0",
+                  "snapshot": "snapshot-1",
+                  "sources": [
+                    {
+                      "content": "sha256:retained-bytes",
+                      "revision": "commit-1",
+                      "source": "repo:payments"
+                    }
+                  ],
+                  "target": {
+                    "project": "payments",
+                    "selector": ""
+                  }
+                }
+              }
+            ],
+            "statement": {
+              "formula": {
+                "atom": {
+                  "args": [
+                    "500"
+                  ],
+                  "predicate": "limit",
+                  "subject": "batch"
+                },
+                "tag": "atom"
+              },
+              "polarity": "positive",
+              "scope": {
+                "project": "payments",
+                "selector": ""
+              }
+            }
+          }
+        },
+        "mutation": "dropped-dependency"
+      },
+      {
+        "baseline": {
+          "id": "unknown-ttl-not-fresh",
+          "ok": true,
+          "result": false
+        },
+        "fixture": "unknown-ttl-not-fresh",
+        "killed": true,
+        "mutated": {
+          "id": "unknown-ttl-not-fresh",
+          "ok": true,
+          "result": true
+        },
+        "mutation": "unknown-fresh"
+      },
+      {
+        "baseline": {
+          "id": "target-scope-must-apply",
+          "ok": true,
+          "result": false
+        },
+        "fixture": "target-scope-must-apply",
+        "killed": true,
+        "mutated": {
+          "id": "target-scope-must-apply",
+          "ok": true,
+          "result": true
+        },
+        "mutation": "swapped-target"
+      },
+      {
+        "baseline": {
+          "id": "skipped-gate-not-applied",
+          "ok": true,
+          "result": false
+        },
+        "fixture": "skipped-gate-not-applied",
+        "killed": true,
+        "mutated": {
+          "id": "skipped-gate-not-applied",
+          "ok": true,
+          "result": true
+        },
+        "mutation": "skipped-gate"
+      },
+      {
+        "baseline": {
+          "id": "dispute-preserves-support",
+          "ok": true,
+          "result": {
+            "applicable": true,
+            "available": true,
+            "contested": true,
+            "freshness": "fresh",
+            "support": "positive",
+            "usable": false,
+            "validated": false
+          }
+        },
+        "fixture": "dispute-preserves-support",
+        "killed": true,
+        "mutated": {
+          "id": "dispute-preserves-support",
+          "ok": true,
+          "result": {
+            "applicable": true,
+            "available": true,
+            "contested": false,
+            "freshness": "fresh",
+            "support": "positive",
+            "usable": true,
+            "validated": false
+          }
+        },
+        "mutation": "erased-dispute"
+      },
+      {
+        "baseline": {
+          "id": "authored-historical-prefilter",
+          "ok": true,
+          "result": true
+        },
+        "fixture": "authored-historical-prefilter",
+        "killed": true,
+        "mutated": {
+          "id": "authored-historical-prefilter",
+          "ok": true,
+          "result": false
+        },
+        "mutation": "historical-latest-selection"
+      }
+    ],
+    "result": "pass",
+    "total": 7
+  },
+  "python_response_count": 280,
+  "reference_response_count": 280,
+  "report_schema_version": 1,
+  "result": "pass",
+  "semantic_version": "2.0.0"
 }

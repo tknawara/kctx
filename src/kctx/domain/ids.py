@@ -1,92 +1,117 @@
-"""Nominal identity types for the legacy record layer (handover §6.1, M2).
-
-The semantics core (`kctx.semantics.model`) already enforces nominal identity
-for the calculus records; this module brings the same discipline to the
-*legacy* CLI boundary (assets, relationships, evidence, …) so that a
-validated id enters the system once, at parse time — never re-parsed from a
-bare string deep in application logic.
-
-Each type is a frozen value object with the same validation rule the corpus
-already follows: non-empty, no whitespace, lowercase ASCII letters/digits/
-hyphens (the slug alphabet `slugify` produces). Parse once at the boundary
-with `parse_*`; downstream code carries the typed value.
-"""
+"""Validated nominal identities. Only boundary codecs unwrap ``val``."""
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import NewType
+from typing import ClassVar
 
-from errors import KctxError
+from kctx.errors import KctxError
 
-# Phantom markers for static checkers: an AssetId is never an EvidenceId
-# even though both wrap a string (Q01's guard rail; the runtime class below
-# is what actually enforces it at the boundary).
-_AssetId = NewType("_AssetId", str)
-_EvidenceId = NewType("_EvidenceId", str)
-_RelationshipId = NewType("_RelationshipId", str)
+_SLUG = r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?"
+_TOKEN = r"[A-Za-z0-9][A-Za-z0-9_.:-]*"
 
-_ID_RE = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
+
+def _validate_identity(value: object, pattern: str, kind: str) -> None:
+    if not isinstance(value, str) or re.fullmatch(pattern, value) is None:
+        raise KctxError("malformed", f"invalid {kind}: {value!r}")
 
 
 @dataclass(frozen=True, slots=True)
-class SlugId:
-    """A validated slug-namespace identity. Subclasses fix the namespace."""
-
-    __kind__ = "id"
-
+class _Identity:
     val: str
+    _pattern: ClassVar[str] = _TOKEN
 
     def __post_init__(self) -> None:
-        if not _ID_RE.match(self.val):
-            raise KctxError(
-                "malformed",
-                f"{self.__kind__} {self.val!r} must match {_ID_RE.pattern!r} "
-                "(non-empty, lowercase letters/digits/hyphens)",
-            )
+        _validate_identity(self.val, self._pattern, type(self).__name__)
 
     def __str__(self) -> str:
         return self.val
 
-    # Explicit, not accidental: comparisons and dict keys use the wrapped
-    # string so JSON records stay byte-compatible.
-    def __eq__(self, other: object) -> bool:
-        if isinstance(other, SlugId):
-            return self.__class__ is other.__class__ and self.val == other.val
-        if isinstance(other, str):
-            return self.val == other
-        return NotImplemented
 
-    def __hash__(self) -> int:
-        # Hash as the wrapped string so id-keyed dicts interop with the
-        # string keys JSON records use; __eq__ still separates namespaces.
-        return hash(self.val)
+@dataclass(frozen=True, slots=True)
+class AssetId(_Identity):
+    _pattern: ClassVar[str] = _SLUG
 
 
-class AssetId(SlugId):
-    __kind__ = "asset id"
+@dataclass(frozen=True, slots=True)
+class RelationshipId(_Identity):
+    _pattern: ClassVar[str] = rf"{_SLUG}(?:__{_SLUG})*"
 
 
-class EvidenceId(SlugId):
-    __kind__ = "evidence id"
+@dataclass(frozen=True, slots=True)
+class EvidenceId(_Identity):
+    _pattern: ClassVar[str] = _SLUG
 
 
-# Relationship ids are slug segments joined by `__` (the corpus convention:
-# type__from__to), so each namespace gets the pattern its records actually use.
-_REL_ID_RE = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?(__[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$")
+@dataclass(frozen=True, slots=True)
+class ObservationId(_Identity):
+    pass
 
 
-class RelationshipId(SlugId):
-    __kind__ = "relationship id"
+@dataclass(frozen=True, slots=True)
+class ProposalId(_Identity):
+    _pattern: ClassVar[str] = rf"(?:{_TOKEN}|{_SLUG}/{_SLUG})"
 
-    def __post_init__(self) -> None:
-        if not _REL_ID_RE.match(self.val):
-            raise KctxError(
-                "malformed",
-                f"relationship id {self.val!r} must be slug segments joined "
-                "by __ (each matching the asset-id alphabet)",
-            )
+
+@dataclass(frozen=True, slots=True)
+class InvestigationId(_Identity):
+    _pattern: ClassVar[str] = rf"(?:{_TOKEN}|[0-9]{{4}}/[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}-{_SLUG})"
+
+
+@dataclass(frozen=True, slots=True)
+class SignatureId(_Identity):
+    _pattern: ClassVar[str] = _SLUG
+
+
+@dataclass(frozen=True, slots=True)
+class ClaimId(_Identity):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class ClaimRevision(_Identity):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class CitationId(_Identity):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class RuleVersion(_Identity):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class OperationId(_Identity):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class SnapshotId(_Identity):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class DerivationId(_Identity):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class RunId(_Identity):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class GateId(_Identity):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class TicketId(_Identity):
+    pass
 
 
 def parse_asset_id(raw: str) -> AssetId:
@@ -99,3 +124,115 @@ def parse_evidence_id(raw: str) -> EvidenceId:
 
 def parse_relationship_id(raw: str) -> RelationshipId:
     return RelationshipId(raw)
+
+
+@dataclass(frozen=True, slots=True)
+class PlanId(_Identity):
+    _pattern: ClassVar[str] = r"[0-9a-f]{64}"
+
+
+@dataclass(frozen=True, slots=True)
+class SourceCaptureId(_Identity):
+    _pattern: ClassVar[str] = r"[0-9a-f]{64}"
+
+
+@dataclass(frozen=True, slots=True)
+class ContentDigest(_Identity):
+    _pattern: ClassVar[str] = r"[0-9a-f]{64}"
+
+
+@dataclass(frozen=True, slots=True)
+class PolicyDigest(_Identity):
+    _pattern: ClassVar[str] = r"[0-9a-f]{64}"
+
+
+@dataclass(frozen=True, slots=True)
+class ReleaseId(_Identity):
+    _pattern: ClassVar[str] = r"(?:[0-9a-f]{40}|[0-9a-f]{64})"
+
+
+@dataclass(frozen=True, slots=True)
+class DoltCommitId(_Identity):
+    _pattern: ClassVar[str] = r"[0-9a-v]{32}"
+
+
+@dataclass(frozen=True, slots=True)
+class AuthorityKeyId(_Identity):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class AttestationId(_Identity):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class EnumerationId(_Identity):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class CorrectionId(_Identity):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class ReceiptId(_Identity):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class PolicyId(_Identity):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class CheckerId(_Identity):
+    _pattern: ClassVar[str] = r"[\s\S]+"
+
+
+@dataclass(frozen=True, slots=True)
+class _OpaqueIdentity(_Identity):
+    """A nonempty external identity; provider codecs validate its syntax."""
+
+    _pattern: ClassVar[str] = r"[\s\S]+"
+
+
+@dataclass(frozen=True, slots=True)
+class SourceId(_OpaqueIdentity):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class SourceRevision(_OpaqueIdentity):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class ContentId(_OpaqueIdentity):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class ProjectId(_OpaqueIdentity):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class ActorId(_OpaqueIdentity):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class ProposalMaterialRevision(_OpaqueIdentity):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class TargetRevision(_OpaqueIdentity):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class GitRevision(_Identity):
+    _pattern: ClassVar[str] = r"(?:[0-9a-f]{40}|[0-9a-f]{64})"

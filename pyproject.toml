@@ -1,29 +1,30 @@
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
+
 [project]
 name = "kctx"
 version = "0.1.0"
-description = "kctx: CLI for the tnawara/kb knowledge workspace (M2 shadow-mode citation/relationship graph in graph/)"
+description = "Typed knowledge workspace CLI with a Lean-checked semantic core"
 requires-python = ">=3.11"
-dependencies = [
-    # 2.14.1, not the newer 2.14.2: a Space's /etc/uv/uv.toml forces
-    # Bloomberg's pypi mirror (see the dotfiles repo's own documented
-    # Spaces-drift note), and that mirror lagged 2.14.2 by one release when
-    # this was pinned -- verified against both indexes live. Re-check both
-    # before bumping.
-    "pydantic==2.14.1",
-    "structlog==26.1.0",
-]
+dependencies = ["pydantic==2.14.1", "structlog==26.1.0", "cryptography==46.0.3", "PyMySQL==1.1.2", "click==8.3.0", "rich==14.2.0"]
 
-# Every existing kctx command (asset/proposal/run/uses/...) stays stdlib-only
-# and imports nothing from this table's dependencies -- only tools/kctx/graph/
-# (the M2 Dolt shadow-graph package) uses pydantic/structlog. `uv run` is the
-# supported way to execute kctx (see the `kctx` wrapper); it syncs this venv
-# on every invocation, so `graph`/`logs` commands always have their deps.
-# Plain `python3 -m unittest discover -s tools/kctx/tests` still works for
-# every non-graph test; graph-package tests probe for these imports and skip
-# cleanly if the ambient interpreter lacks them.
+[project.scripts]
+kctx = "kctx.cli.app:main"
+
+[dependency-groups]
+dev = ["pyright[nodejs]==1.1.407", "ruff==0.14.5", "types-PyMySQL==1.1.0.20250916"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/kctx"]
+
 [tool.uv]
-# No src/ package here -- this is a script directory, not an installable
-# distribution, so uv only resolves/installs the dependency list above and
-# never tries to build/install `kctx` itself.
 python-preference = "only-system"
 python-downloads = "never"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "B", "UP", "ANN", "RUF"]

@@ -15,7 +15,7 @@ RUN curl -sSfL https://elan.lean-lang.org/elan-init.sh | sh -s -- -y \
 
 ENV PATH="/opt/elan/bin:${PATH}"
 WORKDIR /work
-COPY . /work/kctx
+COPY . /work/kctx/formal
 WORKDIR /work/kctx/formal
 
 # Prebuild once so the image is warm; CI re-runs the same pinned build.

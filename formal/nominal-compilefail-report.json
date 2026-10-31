@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "command": "formal/scripts/check_nominal.py",
+  "tests": [
+    {
+      "path": "formal/compilefail/claim_as_observation.lean",
+      "sha256": "f4530eb70178310a6fa6610dcb5e363d7368739822b865f0ab340793fe27d30f",
+      "exit_code": 1,
+      "rejected": true,
+      "diagnostics": "/work/kctx/formal/compilefail/claim_as_observation.lean:3:90: error: Application type mismatch: In the application\n  observationAt kb id\nthe argument\n  id\nhas type\n  ClaimId : Type\nbut is expected to have type\n  ObservationId : Type\n"
+    },
+    {
+      "path": "formal/compilefail/cross_namespace_equality.lean",
+      "sha256": "b15c8194367817003f767f430b7207d31b00c69af0f1356637c9ff93bb4f3cb8",
+      "exit_code": 1,
+      "rejected": true,
+      "diagnostics": "/work/kctx/formal/compilefail/cross_namespace_equality.lean:3:83: error: type mismatch\n  checker\nhas type\n  CheckerId : Type\nbut is expected to have type\n  PolicyId : Type\n"
+    },
+    {
+      "path": "formal/compilefail/empty_identifier.lean",
+      "sha256": "3fb251653560cf986c3acfc00c41d63e2509fcb50ee5254415d82641fe457df9",
+      "exit_code": 1,
+      "rejected": true,
+      "diagnostics": "/work/kctx/formal/compilefail/empty_identifier.lean:3:45: error: tactic 'decide' proved that the proposition\n  \"\" \u2260 \"\"\nis false\n"
+    },
+    {
+      "path": "formal/compilefail/observation_as_enumeration.lean",
+      "sha256": "3bb42b08ecd316c53bf46b6d603b0b0cd6f18524bdf844a0e99d5224f4a00955",
+      "exit_code": 1,
+      "rejected": true,
+      "diagnostics": "/work/kctx/formal/compilefail/observation_as_enumeration.lean:3:67: error: Application type mismatch: In the application\n  Formula.inventory id\nthe argument\n  id\nhas type\n  ObservationId : Type\nbut is expected to have type\n  EnumerationId : Type\n"
+    },
+    {
+      "path": "formal/compilefail/raw_string_lookup.lean",
+      "sha256": "a8bc3950429aebc01b750d455254b48460545ab7845ab7d604fca22422a88553",
+      "exit_code": 1,
+      "rejected": true,
+      "diagnostics": "/work/kctx/formal/compilefail/raw_string_lookup.lean:3:87: error: Application type mismatch: In the application\n  observationAt kb id\nthe argument\n  id\nhas type\n  String : Type\nbut is expected to have type\n  ObservationId : Type\n"
+    },
+    {
+      "path": "formal/compilefail/source_revision_as_snapshot.lean",
+      "sha256": "67a178cd73c9f34c0a8e26e285c39e6ab4c32172492608d2976e5498a6c111c1",
+      "exit_code": 1,
+      "rejected": true,
+      "diagnostics": "/work/kctx/formal/compilefail/source_revision_as_snapshot.lean:3:109: error: type mismatch\n  revision\nhas type\n  SourceRevision : Type\nbut is expected to have type\n  SnapshotId : Type\n"
+    }
+  ],
+  "passed": true
+}

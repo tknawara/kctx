@@ -1,0 +1,289 @@
+{
+  "schema_version": 1,
+  "scope": "Executable evidence routing, not a pass report. Parent owns full handover gates and legacy workflow/quality checks.",
+  "cases": [
+    {
+      "case": "immutable-filesystem-publication",
+      "scenarios": [
+        "Q45",
+        "Q46"
+      ],
+      "gates": [
+        "G08"
+      ],
+      "report": "storage",
+      "assertions": "Real fsync/hard-link publication killed before and after link; independent competing creators; no partial JSON."
+    },
+    {
+      "case": "graph-crash-*",
+      "scenarios": [
+        "Q47",
+        "Q50",
+        "Q58",
+        "D40"
+      ],
+      "gates": [
+        "G08",
+        "G11",
+        "G12"
+      ],
+      "report": "storage",
+      "assertions": "Native table import/data commit/metadata commit/validation/pointer boundaries exit86; completed snapshot remains exact before or after."
+    },
+    {
+      "case": "competing-writers-pinned-reader",
+      "scenarios": [
+        "Q47",
+        "Q57",
+        "D27",
+        "D42",
+        "D45"
+      ],
+      "gates": [
+        "G08",
+        "G11"
+      ],
+      "report": "storage",
+      "assertions": "Two native writer subprocesses and repeated native AS OF reader; one sync plus idempotent loser."
+    },
+    {
+      "case": "native-sql-failure-contracts",
+      "scenarios": [
+        "Q59",
+        "Q60",
+        "D28",
+        "D34",
+        "D69",
+        "D71"
+      ],
+      "gates": [
+        "G12"
+      ],
+      "report": "storage",
+      "assertions": "Real typed SQL rows, duplicate primary key rejection, malformed SQL, unknown native revision, rollback, unchanged completed pointer."
+    },
+    {
+      "case": "production-graph-regressions",
+      "scenarios": [
+        "Q48",
+        "Q49",
+        "Q51",
+        "Q52",
+        "Q53",
+        "Q54",
+        "Q55",
+        "Q56",
+        "D32"
+      ],
+      "gates": [
+        "G11"
+      ],
+      "report": "storage",
+      "assertions": "Named production test results retained; zero skips required. Regression details, not this map, establish each assertion."
+    },
+    {
+      "case": "independent-restore-native-history",
+      "scenarios": [
+        "Q63",
+        "Q64",
+        "D49",
+        "D50"
+      ],
+      "gates": [
+        "G14"
+      ],
+      "report": "storage",
+      "assertions": "Delete original graph/source, restore independent native copy and Git bundle, compare old/current exact rows/citations, real Git/Dolt GC, deny Git-only restore."
+    },
+    {
+      "case": "knowledge-crash-*",
+      "scenarios": [
+        "Q30",
+        "Q36",
+        "Q47",
+        "D35",
+        "D40",
+        "D41"
+      ],
+      "gates": [
+        "G08"
+      ],
+      "report": "storage",
+      "assertions": "Signed actual source/PR/document candidates; process death at every durable publication phase, recovery/replay without duplicate publication; historical results unchanged."
+    },
+    {
+      "case": "knowledge-competing-and-tampered-input",
+      "scenarios": [
+        "Q30",
+        "Q46",
+        "Q47",
+        "Q56",
+        "D37",
+        "D39",
+        "D42",
+        "D45"
+      ],
+      "gates": [
+        "G08",
+        "G11"
+      ],
+      "report": "storage",
+      "assertions": "Two approved plans against same predecessor, exactly one success; retained pinned continuation, mutated plan cannot use original approval."
+    },
+    {
+      "case": "migration-dry-apply-repeat-rollback-unknown",
+      "scenarios": [
+        "Q37",
+        "Q65",
+        "Q66",
+        "Q67",
+        "Q76",
+        "D13",
+        "D14",
+        "D18"
+      ],
+      "gates": [
+        "G10"
+      ],
+      "report": "storage",
+      "assertions": "Dry-run byte comparison; candidate migration, repeat identity, exact original byte retention, rollback; unknown schemas quarantined, never admitted."
+    },
+    {
+      "case": "knowledge-clean-independent-restore",
+      "scenarios": [
+        "Q23",
+        "Q63",
+        "Q64",
+        "D17",
+        "D50",
+        "D51",
+        "D70"
+      ],
+      "gates": [
+        "G14"
+      ],
+      "report": "storage",
+      "assertions": "Independent backup, remove both current evidence copies and deny retrieval, older release unaffected; delete original store then restore old/current; missing Dolt blocks publication."
+    },
+    {
+      "case": "local-independent-native-clients",
+      "scenarios": [
+        "Q61",
+        "Q62",
+        "D07",
+        "D28",
+        "D48"
+      ],
+      "gates": [
+        "G13"
+      ],
+      "report": "remote",
+      "assertions": "Real local Git and Dolt remotes; two clean native clients, competing Dolt branch push, historical retrieval, dirty fetch preservation; LOCAL ONLY, not enterprise."
+    },
+    {
+      "case": "local-interrupted-*",
+      "scenarios": [
+        "Q62",
+        "D08",
+        "D09",
+        "D52"
+      ],
+      "gates": [
+        "G13"
+      ],
+      "report": "remote",
+      "assertions": "Kill native Git receive process group at hook entry; kill large native Dolt push; independent remote read before retry. LOCAL ONLY."
+    },
+    {
+      "case": "enterprise-*",
+      "scenarios": [
+        "Q61",
+        "Q62",
+        "D05",
+        "D06",
+        "D07",
+        "D08",
+        "D09",
+        "D10",
+        "D49"
+      ],
+      "gates": [
+        "G13"
+      ],
+      "report": "remote",
+      "assertions": "Actual read-only enterprise reachability probe; writes require approved scratch config. Native two-client writes plus explicitly approved endpoint-specific probes, no local substitution."
+    },
+    {
+      "case": "matched-mechanical-retrieval",
+      "scenarios": [
+        "Q75",
+        "D65"
+      ],
+      "gates": [
+        "G15"
+      ],
+      "report": "evaluation",
+      "assertions": "24 frozen tasks, two repos/projects, source+operational context; matched file/extracted-index/native-Dolt exact pinned paths, cold/warm costs. NOT model quality."
+    },
+    {
+      "case": "actual-model-trials",
+      "scenarios": [
+        "Q73",
+        "Q74",
+        "D59",
+        "D62",
+        "D63",
+        "D65",
+        "D66"
+      ],
+      "gates": [
+        "G15"
+      ],
+      "report": "agents",
+      "assertions": "24 frozen prompts to supplied real model runner on matched source context, exact labelled output, identity/config/raw transcripts; absent runner => blocked nonzero."
+    },
+    {
+      "case": "frozen-cost-thresholds",
+      "scenarios": [
+        "Q73",
+        "D66"
+      ],
+      "gates": [
+        "G15"
+      ],
+      "report": "evaluation",
+      "assertions": "No posthoc change: warm p95/context <=1.25 baseline, repeated reads <=0.9 baseline; any violation nonzero."
+    },
+    {
+      "case": "authorized-retained-rollback-rollforward",
+      "scenarios": ["Q23", "Q76", "D44", "D59", "D70"],
+      "gates": ["G10", "G14"],
+      "report": "storage",
+      "assertions": "Signed forward selection and roll-forward preserve intervening audit and correction ledger; no retraction resurrection or evidence-age renewal; exact historical replay unchanged; missing target refuses."
+    },
+    {
+      "case": "legacy-accounted-migration",
+      "scenarios": ["Q65", "Q66", "Q67", "D11", "D12", "D13", "D14", "D16", "D18"],
+      "gates": ["G10"],
+      "report": "storage",
+      "assertions": "Exact and unique historical source references distinguished from ambiguous/unavailable/malformed inputs; identities and authored CRLF/Unicode/citation bytes retained; interrupted candidate migration recovers; independent original-byte restoration; no prose truth or implicit admission."
+    },
+    {
+      "case": "imported-real-model-trials",
+      "scenarios": ["Q73", "Q74", "D59", "D65", "D66"],
+      "gates": ["G15"],
+      "report": "agents",
+      "assertions": "48 matched externally attested real model invocation receipts require exact frozen input/transcript hashes, unique invocation identity, model/harness/prompt/tool metadata and expected outputs. Missing or duplicated trials reject; importer does not synthesize or independently execute model calls."
+    }
+  ],
+  "external_prerequisites": {
+    "enterprise": "Approved isolated Git + Dolt scratch URLs, approval reference, credentials, branch prefix, documented retention/permission semantics, endpoint-specific denial/interruption/retention probe commands. Actual read-only probe results are in report commands.",
+    "agents": "Actual model runner config, or a complete real-execution receipt bundle from parent task/completion tools. Mechanical retrieval and exported prompts alone do not satisfy model outcome trials."
+  },
+  "no_claims": [
+    "Installed Gripsack provisioning is parent G01/G12 work, not inferred from Compose execution.",
+    "Local native remotes do not prove enterprise data-ref transport or policy protections.",
+    "Same-version restored readers do not prove an unspecified older reader version works.",
+    "Candidate migration quarantines unsupported legacy schemas; it is not automatic conversion or admission of ambiguous historical knowledge."
+  ]
+}

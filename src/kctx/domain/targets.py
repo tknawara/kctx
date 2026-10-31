@@ -1,89 +1,64 @@
-"""Typed use-target references (handover §6.1, M2 slice 7).
-
-`kctx uses <target>` accepts six spellings: `ev:` evidence ids, `sig:` and
-`inv:` ids, `proposal/…` ids, bare asset ids/aliases, and `repo@sha:path:L`
-code locators. The baseline classified them by scattered
-`target.startswith("ev:")` checks with inline slicing at every use site.
-
-This module parses the spelling **once, at the boundary**, into a closed sum;
-downstream code switches on the variant, never on string prefixes. Parsing
-keeps the baseline's exact acceptance rules (including bare-form search
-widening for sig/inv/proposal), so behavior is unchanged — the fixtures suite
-(50 nav tests) is the contract.
-"""
+"""Closed navigation references, decoded once at the command boundary."""
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import assert_never
+
+from kctx.domain.ids import AssetId, EvidenceId, InvestigationId, ProposalId, SignatureId
+from kctx.errors import KctxError
 
 
 @dataclass(frozen=True, slots=True)
 class EvidenceRef:
-    """`ev:<home>/<stem>` — no bare-form widening (its only alternate form is
-    the migration history `uses` is scoped to tolerate, not solve)."""
-
     home: str
-    stem: str
+    stem: EvidenceId
 
     @property
     def spelling(self) -> str:
-        return f"ev:{self.home}/{self.stem}"
-
-    @property
-    def search_strings(self) -> Tuple[str, ...]:
-        return (self.spelling,)
+        return f"ev:{self.home}/{self.stem.val}"
 
 
 @dataclass(frozen=True, slots=True)
-class _IdRef:
-    """`prefix:id` where the bare id is also a live reference form."""
-
-    prefix: str
-    id: str
+class SigRef:
+    id: SignatureId
 
     @property
     def spelling(self) -> str:
-        return f"{self.prefix}:{self.id}"
+        return f"sig:{self.id.val}"
+
+
+@dataclass(frozen=True, slots=True)
+class InvRef:
+    id: InvestigationId
 
     @property
-    def search_strings(self) -> Tuple[str, ...]:
-        return (self.spelling, self.id)
-
-
-class SigRef(_IdRef):
-    __slots__ = ()
-
-    def __init__(self, id: str):
-        super().__init__("sig", id)
-
-
-class InvRef(_IdRef):
-    __slots__ = ()
-
-    def __init__(self, id: str):
-        super().__init__("inv", id)
+    def spelling(self) -> str:
+        return f"inv:{self.id.val}"
 
 
 @dataclass(frozen=True, slots=True)
 class ProposalRef:
-    """`proposal/<kind>/<date>-slug` — bare `<date>-slug` is a live form."""
-
-    id: str
+    id: ProposalId
 
     @property
     def spelling(self) -> str:
-        return f"proposal/{self.id}"
+        return f"proposal/{self.id.val}"
+
+
+@dataclass(frozen=True, slots=True)
+class DossierRef:
+    id: AssetId
 
     @property
-    def search_strings(self) -> Tuple[str, ...]:
-        return (self.spelling, self.id)
+    def spelling(self) -> str:
+        return self.id.val
 
 
 @dataclass(frozen=True, slots=True)
 class AssetRef:
-    """A bare asset id/alias — resolved against inventory by the caller."""
+    """Unresolved prose selector: aliases and locator fragments remain strings."""
 
     ident: str
 
@@ -91,74 +66,62 @@ class AssetRef:
     def spelling(self) -> str:
         return self.ident
 
-    @property
-    def search_strings(self) -> Tuple[str, ...]:
-        return (self.ident,)  # replaced by id+aliases once resolved
-
 
 @dataclass(frozen=True, slots=True)
 class CodeLocator:
-    """`repo@sha:path[:L…]` — matched against citations' own path=/L= fields,
-    never against free-text file:line mentions."""
-
     repo: str
     sha: str
     path: str
-    line: Optional[Tuple[int, int]]
+    line: tuple[int, int] | None
 
     @property
     def spelling(self) -> str:
-        line = "" if self.line is None else f":{self.line[0]}"
+        suffix = "" if self.line is None else f":{self.line[0]}"
         if self.line is not None and self.line[1] != self.line[0]:
-            line = f":{self.line[0]}-{self.line[1]}"
-        return f"{self.repo}@{self.sha}:{self.path}{line}"
+            suffix = f":{self.line[0]}-{self.line[1]}"
+        return f"{self.repo}@{self.sha}:{self.path}{suffix}"
 
 
-UseTarget = Union[EvidenceRef, SigRef, InvRef, ProposalRef, AssetRef, CodeLocator]
-
-# Same shape as nav's _USES_LOCATOR_RE (kept in one place; nav imports this).
+UseTarget = EvidenceRef | SigRef | InvRef | ProposalRef | DossierRef | AssetRef | CodeLocator
 LOCATOR_RE = re.compile(
     r"^(?P<repo>[^@\s]+)@(?P<sha>[0-9a-fA-F]{7,40}):(?P<path>[^:\s]+)"
     r"(?::(?P<line>\d+(?:-\d+)?))?$"
 )
 
 
-def _line_range(raw: Optional[str]) -> Optional[Tuple[int, int]]:
+def line_range(raw: str | None) -> tuple[int, int] | None:
     if not raw:
         return None
     a, _, b = raw.partition("-")
     try:
         return (int(a), int(b)) if b else (int(a), int(a))
     except ValueError:
-        return None  # baseline: an unparseable line is no line constraint
+        return None
 
 
 def parse_use_target(raw: str) -> UseTarget:
-    """Parse a `kctx uses` target spelling once. Accepts exactly what the
-    baseline accepted (prefix rules + locator regex); malformed inputs fall
-    through to AssetRef, whose inventory resolution reports not-found — the
-    baseline's behavior."""
-    m = LOCATOR_RE.match(raw)
-    if m:
-        return CodeLocator(
-            repo=m.group("repo"),
-            sha=m.group("sha"),
-            path=m.group("path"),
-            line=_line_range(m.group("line")),
-        )
+    match = LOCATOR_RE.fullmatch(raw)
+    if match:
+        return CodeLocator(match["repo"], match["sha"], match["path"], line_range(match["line"]))
     if raw.startswith("ev:"):
-        rest = raw[len("ev:") :]
-        home, _, stem = rest.rpartition("/")  # home may itself contain /
-        return EvidenceRef(home=home, stem=stem)
+        home, separator, stem = raw[3:].rpartition("/")
+        if not separator or not home:
+            raise KctxError("malformed", f"bad ev: id {raw!r}, expected <home>/<stem>")
+        return EvidenceRef(home, EvidenceId(stem))
     if raw.startswith("sig:"):
-        return SigRef(raw[len("sig:") :])
+        return SigRef(SignatureId(raw[4:]))
     if raw.startswith("inv:"):
-        return InvRef(raw[len("inv:") :])
+        return InvRef(InvestigationId(raw[4:]))
     if raw.startswith("proposal/"):
-        return ProposalRef(raw[len("proposal/") :])
-    return AssetRef(ident=raw)
+        return ProposalRef(ProposalId(raw[9:]))
+    return AssetRef(raw)
 
 
-def search_strings(target: UseTarget) -> Tuple[str, ...]:
-    """Literal strings to grep for, per the baseline's widening rules."""
-    return target.search_strings
+def search_strings(target: UseTarget) -> tuple[str, ...]:
+    match target:
+        case EvidenceRef() | AssetRef() | DossierRef() | CodeLocator():
+            return (target.spelling,)
+        case SigRef() | InvRef() | ProposalRef():
+            return (target.spelling, target.id.val)
+        case _:
+            assert_never(target)

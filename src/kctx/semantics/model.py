@@ -1,82 +1,70 @@
-"""Domain model mirroring ``formal/Kctx/Model.lean`` (semantic version 1.0.0).
-
-Every type here has a Lean counterpart; field order in the dataclasses is the
-wire order in ``wire.py``. Keep them in sync or conformance fails.
-"""
+"""Pure immutable values for the version 2 finite-witness calculus."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Tuple
 
-SEMANTIC_VERSION = "1.0.0"
+from kctx.domain.ids import (
+    ActorId,
+    AttestationId,
+    CheckerId,
+    ClaimId,
+    ClaimRevision,
+    ContentId,
+    CorrectionId,
+    DerivationId,
+    EnumerationId,
+    GateId,
+    ObservationId,
+    OperationId,
+    PolicyId,
+    ProjectId,
+    ProposalId,
+    ProposalMaterialRevision,
+    ReceiptId,
+    RuleVersion,
+    SnapshotId,
+    SourceId,
+    SourceRevision,
+    TargetRevision,
+)
 
-
-class IdKind(Enum):
-    ASSET = "asset"
-    CLAIM = "claim"
-    CLAIM_REV = "claimRev"
-    CITATION = "citation"
-    OBSERVATION = "observation"
-    PROPOSAL = "proposal"
-    INVESTIGATION = "investigation"
-    SIGNATURE = "signature"
-    RULE = "rule"
-    OPERATION = "operation"
-    SNAPSHOT = "snapshot"
-
-
-@dataclass(frozen=True, slots=True)
-class Ident:
-    """Nominal identifier. The ``kind`` field makes asset/claim/proposal ids
-    non-interchangeable at runtime (the Lean side enforces it in the type)."""
-
-    val: str
-    kind: IdKind = IdKind.ASSET
-
-    def __str__(self) -> str:  # pragma: no cover - trivial
-        return self.val
-
-
-@dataclass(frozen=True, slots=True)
-class ClaimRef:
-    """Logical claim id + immutable revision (handover §4)."""
-
-    id: str
-    rev: str
+SEMANTIC_VERSION = "2.0.0"
+SCHEMA_VERSION = 2
 
 
-@dataclass(frozen=True, slots=True)
-class Scope:
-    project: str
-    extra: str
+class TtlTag(Enum):
+    EXPIRE_AFTER = "expireAfter"
+    NO_EXPIRY = "noExpiry"
+    MISSING = "missing"
 
 
-def specializes(target: Scope, source: Scope) -> bool:
-    """``target`` denotes a sub-scope of ``source``: same project, and
-    ``source`` is broad (empty extra) or identical. Mirrors
-    ``Scope.specializes``."""
-    return target.project == source.project and (
-        source.extra == "" or source.extra == target.extra
-    )
+def _require_ttl_tag(value: object) -> None:
+    if not isinstance(value, TtlTag):
+        raise ValueError("invalid ttl tag")
 
 
 @dataclass(frozen=True, slots=True)
 class Ttl:
-    """``expireAfter secs | noExpiry | missing`` — mirrors Lean ``TtlPolicy``.
-    A missing policy is never an implicit freshness proof."""
-
-    tag: str
+    tag: TtlTag
     secs: int | None = None
+
+    def __post_init__(self) -> None:
+        _require_ttl_tag(self.tag)
+        if self.tag is TtlTag.EXPIRE_AFTER:
+            if isinstance(self.secs, bool) or not isinstance(self.secs, int):
+                raise ValueError("expireAfter requires integer seconds")
+        elif self.secs is not None:
+            raise ValueError("non-expiring ttl cannot carry seconds")
 
 
 def ttl_expire_after(secs: int) -> Ttl:
-    return Ttl("expireAfter", secs)
+    return Ttl(TtlTag.EXPIRE_AFTER, secs)
 
 
-TTL_NO_EXPIRY = Ttl("noExpiry")
-TTL_MISSING = Ttl("missing")
+TTL_NO_EXPIRY = Ttl(TtlTag.NO_EXPIRY)
+TTL_MISSING = Ttl(TtlTag.MISSING)
 
 
 class Freshness(Enum):
@@ -85,154 +73,173 @@ class Freshness(Enum):
     UNKNOWN = "unknown"
 
 
-class ObsOutcome(Enum):
-    OK = "ok"
-    TIMED_OUT = "timedOut"
-    PARTIAL_RESULT = "partialResult"
-    TRUNCATED = "truncated"
-    DENIED = "denied"
-    UNAVAILABLE = "unavailable"
+@dataclass(frozen=True, slots=True)
+class Scope:
+    project: ProjectId
+    selector: str
 
 
-class SupportRole(Enum):
-    SUPPORTS = "supports"
-    CONTRADICTS = "contradicts"
-    CONTEXTUALIZES = "contextualizes"
-
-
-class RuleId(Enum):
-    AND_INTRO = "andIntro"
-    SPECIALIZE = "specialize"
-    OBS_SUPPORTS = "obsSupports"
-    ALL_CHECKED = "allChecked"
-
-
-ENABLED_RULES: frozenset[RuleId] = frozenset(RuleId)
+def narrower(target: Scope, source: Scope) -> bool:
+    return target.project == source.project and (
+        not source.selector or target.selector == source.selector
+    )
 
 
 @dataclass(frozen=True, slots=True)
 class Atom:
     subject: str
     predicate: str
-    args: Tuple[str, ...]
-
-
-class ClaimProp:
-    """Tagged union ``atom(a) | conj(atoms) | allChecked(pred, members)``
-    (v1 bound: conjunction over flat atoms)."""
-
-    __slots__ = ("tag", "atom", "atoms", "predicate", "members")
-
-    def __init__(
-        self,
-        tag: str,
-        atom: Atom | None = None,
-        atoms: Tuple[Atom, ...] | None = None,
-        predicate: str | None = None,
-        members: Tuple[str, ...] | None = None,
-    ):
-        self.tag = tag
-        self.atom = atom
-        self.atoms = atoms
-        self.predicate = predicate
-        self.members = members
-
-    @classmethod
-    def of_atom(cls, a: Atom) -> "ClaimProp":
-        return cls("atom", atom=a)
-
-    @classmethod
-    def conj(cls, atoms: tuple[Atom, ...] | list[Atom]) -> "ClaimProp":
-        return cls("conj", atoms=tuple(atoms))
-
-    @classmethod
-    def all_checked(cls, predicate: str, members: tuple[str, ...] | list[str]) -> "ClaimProp":
-        return cls("allChecked", predicate=predicate, members=tuple(members))
-
-    def as_atom(self) -> Atom | None:
-        return self.atom if self.tag == "atom" else None
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, ClaimProp):
-            return NotImplemented
-        return (
-            self.tag == other.tag
-            and self.atom == other.atom
-            and self.atoms == other.atoms
-            and self.predicate == other.predicate
-            and self.members == other.members
-        )
-
-    def __hash__(self) -> int:
-        return hash((self.tag, self.atom, self.atoms, self.predicate, self.members))
-
-    def __repr__(self) -> str:  # pragma: no cover - debugging aid
-        if self.tag == "atom":
-            return f"ClaimProp.atom{self.atom!r}"
-        if self.tag == "conj":
-            return f"ClaimProp.conj{self.atoms!r}"
-        return f"ClaimProp.allChecked({self.predicate!r}, {self.members!r})"
+    args: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
-class Observation:
-    id: str
-    outcome: ObsOutcome
-    observed_at: int
-    ttl: Ttl
-    system: str
-    locator: str
+class Atomic:
+    atom: Atom
+
+
+@dataclass(frozen=True, slots=True)
+class Truth:
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class Conjunction:
+    left: Formula
+    right: Formula
+
+
+@dataclass(frozen=True, slots=True)
+class All:
+    enumeration: EnumerationId
+    predicate: str
+
+
+@dataclass(frozen=True, slots=True)
+class Absent:
+    enumeration: EnumerationId
+
+
+@dataclass(frozen=True, slots=True)
+class Inventory:
+    enumeration: EnumerationId
+
+
+Formula = Atomic | Truth | Conjunction | All | Absent | Inventory
+
+
+class Polarity(Enum):
+    POSITIVE = "positive"
+    NEGATIVE = "negative"
+
+
+@dataclass(frozen=True, slots=True)
+class Statement:
+    formula: Formula
+    scope: Scope
+    polarity: Polarity = Polarity.POSITIVE
+
+
+@dataclass(frozen=True, slots=True)
+class ClaimRef:
+    id: ClaimId
+    rev: ClaimRevision
 
 
 @dataclass(frozen=True, slots=True)
 class Claim:
-    id: str
-    rev: str
-    prop: ClaimProp
+    id: ClaimId
+    revision: ClaimRevision
+    statement: Statement
+
+    @property
+    def ref(self) -> ClaimRef:
+        return ClaimRef(self.id, self.revision)
+
+
+class ObsOutcome(Enum):
+    OK = "ok"
+    TIMEOUT = "timeout"
+    PARTIAL = "partial"
+    TRUNCATED = "truncated"
+    DENIED = "denied"
+    UNAVAILABLE = "unavailable"
+
+
+@dataclass(frozen=True, slots=True)
+class Observation:
+    id: ObservationId
+    source: SourceId
+    revision: SourceRevision
+    content: ContentId
+    observed_at: int
+    outcome: ObsOutcome
+
+
+@dataclass(frozen=True, slots=True)
+class Attestation:
+    id: AttestationId
+    claim: ClaimRef
+    observation: ObservationId
+    statement: Statement
+    authority: ActorId
+
+
+@dataclass(frozen=True, slots=True)
+class Enumeration:
+    id: EnumerationId
+    source: SourceId
+    revision: SourceRevision
+    query: str
+    scope: Scope
+    observation: ObservationId
+    members: tuple[str, ...]
+    universe: tuple[str, ...]
+    method: str
+
+
+@dataclass(frozen=True, slots=True)
+class AttestWitness:
+    attestation: AttestationId
+
+
+@dataclass(frozen=True, slots=True)
+class TruthWitness:
     scope: Scope
 
 
 @dataclass(frozen=True, slots=True)
-class Binding:
-    obs: str
-    ref: ClaimRef
-    role: SupportRole
-
-
-class DepKind(Enum):
-    SOURCE_CONTENT = "sourceContent"
-    KB_RECORD = "kbRecord"
-    POLICY = "policy"
-    CHECKER = "checker"
-    CORRECTION = "correction"
-    DISCOVERY = "discovery"
+class AndWitness:
+    left: Witness
+    right: Witness
 
 
 @dataclass(frozen=True, slots=True)
-class Dep:
-    kind: DepKind
-    target: str
-    digest: str
-
-
-@dataclass(frozen=True, slots=True)
-class CoverageWitness:
+class SpecializeWitness:
     scope: Scope
-    members: Tuple[str, ...]
-    complete: bool
+    premise: Witness
+
+
+@dataclass(frozen=True, slots=True)
+class AllWitness:
+    enumeration: EnumerationId
+    predicate: str
+    premise: Witness
+
+
+@dataclass(frozen=True, slots=True)
+class AbsentWitness:
+    enumeration: EnumerationId
+    premise: Witness
+
+
+Witness = AttestWitness | TruthWitness | AndWitness | SpecializeWitness | AllWitness | AbsentWitness
 
 
 @dataclass(frozen=True, slots=True)
 class Derivation:
-    id: str
-    rule: RuleId
-    premise_groups: Tuple[Tuple[ClaimRef, ...], ...]
-    conclusion: ClaimRef
-    conclusion_prop: ClaimProp
-    scope: Scope
-    footprint: Tuple[Dep, ...]
-    evidence: str | None
-    witness: CoverageWitness | None
+    id: DerivationId
+    claim: ClaimRef
+    witness: Witness
 
 
 class CorrectionKind(Enum):
@@ -243,73 +250,366 @@ class CorrectionKind(Enum):
 
 @dataclass(frozen=True, slots=True)
 class Correction:
+    id: CorrectionId
     kind: CorrectionKind
     target: ClaimRef
+    replacement: ClaimRef | None
     recorded_at: int
 
 
 @dataclass(frozen=True, slots=True)
-class EvalCtx:
-    now: int
-    require_fresh_evidence: bool = True
-    require_validated: bool = True
-    require_uncontested: bool = True
+class Policy:
+    id: PolicyId
+    require_fresh: bool
+    require_validation: bool
+    require_uncontested: bool
+    ttl: Ttl
+    authorized_actors: tuple[ActorId, ...]
 
 
 @dataclass(frozen=True, slots=True)
-class KbView:
-    """Read-only projection of a KB the checker consults (Lean ``KbView``)."""
+class SourceSelection:
+    source: SourceId
+    revision: SourceRevision
+    content: ContentId
 
-    observations: Tuple[Observation, ...]
-    claims: Tuple[Claim, ...]
-    bindings: Tuple[Binding, ...]
-    corrections: Tuple[Correction, ...]
-    derivations: Tuple[Derivation, ...]
-    validations: Tuple[Tuple[ClaimRef, str], ...]
+
+@dataclass(frozen=True, slots=True)
+class Context:
+    snapshot: SnapshotId
+    semantic_version: str
+    ruleset: RuleVersion
+    checker: CheckerId
+    policy: Policy
+    now: int
+    target: Scope
+    intended_use: str
+    sources: tuple[SourceSelection, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ObservationDependency:
+    value: Observation
+
+
+@dataclass(frozen=True, slots=True)
+class ClaimDependency:
+    value: Claim
+
+
+@dataclass(frozen=True, slots=True)
+class AttestationDependency:
+    value: Attestation
+
+
+@dataclass(frozen=True, slots=True)
+class EnumerationDependency:
+    value: Enumeration
+
+
+@dataclass(frozen=True, slots=True)
+class CorrectionsDependency:
+    target: ClaimRef
+    events: tuple[Correction, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ContextDependency:
+    value: Context
+
+
+Dependency = (
+    ObservationDependency
+    | ClaimDependency
+    | AttestationDependency
+    | EnumerationDependency
+    | CorrectionsDependency
+    | ContextDependency
+)
+
+
+@dataclass(frozen=True, slots=True)
+class Receipt:
+    id: ReceiptId
+    claim: ClaimRef
+    context: Context
+    witness: Witness
+    dependencies: tuple[Dependency, ...]
+    result: ReceiptResult
+    expires_at: int
+
+
+class ReceiptResult(Enum):
+    PASS = "pass"
+    FAIL = "fail"
 
 
 @dataclass(frozen=True, slots=True)
 class KB:
-    head: str
-    observations: Tuple[Observation, ...] = ()
-    claims: Tuple[Claim, ...] = ()
-    bindings: Tuple[Binding, ...] = ()
-    derivations: Tuple[Derivation, ...] = ()
-    corrections: Tuple[Correction, ...] = ()
-    validations: Tuple[Tuple[ClaimRef, str], ...] = ()
-
-    def view(self) -> KbView:
-        return KbView(
-            self.observations,
-            self.claims,
-            self.bindings,
-            self.corrections,
-            self.derivations,
-            self.validations,
-        )
+    snapshot: SnapshotId
+    observations: tuple[Observation, ...] = ()
+    claims: tuple[Claim, ...] = ()
+    attestations: tuple[Attestation, ...] = ()
+    enumerations: tuple[Enumeration, ...] = ()
+    derivations: tuple[Derivation, ...] = ()
+    corrections: tuple[Correction, ...] = ()
+    receipts: tuple[Receipt, ...] = ()
 
 
-def find_obs(v: KbView, oid: str) -> Observation | None:
-    for o in v.observations:
-        if o.id == oid:
-            return o
-    return None
+@dataclass(frozen=True, slots=True)
+class Checked:
+    statement: Statement
+    dependencies: tuple[Dependency, ...]
 
 
-def find_claim(v: KbView, ref: ClaimRef) -> Claim | None:
-    for c in v.claims:
-        if c.id == ref.id and c.rev == ref.rev:
-            return c
-    return None
+class Support(Enum):
+    NONE = "none"
+    POSITIVE = "positive"
+    NEGATIVE = "negative"
+    BOTH = "both"
 
 
-def prop_of(v: KbView, ref: ClaimRef) -> ClaimProp:
-    c = find_claim(v, ref)
-    if c is None:
-        return ClaimProp.of_atom(Atom("", "", ()))
-    return c.prop
+@dataclass(frozen=True, slots=True)
+class Assessment:
+    support: Support
+    applicable: bool
+    freshness: Freshness
+    validated: bool
+    contested: bool
+    available: bool
+    usable: bool
 
 
-def scope_of(v: KbView, ref: ClaimRef) -> Scope | None:
-    c = find_claim(v, ref)
-    return None if c is None else c.scope
+@dataclass(frozen=True, slots=True)
+class Authority:
+    actor: ActorId
+    target: ClaimRef
+    intended_use: str
+    policy: PolicyId
+    statement: Statement
+    approved: KB
+    approvals: tuple[Claim, ...]
+    context: Context
+
+
+@dataclass(frozen=True, slots=True)
+class Plan:
+    id: OperationId
+    expected_snapshot: SnapshotId
+    candidate: KB
+    authority: Authority
+    claim: ClaimRef
+    witness: Witness
+
+
+@dataclass(frozen=True, slots=True)
+class VerifiedApproval:
+    """Trusted adapter capability: construct only after authenticating this plan."""
+
+    plan: Plan
+
+
+@dataclass(frozen=True, slots=True)
+class JournalEntry:
+    plan: Plan
+
+
+class CommitOutcome(Enum):
+    APPLIED = "applied"
+    ALREADY_APPLIED = "already_applied"
+    INPUT_CONFLICT = "input_conflict"
+    PREDECESSOR_CONFLICT = "predecessor_conflict"
+    REJECTED = "rejected"
+
+
+@dataclass(frozen=True, slots=True)
+class Application:
+    kb: KB
+    journal: tuple[JournalEntry, ...]
+    outcome: CommitOutcome
+
+
+class ProposalStatus(Enum):
+    DRAFT = "draft"
+    PROPOSED = "proposed"
+    APPROVED = "approved"
+    APPLIED = "applied"
+    VERIFIED = "verified"
+    REJECTED = "rejected"
+
+
+@dataclass(frozen=True, slots=True)
+class Proposal:
+    id: ProposalId
+    revision: ClaimRevision
+    target: ClaimRef
+    status: ProposalStatus
+    actor: ActorId | None
+    executor: ActorId | None
+    acceptor: ActorId | None
+    gates: tuple[ReceiptId, ...]
+
+
+class HypothesisStatus(Enum):
+    SUPPORTED = "supported"
+    REFUTED = "refuted"
+    OPEN = "open"
+    UNKNOWN = "unk"
+
+
+@dataclass(frozen=True, slots=True)
+class Hypothesis:
+    text: str
+    status: HypothesisStatus
+
+
+@dataclass(frozen=True, slots=True)
+class Investigation:
+    checked_against: str
+    scope_and_limits: str
+    hypotheses: tuple[Hypothesis, ...]
+
+
+class AuthoredStatus(Enum):
+    DRAFT = "draft"
+    PROPOSED = "proposed"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+    LANDING = "landing"
+    APPLIED = "applied"
+    VERIFIED = "verified"
+    REGRESSED = "regressed"
+    DEFERRED = "deferred"
+    SUPERSEDED = "superseded"
+
+
+class AuthoredProfile(Enum):
+    MODERN = "modern"
+    LEGACY_LIMITED = "legacy_limited"
+
+
+class GateWhen(Enum):
+    LAND = "land"
+    DEPLOY = "deploy"
+    USE = "use"
+
+
+class GateOutcome(Enum):
+    PASS = "pass"
+    FAIL = "fail"
+    UNKNOWN = "unk"
+
+
+@dataclass(frozen=True, slots=True)
+class AuthoredGateDefinition:
+    id: GateId
+    claim: str
+    check: str
+    when: GateWhen
+    by: ActorId | None
+    checker: CheckerId | None
+
+
+@dataclass(frozen=True, slots=True)
+class AuthoredGateResult:
+    definition: AuthoredGateDefinition
+    target_revision: TargetRevision | None
+    checker: CheckerId | None
+    result: GateOutcome
+    observed_at: int
+    expires_at: int
+    proposal_revision: ProposalMaterialRevision | None
+    environment: str
+    scope: str
+    evidence_refs: tuple[str, ...]
+    actor: ActorId | None
+
+
+@dataclass(frozen=True, slots=True)
+class AuthoredReplacement:
+    id: ProposalId
+    superseded_by: ProposalId | None
+
+
+@dataclass(frozen=True, slots=True)
+class AuthoredLanded:
+    """Exact resolution projected by the source adapter, not authored approval."""
+
+    reference: str
+    target_revision: TargetRevision
+
+
+@dataclass(frozen=True, slots=True)
+class AuthoredProposal:
+    status: AuthoredStatus
+    profile: AuthoredProfile
+    research_present: bool
+    alternatives_count: int
+    target_revision: TargetRevision | None
+    gate_definitions: tuple[AuthoredGateDefinition, ...]
+    gate_results: tuple[AuthoredGateResult, ...]
+    actor: ActorId | None
+    acceptor: ActorId | None
+    executor: ActorId | None
+    verifier: ActorId | None
+    landed_refs: tuple[str, ...]
+    regression_note: str
+    id: ProposalId
+    superseded_by: ProposalId | None
+    proposals: tuple[AuthoredReplacement, ...]
+    accepted_revision: ProposalMaterialRevision | None
+    proposal_revision: ProposalMaterialRevision | None
+    environment: str
+    scope: str
+    resolved_landed: tuple[AuthoredLanded, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class SelectionState:
+    kb: KB
+    selected: tuple[ClaimRef, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class SelectionPlan:
+    id: OperationId
+    expected_snapshot: SnapshotId
+    target_snapshot: SnapshotId
+    new_snapshot: SnapshotId
+    selected: tuple[ClaimRef, ...]
+    actor: ActorId | None
+    policy: PolicyId
+    intended_use: str
+    context: Context
+
+
+@dataclass(frozen=True, slots=True)
+class VerifiedSelectionApproval:
+    plan: SelectionPlan
+
+
+@dataclass(frozen=True, slots=True)
+class SelectionJournalEntry:
+    plan: SelectionPlan
+
+
+@dataclass(frozen=True, slots=True)
+class SelectionResult:
+    state: SelectionState
+    journal: tuple[SelectionJournalEntry, ...]
+    outcome: CommitOutcome
+
+
+def find_claim(kb: KB, ref: ClaimRef) -> Claim | None:
+    return next((claim for claim in kb.claims if claim.ref == ref), None)
+
+
+def find_observation(kb: KB, ident: ObservationId) -> Observation | None:
+    return next((observation for observation in kb.observations if observation.id == ident), None)
+
+
+def member_formula(members: tuple[str, ...], predicate: str) -> Formula:
+    result: Formula = Truth()
+    for member in reversed(members):
+        result = Conjunction(Atomic(Atom(member, predicate)), result)
+    return result

@@ -12,7 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from storage import is_past_ttl, ttl_seconds
+from kctx.domain.time import is_past_ttl, ttl_seconds
 
 
 class TtlBoundaryTests(unittest.TestCase):

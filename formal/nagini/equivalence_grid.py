@@ -17,8 +17,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
-from kctx.semantics.model import Ttl  # noqa: E402
-from kctx.semantics.time import Freshness, assess_fresh  # noqa: E402
+from kctx.semantics.model import Freshness, Ttl, TtlTag  # noqa: E402
+from kctx.semantics.time import assess_fresh  # noqa: E402
 
 # Execute the RUNTIME twin (plain algorithm). The nagini job separately
 # asserts this body is token-identical to the Viper-verified annotated twin.
@@ -32,9 +32,9 @@ _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 assess_fresh_tagged = _mod.assess_fresh_tagged
 
-POLICIES = [(0, 5, Ttl("expireAfter", 5)), (0, 50, Ttl("expireAfter", 50)),
-            (0, 0, Ttl("expireAfter", 0)), (1, 0, Ttl("noExpiry")),
-            (2, 0, Ttl("missing"))]
+POLICIES = [(0, 5, Ttl(TtlTag.EXPIRE_AFTER, 5)), (0, 50, Ttl(TtlTag.EXPIRE_AFTER, 50)),
+            (0, 0, Ttl(TtlTag.EXPIRE_AFTER, 0)), (1, 0, Ttl(TtlTag.NO_EXPIRY)),
+            (2, 0, Ttl(TtlTag.MISSING))]
 RESULTS = {0: Freshness.FRESH, 1: Freshness.STALE, 2: Freshness.UNKNOWN}
 
 BASE = 1_000_000

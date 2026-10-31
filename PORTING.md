@@ -1,59 +1,70 @@
-# Port queue: flat modules → `src/kctx` package (handover §7.1)
+# Package cutover and ownership
 
-The full typed refactor, executed as reviewable slices with the suite green
-at each step (handover §1.8 forbids the one-diff big-bang; G18 rejects
-unreviewable changes). Each landed slice: types threaded, all tests green,
-committed and pushed. The frozen fixture suite (322 tests) is the behavior
-contract throughout — "faithful to the handover" means behavior-preserving
-except where the handover itself mandates a change (readiness predicate,
-corrections ordering, cursor semantics, gate binding — all landed earlier).
+The flat-module port queue is complete: production code lives in `src/kctx`,
+imports use `kctx.*`, and callers use the package entry point. This inventory is
+an ownership map, **not** a statement that every qualification gate passed.
+Current evidence is maintained in [gates](docs/kctx/gates.md); historical test
+counts and earlier v1 conformance results are not current assurance claims.
 
-## Landed
+| Completed boundary | Current owner and contract |
+| --- | --- |
+| Domain identities | `src/kctx/domain/ids.py`: validated nominal identities for authored assets, claims/revisions, observations, captures, actors, policies, source revisions, plans, releases and native commits. Git, Dolt and content identities are not one interchangeable SHA type. |
+| Domain records and vocabulary | `domain/records.py`, `proposals.py`, `incidents.py`, `capture.py`, `corrections.py`, `targets.py`, `vocabulary.py`, `time.py`, `json.py`: typed records, closed variants, parsed targets and boundary JSON. |
+| Codecs | `codecs/records.py`, `frontmatter.py`, `documents.py`, `gates.py`, `proposals.py`, `capture.py`, `validation.py`: explicit decode/encode boundaries and span-preserving authored document updates. |
+| Filesystem adapters | `adapters/files/`: contained reads, conditional mutations, root discovery and retained knowledge artifacts. |
+| Git adapters | `adapters/git/`: exact citation objects, captured worktree identities and retained release manifests/publication refs. |
+| Dolt adapters | `adapters/dolt/`: native candidate commits, normalized structured knowledge, backup/restore and pinned read sessions. |
+| Semantic decisions | `semantics/model.py`, `checker.py`, `wellformed.py`, `workflow.py`, `time.py`, `wire.py`: current version 2 finite witnesses, independent assessments, approval/selection and authored workflow predicates. |
+| Application services | `services/`: inventory/navigation, proposals/gates, investigations/signatures/KTLO/dossiers, observations/coverage/runs, corrections, citation refresh, validation and authenticated knowledge admission/retrieval. |
+| Citation implementation | `citations/`: built-in construction, syntax, classification, scanning, rendering and redaction. No external citation executable or separate legacy protocol. |
+| Authored graph | `graph/`: pinned extraction, exact citation occurrence bindings, native Dolt query projection and its own candidate/active-pointer recovery. It is not a substitute semantic inference engine. |
+| Configuration and presentation | `config.py`, `observability.py`, `presentation.py`, `redaction.py`: single machine config, structured diagnostics, audience output and privacy boundaries. |
+| CLI | `cli/app.py` plus command modules and `citations/cli.py`, `graph/cli_graph.py`: native Click commands registered by `register(root)`, Rich human rendering, typed service calls and JSON replies. The old Arguments/dispatch/registration compatibility architecture is removed. |
+| Agent/API protocol | `engine/`: one JSON-RPC 2.0 JSONL server, `from kctx.engine import serve`, surfaced as `kctx serve`; initialized protocol version 1. Citation/graph/knowledge methods share the engine; operator private signing stays CLI-only. |
+| Packaging | `src/kctx/__main__.py`, package entry points and `py.typed`: ordinary installed Python runtime; Lean is development/qualification infrastructure, not runtime execution. |
 
-| Slice | What moved | Notes |
-| --- | --- | --- |
-| semantics | `src/kctx/semantics/` | The proved core: pure typed decisions, Lean-mirrored, conformance 35/35. |
-| domain ids | `src/kctx/domain/ids.py` | Nominal validated ids (asset/evidence/relationship namespaces); wired at the inventory boundary. |
-| domain targets | `src/kctx/domain/targets.py` | `uses`-target spellings parsed once into a closed sum; fixtures pin the six variants and widening rules. (nav.py wiring is queued below — the parse module + tests land first.) |
-| graph package | `graph/` → `src/kctx/graph/` | Self-bootstrapping under both import styles; all imports fixed (cli, kctx.py, 7 test files). |
-| observability seam | `src/kctx/observability.py` | Entry-point logging no longer couples every invocation to the graph package (§7.2); graph owns the structlog impl behind the seam during the port. |
-| config layer | `src/kctx/config.py` | One `config.toml`, no layering (`docs/kctx/config.md`). Wired: root/cite_bin/cite_py/graph_dir/log_dir. All legacy env vars (KCTX_ROOT, CITE_BIN, KCTX_CITE_PY, KCTX_GRAPH_DIR, KCTX_LOG_DIR) removed from production modules; `KCTX_CONFIG` is the single remaining knob. 13 fixtures. |
-| frontmatter codec | `src/kctx/codecs/frontmatter.py` | Shared parser with duplicate-key diagnostics; `storage.py` delegates. |
-| entry | `kctx.py` | Puts `src` on sys.path; logging via the seam; `-v` consumed at the boundary. |
+## Nominal values are a boundary rule
 
-## Queue (dependency order)
+Decode external strings once, operate on domain values internally, and encode at
+the output boundary. A claim revision, source revision, file mutation revision,
+proposal material revision and Dolt commit name different things. Keeping their
+external spellings does not justify aliasing their types. Python nominal classes
+and Lean `Ids.lean` prevent accidental substitutions; strict codecs enforce
+shape/value constraints but do not establish external authenticity.
 
-1. **domain records + codecs** — typed `Asset`/`Relationship`/`Observation`/
-   `Proposal` decode→validate→object in `domain/` + `codecs/` (flat-Markdown
-   document codec with span preservation per §7.4); `records.py` and the
-   storage frontmatter helpers become codecs clients.
-2. **storage → adapters/files** — root precedence fix (§7.3: `--root` →
-   `KCTX_ROOT` → config → KB marker from cwd; never any git repo), JSON
-   codecs, time utilities split out.
-3. **services** — inventory, proposals/gates, investigations/signatures/
-   ktlo/dossiers, corrections, runs (observation/coverage/receipts), admit,
-   nav (context/stale/uses/home/timeline), validate orchestrator; each calls
-   `kctx.semantics` for decisions and `domain` types internally.
-4. **cli dispatch** — `cli/` package; flat `cli.py` deleted at the end of
-   the slice that removes its last import.
-5. **root-module deletion** — when the last service lands, the flat modules
-   are deleted (no shims): imports in tests move to the package in the same
-   commit.
+Use `kctx.semantics` for current pure functions, not removed v1 derivation APIs.
+Use `kctx.engine` for the production protocol, not the development reference
+codec as an agent service. No flat-root import shims or parallel citation server
+are required. The authored navigation command `context` and authenticated
+`knowledge context` intentionally retain different contracts.
 
-## Constraint notes
+## Deliberate changes, not compatibility accidents
 
-- Tests are the contract: any red test stops the slice.
-- The conformance harness (`scripts/conformance_check.py`) and contracts
-  check (`scripts/check_contracts.py`) run at every checkpoint.
-- Nagini/Viper: **landed for the freshness leaf** — compose profile `nagini`
-  (JVM + Viper + nagini 1.3.1, python 3.12) verifies `assess_fresh_contracts.py`
-  ("Verification successful"), `twin_drift_check.py` asserts the executed
-  runtime twin is token-identical to the verified body, and
-  `equivalence_grid.py` runs 100 cases against production `assess_fresh`.
-  Extended to `usable_for` (T17): Viper-verified contracts (supported=0 →
-  never usable; all-mandatory-met → usable; each required-unmet condition
-  blocks), drift-guarded runtime twin, 80/128 realizable-case grid. The grid
-  surfaced a real modeling fact worth keeping in the trace: contested is not
-  independent of supported in production (corrections reject the derivation
-  itself), and evidence-only support is freshness-guarded. Further leaves
-  follow the same pattern; whole-core refinement remains out of scope.
+- Readiness cannot be bypassed by jumping from draft to proposed.
+- Gates bind material, target/environment/scope, checker, time and actor; changing
+  inputs requires new evidence rather than carrying an old pass forward.
+- Corrections persist recoverable operation intent before review projections;
+  exact replay and conflicts are explicit.
+- Observation provenance retains worktree identity and dependency roots, not just
+  a repository HEAD or several copies counted as independent evidence.
+- Citation refresh preserves historical binding; current-state fields are
+  advisory, not silently rewritten observations.
+- Authenticated knowledge uses native Dolt candidates and a completed release
+  boundary; the authored graph remains separately rebuildable.
+- Version 2 replaces the unsound v1 assurance model rather than wrapping it.
+  Support, freshness, validation, applicability and contestation are independent.
+
+See [calculus](docs/kctx/calculus.md), [configuration](docs/kctx/config.md),
+[workflows](docs/kctx/workflows.md) and [flow diagrams](docs/kctx/flows.md).
+
+## Qualification scope
+
+Lean definitions/proofs, Python conformance, adapter qualification and leaf-level
+Nagini contracts answer different questions. Nagini's time/Boolean leaves are
+not a whole-core refinement proof. Named pointers include
+`tests/test_domain_ids.py`, `tests/test_domain_targets.py`,
+`tests/test_record_codecs.py`, `tests/test_cli_commands.py`,
+`tests/test_engine_protocol.py`, `tests/test_knowledge_boundaries.py`,
+`tests/test_storage_publication.py`, `tests/semantics/` and `tests/conformance/`.
+Consult source-identified reports in the gate record for exercised results; no
+frozen historical test count is used as a completion criterion here.

@@ -221,11 +221,21 @@ def load(root: Path, inv_id: InvestigationId) -> LoadedDocument[Investigation]:
 
 
 def list_investigations(
-    root: Path, *, open_only: bool = False, asset: AssetId | None = None
+    root: Path,
+    *,
+    open_only: bool = False,
+    asset: AssetId | None = None,
+    skipped: list[str] | None = None,
 ) -> tuple[Investigation, ...]:
     out: list[Investigation] = []
     for path in all_paths(root):
-        record = _decode(read_document(path))
+        try:
+            record = _decode(read_document(path))
+        except (KctxError, ValueError, OSError) as error:
+            if skipped is None:
+                raise
+            skipped.append(f"investigation {path.relative_to(root)}: {error}")
+            continue
         if open_only and record.status not in (
             InvestigationStatus.OPEN,
             InvestigationStatus.MONITORING,

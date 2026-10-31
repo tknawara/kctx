@@ -5,7 +5,6 @@ from kctx.domain.capture import CaptureStatus, CoveragePolicy, ObservationAssess
 from kctx.domain.ids import (
     AssetId,
     ContentDigest,
-    EvidenceId,
     ObservationId,
     RelationshipId,
     RunId,
@@ -39,6 +38,7 @@ from kctx.domain.records import (
     RunResume,
     SharedEvidence,
 )
+from kctx.domain.targets import parse_evidence_address
 from kctx.domain.vocabulary import (
     AssetKind,
     CoverageOutcome,
@@ -140,7 +140,9 @@ def decode_relationship(value: object) -> Relationship:
         from_=AssetId(text(d["from"], "from")),
         to=AssetId(text(d["to"], "to")),
         status=enum_value(RelationshipStatus, d.get("status", "explicit"), "status"),
-        evidence=tuple(EvidenceId(item) for item in texts(d.get("evidence", []), "evidence")),
+        evidence=tuple(
+            parse_evidence_address(item) for item in texts(d.get("evidence", []), "evidence")
+        ),
         applicability=text(d.get("applicability", ""), "applicability"),
     )
 
@@ -153,7 +155,7 @@ def encode_relationship(value: Relationship) -> JsonObject:
         "from": value.from_.val,
         "to": value.to.val,
         "status": value.status.value,
-        "evidence": [item.val for item in value.evidence],
+        "evidence": [item.spelling for item in value.evidence],
         "applicability": value.applicability,
     }
     return result
@@ -584,4 +586,5 @@ def encode_impact(value: Impact) -> JsonObject:
         "reached": reached,
         "unexplored_edges": unexplored,
         "note": value.note,
+        "warnings": list(value.warnings),
     }

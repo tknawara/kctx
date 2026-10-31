@@ -11,12 +11,12 @@ from kctx.domain.capture import (
 from kctx.domain.ids import (
     AssetId,
     ContentDigest,
-    EvidenceId,
     ObservationId,
     RelationshipId,
     RunId,
     SourceRevision,
 )
+from kctx.domain.targets import EvidenceAddress
 from kctx.domain.vocabulary import (
     AssetKind,
     CoverageOutcome,
@@ -58,7 +58,7 @@ class Relationship:
     from_: AssetId
     to: AssetId
     status: RelationshipStatus = RelationshipStatus.EXPLICIT
-    evidence: tuple[EvidenceId, ...] = ()
+    evidence: tuple[EvidenceAddress, ...] = ()
     applicability: str = ""
 
 
@@ -210,3 +210,4 @@ class Impact:
     reached: tuple[ImpactReached, ...]
     unexplored_edges: tuple[ImpactUnexplored, ...]
     note: str
+    warnings: tuple[str, ...] = ()

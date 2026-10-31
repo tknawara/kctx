@@ -53,10 +53,14 @@ class ContainedCitationTest(KctxTestCase):
                     self.assertEqual(self.marker.read_bytes(), self.original)
             provider.assert_not_called()
 
-    def test_directory_link_and_explicit_symlink_ancestor_are_refused(self):
+    def test_walk_skips_non_markdown_links_but_refuses_selected_ones(self):
         alias = self.root / "linked-directory"
         alias.symlink_to(self.outside, target_is_directory=True)
-        for target in (self.root, alias, alias / "outside.md"):
+        # A non-Markdown link inside a walk is skipped unread, never followed:
+        # a git-ignored .venv link must not make the tree unscannable.
+        result = run_check([str(self.root)], mark=True)
+        self.assertNotIn("outside.md", {entry["file"] for entry in result["results"]})
+        for target in (alias, alias / "outside.md"):
             with self.subTest(target=target), self.assertRaises(KctxError):
                 run_check([str(target)], mark=True)
         with self.assertRaises(OSError):
@@ -205,3 +209,23 @@ class ContainedCitationTest(KctxTestCase):
                 refresh_pr_citations(self.root, "acme/widget")
         self.assertEqual(self.marker.read_bytes(), self.original)
         self.assertEqual(held.read_text(), PR)
+
+
+class ReadOnlyDescriptorTest(KctxTestCase):
+    def test_read_only_scans_do_not_hold_one_descriptor_per_file(self):
+        notes = self.root / "notes"
+        notes.mkdir()
+        for index in range(200):
+            (notes / f"n{index}.md").write_text("plain text\n", encoding="utf-8")
+
+        def open_fds() -> int:
+            return len(os.listdir("/proc/self/fd"))
+
+        baseline = open_fds()
+        with contained_markdown([str(notes)]) as sources:
+            self.assertEqual(len(sources), 200)
+            inside = open_fds()
+        self.assertLess(inside, baseline + 100, "read-only scan must not retain a descriptor per file")
+        with contained_markdown([str(notes)], writable=True) as writable:
+            self.assertEqual(len(writable), 200)
+            self.assertGreater(open_fds(), baseline + 190, "write-back runs retain their descriptors")

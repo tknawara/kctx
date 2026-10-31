@@ -4,8 +4,15 @@ from pathlib import Path
 
 from kctx.adapters.files.storage import atomic_write_json, list_json_files, read_json, slugify
 from kctx.codecs.records import decode_asset, decode_relationship, encode_asset, encode_relationship
-from kctx.domain.ids import AssetId, EvidenceId, RelationshipId
-from kctx.domain.records import Asset, Impact, ImpactReached, ImpactUnexplored, Relationship
+from kctx.domain.ids import AssetId, RelationshipId
+from kctx.domain.records import (
+    Asset,
+    Impact,
+    ImpactReached,
+    ImpactUnexplored,
+    Relationship,
+)
+from kctx.domain.targets import EvidenceAddress
 from kctx.domain.vocabulary import AssetKind, Lifecycle, RelationshipStatus, RelationshipType
 from kctx.errors import KctxError
 
@@ -18,14 +25,32 @@ def relationships_dir(root: Path) -> Path:
     return root / "inventory" / "relationships"
 
 
-def load_all_assets(root: Path) -> tuple[Asset, ...]:
-    return tuple(decode_asset(read_json(p)) for p in list_json_files(assets_dir(root)))
+def load_all_assets(root: Path, *, skipped: list[str] | None = None) -> tuple[Asset, ...]:
+    """Decode every asset; aggregate readers pass ``skipped`` to keep serving
+    the readable records instead of aborting on the first malformed one."""
+    out: list[Asset] = []
+    for path in list_json_files(assets_dir(root)):
+        try:
+            out.append(decode_asset(read_json(path)))
+        except (KctxError, ValueError, OSError) as error:
+            if skipped is None:
+                raise
+            skipped.append(f"asset {path.relative_to(root)}: {error}")
+    return tuple(out)
 
 
-def load_all_relationships(root: Path) -> tuple[Relationship, ...]:
-    return tuple(
-        decode_relationship(read_json(p)) for p in list_json_files(relationships_dir(root))
-    )
+def load_all_relationships(
+    root: Path, *, skipped: list[str] | None = None
+) -> tuple[Relationship, ...]:
+    out: list[Relationship] = []
+    for path in list_json_files(relationships_dir(root)):
+        try:
+            out.append(decode_relationship(read_json(path)))
+        except (KctxError, ValueError, OSError) as error:
+            if skipped is None:
+                raise
+            skipped.append(f"relationship {path.relative_to(root)}: {error}")
+    return tuple(out)
 
 
 def asset_add(
@@ -120,7 +145,7 @@ def rel_add(
     to: AssetId,
     id: RelationshipId | None = None,
     status: RelationshipStatus = RelationshipStatus.EXPLICIT,
-    evidence: tuple[EvidenceId, ...] = (),
+    evidence: tuple[EvidenceAddress, ...] = (),
     applicability: str = "",
 ) -> Relationship:
     rel_id = id if id is not None else RelationshipId(f"{type.value}__{from_.val}__{to.val}")
@@ -139,10 +164,15 @@ IMPACT_BOUNDARY_NOTE = (
 
 
 def impact(root: Path, ident: AssetId | str, depth: int = 2) -> Impact:
-    """Traverse an exact identity or resolve a prose search, disclosing limits."""
+    """Traverse an exact identity or resolve a prose search, disclosing limits.
+
+    Undecodable relationship records are skipped and disclosed in the result
+    warnings: one malformed file limits this traversal, never every one.
+    """
+    skipped: list[str] = []
     start = get_asset(root, ident) if isinstance(ident, AssetId) else resolve_asset(root, ident)
     by_node: dict[AssetId, list[Relationship]] = {}
-    for relationship in load_all_relationships(root):
+    for relationship in load_all_relationships(root, skipped=skipped):
         by_node.setdefault(relationship.from_, []).append(relationship)
         by_node.setdefault(relationship.to, []).append(relationship)
     visited = {start.id}
@@ -171,4 +201,11 @@ def impact(root: Path, ident: AssetId | str, depth: int = 2) -> Impact:
             other = relationship.to if relationship.from_ == node else relationship.from_
             if other not in visited:
                 unexplored.append(ImpactUnexplored(node, relationship.id, other, relationship.type))
-    return Impact(start.id, depth, tuple(reached), tuple(unexplored), IMPACT_BOUNDARY_NOTE)
+    return Impact(
+        start.id,
+        depth,
+        tuple(reached),
+        tuple(unexplored),
+        IMPACT_BOUNDARY_NOTE,
+        tuple(dict.fromkeys(skipped)),
+    )

@@ -5,6 +5,7 @@ import re
 from collections.abc import Iterator
 from dataclasses import dataclass
 
+from kctx.citations.syntax import CITE_TOKEN_RE
 from kctx.domain.json import JsonObject, JsonValue, json_value, texts
 from kctx.errors import KctxError
 
@@ -31,7 +32,6 @@ class SourceToken:
 
 
 _JSON_STRING_RE = re.compile(r'"(?:[^"\\]|\\.)*"', re.DOTALL)
-_CITE_TOKEN_RE = re.compile(r"⟦cite(?P<body>.*?)(?:⟧|(?=⟦cite)|\Z)", re.DOTALL)
 
 
 def _json_object(pairs: list[tuple[str, JsonValue]]) -> JsonObject:
@@ -149,7 +149,7 @@ def iter_source_tokens(path: str, text: str) -> Iterator[SourceToken]:
     """
     ordinal = 0
     for source in source_texts(text, is_json=path.endswith(".json")):
-        for match in _CITE_TOKEN_RE.finditer(source.text):
+        for match in CITE_TOKEN_RE.finditer(source.text):
             start = source.offset(match.start())
             yield SourceToken(
                 body=match.group("body"),

@@ -136,8 +136,11 @@ land/deploy/use timing. `show` supplies the source revision used for conditional
 writes; reread after a gate append before the next mutation. Gate evidence binds
 proposal material revision, target revision, environment, scope, checker,
 checked time, expiry and actor. `--rev` is repository evidence such as
-`org/repo@<sha>`; it is not interchangeable with proposal material revision or
-`--expected-revision`. A text label `pass` cannot authorize changed material.
+`org/repo@<sha>`; it is retained verbatim in the result's `repo_rev` and is
+never used as the gate-definition binding — that digest is always computed
+from the authored table. It is not interchangeable with proposal material
+revision or `--expected-revision`. A text label `pass` cannot authorize
+changed material.
 Use `fail` or `unk` honestly; required missing/expired/mismatched gates block the
 relevant transition. Proposed/accepted/landing/applied/verified are distinct
 states; record actual landing evidence with `proposal set --landed ...`, not a
@@ -147,6 +150,34 @@ Ed25519 knowledge approval protocol.
 Owners: `cli/proposals.py`, `services/proposals.py`, `codecs/gates.py`,
 `semantics/workflow.py`. Qualification pointers: `tests/test_gates_rev.py`,
 `tests/test_proposal_boundaries.py`, `tests/test_proposals.py`.
+
+### Adopting a legacy flat-file proposal
+
+A flat-file (`proposals/<kind>/<date>-<slug>.md`) record keeps its legacy
+profile: readable, exempt from review readiness, and never treated as verified
+knowledge. A decided status is still earned — a historical `applied` record
+without bindings is reported by `validate` with the exact missing predicates,
+not accepted silently. To bring one to a valid decided status, record the
+bindings in order, because each material change (table, target, environment,
+scope) must precede the acceptance that pins it:
+
+```sh
+# 1. Edit the file to add a real Acceptance gates table (a material change),
+#    then bind target/environment/scope — all before acceptance is recorded.
+kctx proposal set "$LEGACY" --target-revision "$TARGET" --environment "$ENV" --scope "$SCOPE"
+# 2. Record bound evidence at that material revision.
+kctx --json proposal gate "$LEGACY" G1 --outcome pass --evidence "$EVIDENCE" \
+  --by "$ACTOR" --checker "$CHECKER" --expires-at "$EPOCH" --environment "$ENV" --scope "$SCOPE"
+# 3. Earn the transitions; acceptance pins the current material revision.
+kctx proposal set "$LEGACY" --status accepted --by "$ACCEPTOR"
+kctx proposal set "$LEGACY" --status landing --by "$EXECUTOR"
+kctx proposal set "$LEGACY" --status applied --by "$EXECUTOR" --landed "$SOURCE_AT_REVISION"
+```
+
+Every transition still warns `W101`: the legacy profile's status is authored
+history, not verified knowledge or release authority. Superseding the legacy
+record with a modern proposal is the alternative when gate evidence cannot be
+re-earned honestly.
 
 ## Investigations can conclude unknown
 

@@ -406,6 +406,23 @@ class CliCommandsTest(KctxTestCase):
         self.assertEqual(code, 0)
         self.assertEqual(recovered, {"operations": []})
 
+    def test_knowledge_explain_declares_no_unused_options(self):
+        import io
+        from contextlib import redirect_stdout
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            code = cli.main(["knowledge", "explain", "--help"])
+        self.assertEqual(code, 0)
+        self.assertNotIn("--limit", buf.getvalue())
+        self.assertNotIn("--continuation", buf.getvalue())
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            code = cli.main(
+                ["--json", "knowledge", "explain", "--request", "req.json", "--limit", "7"]
+            )
+        self.assertNotEqual(code, 0)
+
     def test_invalid_asset_vocabulary_is_a_domain_error(self):
         code, error = _run(["--json", "asset", "add", "--kind", "not-a-kind", "--name", "Invalid"])
         self.assertEqual(code, 1)

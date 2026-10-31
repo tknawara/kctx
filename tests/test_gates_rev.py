@@ -35,3 +35,25 @@ class RevisionBoundSelectionTest(KctxTestCase):
         self.assertEqual(gates.latest_outcomes(results), {GateId("G1"): GateOutcome.FAIL})
         legacy = (GateResult(GateId("G2"), GateOutcome.PASS, "", ""), GateResult(GateId("G1"), GateOutcome.PASS, "", "", rev="zzz"))
         self.assertEqual(gates.latest_outcomes(legacy, rev="other"), {GateId("G2"): GateOutcome.PASS})
+
+
+class RepositoryEvidenceTest(KctxTestCase):
+    def test_repo_rev_is_evidence_and_never_replaces_the_binding_digest(self):
+        added = _add(self.root, gates=GATES_TABLE_LAND)
+        repository = "example-org/example-repo@" + "0" * 40
+        result = proposals.gate(
+            self.root,
+            added.id,
+            GateId("G1"),
+            outcome=GateOutcome.PASS,
+            evidence="ev1",
+            checker="fixture-checker",
+            expires_at=4102444800,
+            by="agent",
+            repo_rev=repository,
+        )
+        found = proposals.load(self.root, added.id)
+        self.assertEqual(result.rev, gates.gates_rev(found.document.sections))
+        self.assertEqual(result.repo_rev, repository)
+        shown = proposals.show(self.root, added.id)
+        self.assertEqual([status.outcome for status in shown.gates], [GateOutcome.PASS])

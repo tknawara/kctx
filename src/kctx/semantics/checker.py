@@ -357,3 +357,32 @@ def assess(kb: KB, context: Context, ref: ClaimRef) -> Assessment:
 
 def usable_for(kb: KB, context: Context, ref: ClaimRef) -> bool:
     return assess(kb, context, ref).usable
+
+
+def assessment_gaps(kb: KB, context: Context, ref: ClaimRef) -> tuple[str, ...]:
+    """Name the policy requirements an assessment fails, mirroring ``usable``.
+
+    Admission preflight reports these instead of one opaque Boolean; the
+    assessment remains the authority on usability itself.
+    """
+    verdict = assess(kb, context, ref)
+    claim = find_claim(kb, ref)
+    selected = claim is not None and (
+        verdict.support in (Support.BOTH, Support.POSITIVE)
+        if claim.statement.polarity is Polarity.POSITIVE
+        else verdict.support in (Support.BOTH, Support.NEGATIVE)
+    )
+    gaps: list[str] = []
+    if not verdict.applicable:
+        gaps.append("claim is not applicable to the context target")
+    if not selected:
+        gaps.append(
+            f"no accepted witness of the claim's polarity (support={verdict.support.value})"
+        )
+    if context.policy.require_fresh and verdict.freshness is not Freshness.FRESH:
+        gaps.append(f"observations are {verdict.freshness.value} under policy ttl")
+    if context.policy.require_validation and not verdict.validated:
+        gaps.append("no reusable validation receipt")
+    if context.policy.require_uncontested and verdict.contested:
+        gaps.append("claim is contested by contrary evidence or dispute")
+    return tuple(gaps)

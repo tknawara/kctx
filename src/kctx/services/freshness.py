@@ -56,6 +56,7 @@ class StaleResult(TypedDict):
     stale_runs: list[StaleRun]
     regressions: list[Regression]
     open_corrections: list[OpenCorrection]
+    warnings: NotRequired[list[str]]
 
 
 class LineChange(TypedDict):
@@ -119,12 +120,14 @@ def _changed_lines(before: str, after: str) -> list[LineChange]:
     ]
 
 
-def regression_flags(root: Path) -> list[Regression]:
+def regression_flags(root: Path, *, skipped: list[str] | None = None) -> list[Regression]:
     fixed = {
-        record.id: record.fixed_at for record in signatures.list_signatures(root) if record.fixed_at
+        record.id: record.fixed_at
+        for record in signatures.list_signatures(root, skipped=skipped)
+        if record.fixed_at
     }
     flags: list[Regression] = []
-    for record in investigations.list_investigations(root):
+    for record in investigations.list_investigations(root, skipped=skipped):
         if not record.created:
             continue
         for signature in record.signatures:
@@ -198,13 +201,19 @@ def _recompute_stale_aggregate(entries: list[StaleEntry]) -> StaleAggregate:
     }
 
 
-def _open_corrections(root: Path) -> list[OpenCorrection]:
+def _open_corrections(root: Path, *, skipped: list[str] | None = None) -> list[OpenCorrection]:
     from kctx.domain.vocabulary import CorrectionRowStatus
     from kctx.services import corrections
 
     rows: list[OpenCorrection] = []
     for path in corrections.all_paths(root):
-        parsed = corrections.parse(path.read_text(encoding="utf-8"))
+        try:
+            parsed = corrections.parse(path.read_text(encoding="utf-8"))
+        except (KctxError, ValueError, OSError) as error:
+            if skipped is None:
+                raise
+            skipped.append(f"correction {path.relative_to(root)}: {error}")
+            continue
         for row in parsed.rows:
             if isinstance(row.status, CorrectionRowStatus) and row.status in (
                 CorrectionRowStatus.PENDING,
@@ -222,8 +231,11 @@ def _open_corrections(root: Path) -> list[OpenCorrection]:
 
 
 def stale(root: Path, *, project: str | None = None, offline: bool = False) -> StaleResult:
+    """One unreadable signature, investigation, asset or correction file limits
+    its own section and is disclosed as a warning, never the whole report."""
+    skipped: list[str] = []
     assets: list[StaleAsset] = []
-    for asset in inventory.load_all_assets(root):
+    for asset in inventory.load_all_assets(root, skipped=skipped):
         if project and project not in asset.projects:
             continue
         if asset.verified_at and asset.ttl and is_past_ttl(asset.verified_at, asset.ttl):
@@ -264,8 +276,9 @@ def stale(root: Path, *, project: str | None = None, offline: bool = False) -> S
         "stale_assets": assets,
         "citations": citations,
         "stale_runs": stale_runs,
-        "regressions": regression_flags(root),
-        "open_corrections": _open_corrections(root),
+        "regressions": regression_flags(root, skipped=skipped),
+        "open_corrections": _open_corrections(root, skipped=skipped),
+        "warnings": sorted(dict.fromkeys(skipped)),
     }
 
 

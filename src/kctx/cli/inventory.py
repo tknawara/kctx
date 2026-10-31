@@ -7,7 +7,8 @@ from kctx.cli.help import RichCommand, RichGroup
 from kctx.cli.result import Reply
 from kctx.cli.values import decode, many, optional
 from kctx.codecs.records import encode_asset, encode_impact, encode_relationship
-from kctx.domain.ids import AssetId, EvidenceId, RelationshipId
+from kctx.domain.ids import AssetId, RelationshipId
+from kctx.domain.targets import parse_evidence_address
 from kctx.domain.vocabulary import AssetKind, Lifecycle, RelationshipStatus, RelationshipType
 from kctx.services import inventory
 
@@ -127,7 +128,7 @@ def rel_add(
                 to=decode("to", to, AssetId),
                 id=optional("id", ident, RelationshipId),
                 status=decode("status", status, RelationshipStatus),
-                evidence=many("evidence", evidence, EvidenceId),
+                evidence=many("evidence", evidence, parse_evidence_address),
                 applicability=applicability,
             )
         )
@@ -140,7 +141,8 @@ def rel_add(
 @click.pass_obj
 def impact(state: CliState, asset: str, depth: int) -> Reply:
     """Trace an asset's downstream impact."""
-    return Reply(encode_impact(inventory.impact(state.root, asset, depth=depth)))
+    result = inventory.impact(state.root, asset, depth=depth)
+    return Reply(encode_impact(result), 2 if result.warnings else 0)
 
 
 def register(root: click.Group) -> None:

@@ -62,6 +62,7 @@ class ContainedFile:
     _writable: bool
     _parent: int
     _name: str
+    _identity: tuple[int, int]
 
     def text(self) -> str:
         try:
@@ -100,8 +101,7 @@ class ContainedFile:
 
     @property
     def inode_identity(self) -> tuple[int, int]:
-        info = os.fstat(self._descriptor)
-        return info.st_dev, info.st_ino
+        return self._identity
 
     @staticmethod
     def write_updates(updates: Sequence[tuple[ContainedFile, str]]) -> None:
@@ -134,17 +134,45 @@ def _acquire_file(
 ) -> ContainedFile:
     flags = (os.O_RDWR if writable else os.O_RDONLY) | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK
     descriptor = os.open(name, flags, dir_fd=parent)
-    stack.callback(os.close, descriptor)
-    info = os.fstat(descriptor)
-    if not stat.S_ISREG(info.st_mode):
-        raise KctxError("permission", f"source unavailable: refusing non-regular file {path}")
-    if writable and info.st_nlink != 1:
-        raise KctxError("permission", f"source unavailable: refusing write to linked file {path}")
-    retained_parent = os.dup(parent)
-    stack.callback(os.close, retained_parent)
-    return ContainedFile(
-        path, root, root_is_file, _read(descriptor), descriptor, writable, retained_parent, name
-    )
+    released = False
+    try:
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode):
+            raise KctxError("permission", f"source unavailable: refusing non-regular file {path}")
+        if writable and info.st_nlink != 1:
+            raise KctxError(
+                "permission", f"source unavailable: refusing write to linked file {path}"
+            )
+        original = _read(descriptor)
+        identity = (info.st_dev, info.st_ino)
+        if not writable:
+            # Read-only scans visit whole trees; retain no descriptor per file.
+            # The held-descriptor protocol below is what write-backs need.
+            os.close(descriptor)
+            released = True
+            return ContainedFile(path, root, root_is_file, original, -1, False, -1, name, identity)
+        retained_parent = os.dup(parent)
+        try:
+            stack.callback(os.close, retained_parent)
+            stack.callback(os.close, descriptor)
+        except BaseException:
+            os.close(retained_parent)
+            raise
+        released = True  # The stack now owns both descriptors.
+        return ContainedFile(
+            path,
+            root,
+            root_is_file,
+            original,
+            descriptor,
+            writable,
+            retained_parent,
+            name,
+            identity,
+        )
+    finally:
+        if not released:
+            os.close(descriptor)
 
 
 def _walk(
@@ -161,10 +189,14 @@ def _walk(
         child_path = path / name
         info = os.stat(name, dir_fd=directory, follow_symlinks=False)
         if stat.S_ISLNK(info.st_mode):
-            # A link of any suffix could hide a directory containing Markdown.
-            raise KctxError(
-                "permission", f"source unavailable: refusing symbolic link {child_path}"
-            )
+            # Never follow links. A Markdown-suffixed leaf would place linked
+            # content into scan results or write-backs, so it is refused; any
+            # other link names no scannable Markdown and is skipped.
+            if name.endswith(".md"):
+                raise KctxError(
+                    "permission", f"source unavailable: refusing symbolic link {child_path}"
+                )
+            continue
         if stat.S_ISDIR(info.st_mode):
             child = os.open(name, _DIRECTORY_FLAGS, dir_fd=directory)
             try:
@@ -179,11 +211,14 @@ def _walk(
 def contained_markdown(
     paths: Sequence[str], *, writable: bool = False
 ) -> Iterator[list[ContainedFile]]:
-    """Acquire all sources before callers can mutate any; refuse every encountered link.
+    """Acquire sources before callers can mutate any; never follow links.
 
     Explicit regular-file roots need not have a Markdown suffix. Directory roots
-    recurse over Markdown files. All selected leaf descriptors remain open until
-    the context exits, so later pathname swaps cannot redirect reads or writes.
+    recurse over Markdown files; Markdown-suffixed or explicitly selected links
+    are refused, and other links in a walk are skipped unread. Write-back runs
+    hold every leaf descriptor (and a parent descriptor) open until the context
+    exits, so later pathname swaps cannot redirect writes; read-only scans read
+    each leaf once and release its descriptor immediately.
     """
     with ExitStack() as stack:
         files: list[ContainedFile] = []

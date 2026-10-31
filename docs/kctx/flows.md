@@ -88,6 +88,11 @@ Owners: `citations/syntax.py`, `citations/scan.py`,
 worktree bytes. Graph edges preserve occurrence identity (source path/line and
 ordinal), so repeated citations do not collapse into one binding. A symbolic or
 ambiguous legacy reference is not silently promoted to an exact revision.
+Scan parsing is per token: a duplicate-field or unterminated
+token is retained as a located `unverifiable`/`malformed` entry with its file
+and line rather than aborting the scan for its neighbors. Walks never follow
+links: Markdown-suffixed or explicitly selected links are refused, and any
+other link is skipped unread.
 
 `checked_at`, `check_status`, `current_rev`, `current_L`, and `current_state` are
 advisory fields. In particular, `current_L` belongs to `current_rev`, not to the

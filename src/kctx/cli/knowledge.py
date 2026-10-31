@@ -127,8 +127,8 @@ def query(
     state: CliState,
     request: str,
     release: str | None,
-    limit: int,
-    continuation: str | None,
+    limit: int = 20,
+    continuation: str | None = None,
     *,
     explain: bool,
 ) -> Reply:
@@ -163,14 +163,10 @@ def context(
 @knowledge.command()
 @click.option("--request", required=True, help="JSON with context and one exact claim ref.")
 @click.option("--release")
-@click.option("--limit", type=int, default=20)
-@click.option("--continuation")
 @click.pass_obj
-def explain(
-    state: CliState, request: str, release: str | None, limit: int, continuation: str | None
-) -> Reply:
+def explain(state: CliState, request: str, release: str | None) -> Reply:
     """Explain the authority of an exact claim revision."""
-    return query(state, request, release, limit, continuation, explain=True)
+    return query(state, request, release, explain=True)
 
 
 @knowledge.command()

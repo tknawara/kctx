@@ -17,7 +17,7 @@ from kctx.adapters.files.storage import atomic_write_json
 from kctx.codecs.gates import encode_gate_result
 from kctx.codecs.documents import read_document, render_document
 from kctx.domain.ids import (
-    AssetId, GateId, InvestigationId, ProposalMaterialRevision, SignatureId,
+    AssetId, GateId, InvestigationId, ProposalId, ProposalMaterialRevision, SignatureId,
     TargetRevision, TicketId,
 )
 from kctx.domain.proposals import ProposalAdded
@@ -245,6 +245,98 @@ class ProposalLandedValidationTest(KctxTestCase):
         self.assertFalse(report.ok)
         self.assertTrue(any("gate" in problem.message for problem in report.problems))
 
+
+class LegacyProposalValidationTest(KctxTestCase):
+    """Legacy records stay readable, but decided status is still earned (Q26/Q27)."""
+
+    LEGACY_TABLE = (
+        "| id | claim | check | when | by | checker |\n"
+        "|---|---|---|---|---|---|\n"
+        "| G1 | it works | `true` | land | agent | fixture-checker |\n"
+    )
+
+    def _write_legacy(self, status="applied", sections=None, **fields):
+        artifact = self.root / "landed-artifact.txt"
+        artifact.write_bytes(ARTIFACT_CONTENTS)
+        kind_dir = proposals.proposals_root(self.root) / "skill"
+        kind_dir.mkdir(parents=True, exist_ok=True)
+        path = kind_dir / "2026-10-01-legacy-thing.md"
+        frontmatter = {
+            "id": "skill/2026-10-01-legacy-thing",
+            "kind": "skill",
+            "type": "skill-refinement",
+            "title": "Legacy thing",
+            "status": status,
+            "created": "2026-10-01",
+            "updated": "2026-10-01",
+            "target": "[]",
+            "references": "[]",
+            "decided_by": "user",
+            "superseded_by": None,
+            "target_revision": _landed_reference(self.root),
+        }
+        frontmatter.update(fields)
+        body = {
+            "Context": "c",
+            "Evidence": "e",
+            "Proposed change": "ch",
+            "Why general / justification": "w",
+            "Decision log": f"- 2026-10-01: {status}",
+        }
+        if sections:
+            body.update(sections)
+        render_document(frontmatter, body, title="Legacy thing").write(path)
+        return path
+
+    def test_names_the_failed_predicates(self):
+        self._write_legacy(status="applied", landed=f"[{_landed_reference(self.root)}]")
+        report = validate.validate(self.root)
+        self.assertFalse(report.ok)
+        message = next(
+            problem.message
+            for problem in report.problems
+            if problem.where == "skill/2026-10-01-legacy-thing"
+        )
+        for expected in (
+            "accepted proposal revision",
+            "acceptor",
+            "executor",
+            "a land gate",
+        ):
+            self.assertIn(expected, message)
+
+    def test_adoption_recipe_reaches_valid_applied(self):
+        path = self._write_legacy(status="proposed", decided_by=None)
+        read_document(path).update_fields(
+            {
+                "target_revision": _landed_reference(self.root),
+                "environment": "test",
+                "scope": "landed-artifact.txt",
+            }
+        ).update_section("Acceptance gates", self.LEGACY_TABLE).write(path)
+        ident = ProposalId("skill/2026-10-01-legacy-thing")
+        proposals.gate(
+            self.root,
+            ident,
+            GateId("G1"),
+            outcome=GateOutcome.PASS,
+            evidence="observed the legacy thing",
+            checker="fixture-checker",
+            expires_at=4102444800,
+            by="agent",
+        )
+        proposals.set_status(self.root, ident, status=ProposalStatus.ACCEPTED, by="alice")
+        proposals.set_status(self.root, ident, status=ProposalStatus.LANDING, by="bob")
+        proposals.set_status(
+            self.root,
+            ident,
+            status=ProposalStatus.APPLIED,
+            by="bob",
+            landed_add=(_landed_reference(self.root),),
+        )
+        report = validate.validate(self.root)
+        self.assertEqual(report.problems, ())
+        self.assertTrue(report.ok)
 
 class ProposalCandidateValidationTest(KctxTestCase):
     def test_hand_authored_proposed_record_requires_review_readiness(self):

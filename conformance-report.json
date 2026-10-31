@@ -54,15 +54,15 @@
         "src/kctx/domain/ids.py": "183ffac3a677855699ea3d45c65d36b68684ec7bf96a12f77a4917837f5b224b",
         "src/kctx/errors.py": "7525192b5e1a7a084b6a5b80c94beafb83b379cd71294ce5ec467297413504d0",
         "src/kctx/semantics/__init__.py": "4e12ad82720a923437d623c46e5a27a068ea8da79509cf23ee9da5707f7e677b",
-        "src/kctx/semantics/checker.py": "196aeaf161ca107db7ce05469789cf893784d2c579fdc3757334978005859c18",
+        "src/kctx/semantics/checker.py": "98b70e28e02afa1ed28b18c8c0438dd2269dbb54c5b189cf9745b22a8ea04dc3",
         "src/kctx/semantics/model.py": "4fa9a05d7d1b64992200e32874c4ec252f976a0fc3f59f02d7b1cc121df9ceda",
         "src/kctx/semantics/time.py": "eea9776469088e289be1c7536107d3a9822d418bfff5c45fbcc752cb4346669e",
         "src/kctx/semantics/wellformed.py": "d05794e489ea94afef934c3d9aec33942fd12b491e096e6891b9a89c11447602",
         "src/kctx/semantics/wire.py": "fe571e5718fd51081a19d37cfc264853ebc6513fdcef5017fbed23b99596669b",
-        "src/kctx/semantics/workflow.py": "ebc086d96256ad7d912317eee61821783789ecd1d3968c1fd3e46e725a7f7a46",
+        "src/kctx/semantics/workflow.py": "27ba03dc7701bc767ccc6c42b5a7273f9b1ee8ec4b0ed609fe44089eca5712d9",
         "tests/semantics/examples.py": "471758a3d412b92e31e527322bfbd602b6b474cf32d12facba63416226189def"
       },
-      "sha256": "d6c422fd4f7f6afffb30a3a05ab0976ab2e733844404a3d9d7fa9a14eddf56db"
+      "sha256": "61cbe9da42c55f81b649003b07c8a1e3083be3961183e5a7b985325a22c3b778"
     },
     "python_version": "3.12.3",
     "reference": {

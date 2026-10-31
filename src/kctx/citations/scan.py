@@ -11,6 +11,7 @@ from kctx.citations.syntax import (
     CITE_LINE_RE,
     UNPINNED_RE,
     is_illustrative,
+    iter_cite_tokens,
     parse_cite_body,
     remove_field,
     replace_field,
@@ -203,20 +204,33 @@ def run_check(
                 text = source.text()
                 pieces: list[str] = []
                 end = 0
-                for match in CITE_LINE_RE.finditer(text):
-                    line_no = text.count("\n", 0, match.start()) + 1
-                    if is_illustrative(match.group("body")):
+                for token in iter_cite_tokens(text):
+                    line_no = token.line_no
+                    if is_illustrative(token.body):
                         skipped.append({"file": str(path), "line_no": line_no})
                         continue
-                    fields = parse_cite_body(match.group("body"))
+                    try:
+                        if not token.complete:
+                            raise KctxError("malformed", "unterminated citation token")
+                        fields = parse_cite_body(token.body)
+                    except KctxError as error:
+                        # One bad token is reported in place, never a whole-scan abort.
+                        results.append(
+                            {
+                                "file": str(path),
+                                "line_no": line_no,
+                                "fields": {},
+                                "status": CitationStatus.UNVERIFIABLE.value,
+                                "reason": str(error),
+                            }
+                        )
+                        continue
                     status = classify(fields, now=now, config=config)
                     results.append(_entry(str(path), line_no, fields, status))
-                    rewritten = _rewrite(
-                        match.group(0), fields, status, now, touch, touch_all, mark
-                    )
+                    rewritten = _rewrite(token.raw, fields, status, now, touch, touch_all, mark)
                     if rewritten is not None:
-                        pieces.extend((text[end : match.start()], rewritten))
-                        end = match.end()
+                        pieces.extend((text[end : token.start], rewritten))
+                        end = token.end
                 for match in UNPINNED_RE.finditer(text):
                     warnings.append(
                         {
@@ -285,10 +299,27 @@ def run_stale(
         for source in sources:
             path = source.path
             text = source.text()
-            for match in CITE_LINE_RE.finditer(text):
-                if is_illustrative(match.group("body")):
+            for token in iter_cite_tokens(text):
+                if is_illustrative(token.body):
                     continue
-                fields = parse_cite_body(match.group("body"))
+                try:
+                    if not token.complete:
+                        raise KctxError("malformed", "unterminated citation token")
+                    fields = parse_cite_body(token.body)
+                except KctxError as error:
+                    entries.append(
+                        {
+                            "file": str(path),
+                            "line_no": token.line_no,
+                            "kind": None,
+                            "reason": f"malformed: {error}",
+                            "stale": None,
+                            "seen": None,
+                            "age_days": None,
+                            "group": _group_for(source),
+                        }
+                    )
+                    continue
                 reason: str | None = None
                 if offline:
                     if fields.get("stale"):
@@ -309,7 +340,7 @@ def run_stale(
                     entries.append(
                         {
                             "file": str(path),
-                            "line_no": text.count("\n", 0, match.start()) + 1,
+                            "line_no": token.line_no,
                             "kind": fields.get("kind"),
                             "reason": reason,
                             "stale": fields.get("stale"),

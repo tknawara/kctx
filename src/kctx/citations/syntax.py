@@ -3,10 +3,12 @@
 import hashlib
 import re
 from collections.abc import Iterator, Mapping, Sequence
+from dataclasses import dataclass
 
 from kctx.errors import KctxError
 
 CITE_LINE_RE = re.compile(r"⟦cite(?P<body>.*?)⟧", re.DOTALL)
+CITE_TOKEN_RE = re.compile(r"⟦cite(?P<body>.*?)(?:⟧|(?=⟦cite)|\Z)", re.DOTALL)
 FIELD_RE = re.compile(r'(\w+)=(?:"([^"]*)"|([^\s⟧]+))')
 RANGE_RE = re.compile(r"^(\d+)-(\d+)$")
 UNPINNED_RE = re.compile(r"@(main|HEAD|master):")
@@ -26,6 +28,35 @@ def parse_cite_body(body: str) -> dict[str, str]:
             raise KctxError("malformed", f"duplicate citation field {key!r}")
         fields[key] = match.group(2) if match.group(2) is not None else match.group(3)
     return fields
+
+
+@dataclass(frozen=True, slots=True)
+class CiteToken:
+    """One authored token occurrence with its physical line.
+
+    A missing closing delimiter ends the token at the next opener or at end of
+    input, so an unterminated token is retained as ``complete=False`` instead
+    of silently swallowing its successor.
+    """
+
+    body: str
+    raw: str
+    line_no: int
+    complete: bool
+    start: int
+    end: int
+
+
+def iter_cite_tokens(text: str) -> Iterator[CiteToken]:
+    for match in CITE_TOKEN_RE.finditer(text):
+        yield CiteToken(
+            match.group("body"),
+            match.group(0),
+            text.count("\n", 0, match.start()) + 1,
+            match.group(0).endswith("⟧"),
+            match.start(),
+            match.end(),
+        )
 
 
 def find_cite_lines(text: str) -> Iterator[tuple[re.Match[str], dict[str, str]]]:

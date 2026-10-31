@@ -154,7 +154,7 @@ class AuthoredWorkflowBoundariesTest(KctxTestCase):
         added = self._landing()
         document = added.path.read_bytes()
         history = (added.path.parent / "gates.json").read_bytes()
-        for changes in ({"checker": " "}, {"rev": " "}, {"evidence": " "}):
+        for changes in ({"checker": " "}, {"repo_rev": " "}, {"evidence": " "}):
             with self.subTest(changes=changes), self.assertRaises(KctxError):
                 self._gate(added, **changes)
             self.assertEqual(added.path.read_bytes(), document)

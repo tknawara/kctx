@@ -163,8 +163,18 @@ def load(root: Path, sig_id: SignatureId) -> LoadedDocument[Signature]:
     return LoadedDocument(path, _decode(doc), doc)
 
 
-def list_signatures(root: Path) -> tuple[Signature, ...]:
-    return tuple(_decode(read_document(p)) for p in all_paths(root))
+def list_signatures(root: Path, *, skipped: list[str] | None = None) -> tuple[Signature, ...]:
+    """Decode every signature; aggregate readers pass ``skipped`` so one
+    malformed record limits its own reporting, not the whole command."""
+    out: list[Signature] = []
+    for path in all_paths(root):
+        try:
+            out.append(_decode(read_document(path)))
+        except (KctxError, ValueError, OSError) as error:
+            if skipped is None:
+                raise
+            skipped.append(f"signature {path.relative_to(root)}: {error}")
+    return tuple(out)
 
 
 def show(root: Path, sig_id: SignatureId) -> SignatureShown:
@@ -185,9 +195,11 @@ def _pattern_matches(pattern: str, text: str) -> bool:
     return pattern.lower() in text.lower()
 
 
-def match_signatures(root: Path, text: str) -> tuple[SignatureMatch, ...]:
+def match_signatures(
+    root: Path, text: str, *, skipped: list[str] | None = None
+) -> tuple[SignatureMatch, ...]:
     hits: list[SignatureMatch] = []
-    for record in list_signatures(root):
+    for record in list_signatures(root, skipped=skipped):
         matched = tuple(p for p in record.match if _pattern_matches(p, text))
         if matched:
             hits.append(

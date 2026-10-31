@@ -255,81 +255,94 @@ def authored_transition(proposal: AuthoredProposal, target: AuthoredStatus, now:
     )
 
 
-def authored_candidate_valid(proposal: AuthoredProposal, target: AuthoredStatus, now: int) -> bool:
-    """Validate an authored candidate independently of its transition history."""
-    if target is AuthoredStatus.SUPERSEDED and not authored_supersession_valid(proposal):
-        return False
-    if target in (
+def authored_candidate_problems(
+    proposal: AuthoredProposal, target: AuthoredStatus, now: int
+) -> tuple[str, ...]:
+    """Name every failed requirement of an authored candidate, in order.
+
+    Every decided status is earned the same way for both profiles: the legacy
+    profile waives review readiness only. A historical record that never
+    recorded these bindings stays invalid until it adopts them (the workflows
+    guide's legacy adoption recipe).
+    """
+    decided = (
         AuthoredStatus.ACCEPTED,
         AuthoredStatus.LANDING,
         AuthoredStatus.APPLIED,
         AuthoredStatus.VERIFIED,
-    ) and (
+    )
+    problems: list[str] = []
+    if target in decided and (
         not _identity_present(proposal.accepted_revision)
         or proposal.accepted_revision != proposal.proposal_revision
     ):
-        return False
+        problems.append("accepted proposal revision")
+    if target is AuthoredStatus.SUPERSEDED and not authored_supersession_valid(proposal):
+        problems.append("resolving acyclic supersession")
     if target in (
         AuthoredStatus.ACCEPTED,
         AuthoredStatus.REJECTED,
         AuthoredStatus.LANDING,
         AuthoredStatus.APPLIED,
     ) and not _identity_present(proposal.actor):
-        return False
-    if target in (
+        problems.append("recorded actors")
+    if not authored_ready(proposal) and target in (
         AuthoredStatus.PROPOSED,
         AuthoredStatus.ACCEPTED,
         AuthoredStatus.LANDING,
         AuthoredStatus.APPLIED,
         AuthoredStatus.VERIFIED,
-    ) and not authored_ready(proposal):
-        return False
-    if target in (
-        AuthoredStatus.ACCEPTED,
-        AuthoredStatus.LANDING,
-        AuthoredStatus.APPLIED,
-        AuthoredStatus.VERIFIED,
-    ) and not _identity_present(proposal.acceptor):
-        return False
+    ):
+        problems.append("review readiness")
+    if target in decided and not _identity_present(proposal.acceptor):
+        problems.append("acceptor")
     if target in (
         AuthoredStatus.LANDING,
         AuthoredStatus.APPLIED,
         AuthoredStatus.VERIFIED,
     ) and not _identity_present(proposal.executor):
-        return False
+        problems.append("executor")
     if target in (AuthoredStatus.APPLIED, AuthoredStatus.VERIFIED):
         if (
             not _identity_present(proposal.target_revision)
             or not proposal.landed_refs
             or any(not ref.strip() for ref in proposal.landed_refs)
         ):
-            return False
-        if not all(
+            problems.append("explicit landed references")
+        elif not all(
             any(resolution.reference == ref for resolution in proposal.resolved_landed)
             for ref in proposal.landed_refs
         ):
-            return False
-        if not any(
+            problems.append("resolvable landed references")
+        elif not any(
             resolution.reference in proposal.landed_refs
             and resolution.target_revision == proposal.target_revision
             for resolution in proposal.resolved_landed
         ):
-            return False
-        definitions = proposal.gate_definitions
-        if target is AuthoredStatus.APPLIED:
-            definitions = tuple(d for d in definitions if d.when is GateWhen.LAND)
-            if not definitions:
-                return False
-        elif not (
-            any(d.when is GateWhen.DEPLOY for d in definitions)
-            and any(d.when is GateWhen.USE for d in definitions)
-        ):
-            return False
-        if not all(authored_gate_passes(proposal, definition, now) for definition in definitions):
-            return False
+            problems.append("landed references bound to the current target revision")
+        else:
+            definitions = proposal.gate_definitions
+            if target is AuthoredStatus.APPLIED:
+                definitions = tuple(d for d in definitions if d.when is GateWhen.LAND)
+                if not definitions:
+                    problems.append("a land gate")
+            elif not (
+                any(d.when is GateWhen.DEPLOY for d in definitions)
+                and any(d.when is GateWhen.USE for d in definitions)
+            ):
+                problems.append("deploy and use gates")
+            if definitions and not all(
+                authored_gate_passes(proposal, definition, now) for definition in definitions
+            ):
+                problems.append("current fully scoped gates")
     if target is AuthoredStatus.REGRESSED and not proposal.regression_note.strip():
-        return False
-    return True
+        problems.append("regression note")
+    return tuple(problems)
+
+
+def authored_candidate_valid(proposal: AuthoredProposal, target: AuthoredStatus, now: int) -> bool:
+    """Validate an authored candidate independently of its transition history."""
+    return not authored_candidate_problems(proposal, target, now)
 
 
 def selection_plan_valid(

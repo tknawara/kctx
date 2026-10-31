@@ -43,6 +43,12 @@ are required. The authored navigation command `context` and authenticated
 - Readiness cannot be bypassed by jumping from draft to proposed.
 - Gates bind material, target/environment/scope, checker, time and actor; changing
   inputs requires new evidence rather than carrying an old pass forward.
+- Cross-cutting readers (`impact`, `match`, `stale`) skip an undecodable record,
+  disclose it as a warning and exit partial; named-record readers and `validate`
+  stay strict. Relationship evidence holds evidence addresses (`ev:<home>/<stem>`
+  or a code locator), not bare slugs.
+- `proposal gate --rev` is repository evidence retained verbatim in `repo_rev`;
+  the gate-definition binding digest is always computed from the authored table.
 - Corrections persist recoverable operation intent before review projections;
   exact replay and conflicts are explicit.
 - Observation provenance retains worktree identity and dependency roots, not just

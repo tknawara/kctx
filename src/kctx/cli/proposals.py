@@ -203,7 +203,7 @@ def set_proposal(
 @click.option("--outcome", required=True, type=click.Choice(["pass", "fail", "unk"]))
 @click.option("--evidence", required=True)
 @click.option("--by")
-@click.option("--rev")
+@click.option("--rev", help="Repository evidence such as org/repo@<sha>, retained verbatim.")
 @click.option("--target-revision")
 @click.option("--checker", required=True)
 @click.option("--expires-at", required=True, help="Inclusive UTC epoch-second expiry.")
@@ -233,7 +233,7 @@ def gate(
         outcome=decode("outcome", outcome, GateOutcome),
         evidence=evidence,
         by=by,
-        rev=rev,
+        repo_rev=rev,
         target_revision=optional("target_revision", target_revision, TargetRevision),
         checker=checker,
         expires_at=decode("expires_at", expires_at, int),

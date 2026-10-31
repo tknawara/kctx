@@ -71,6 +71,15 @@ context. It does not trust an unrelated caller-supplied digest as a footprint.
 A passing receipt names claim, context, witness, exact dependencies and inclusive
 expiry. Reuse checks these bindings and the accepted witness again.
 
+The TTL is a policy parameter of the signed evaluation context, not a property
+of an observation or a claim. Every retrieval is assessed under its release's
+approved policy, so admitting a later release whose signed context carries a
+different TTL re-assesses every claim of that release — including unchanged,
+never re-observed ones — without any source delta. The operator authorizes
+both the TTL and the release signature; a policy change is itself the event
+being certified (D37), and readers cannot ask "fresh under an earlier policy?"
+at the later release because query contexts are pinned to it.
+
 A semantic `Plan` binds expected snapshot, full candidate KB, authority, claim
 and witness. `VerifiedApproval` is an adapter capability, not proof that an
 arbitrary Python constructor authenticated a signer. Production admission

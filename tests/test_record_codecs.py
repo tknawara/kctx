@@ -12,6 +12,7 @@ from kctx.codecs.records import (
 )
 from kctx.domain.ids import AssetId, EvidenceId, ObservationId, RelationshipId, RunId
 from kctx.domain.ids import ContentDigest
+from kctx.domain.targets import CodeLocator, EvidenceRef
 from kctx.domain.records import Asset, Coverage, CoverageEntry, Observation, ObservationEvidence, ObservationSource, Relationship
 from kctx.domain.vocabulary import AssetKind, CoverageOutcome, ObservationSystem, RelationshipType, RunMode
 from kctx.errors import KctxError
@@ -48,17 +49,31 @@ class RecordCodecTests(unittest.TestCase):
             self.assertEqual(caught.exception.category, "malformed")
 
     def test_relationship_round_trip_keeps_wire_from(self):
-        relationship = Relationship(RelationshipId("consumes__svc-a__svc-b"), RelationshipType.CONSUMES,
-                                    AssetId("svc-a"), AssetId("svc-b"), evidence=(EvidenceId("ev-1"),))
+        relationship = Relationship(
+            RelationshipId("consumes__svc-a__svc-b"),
+            RelationshipType.CONSUMES,
+            AssetId("svc-a"),
+            AssetId("svc-b"),
+            evidence=(
+                EvidenceRef("inventory", EvidenceId("ev-1")),
+                CodeLocator("example/repo", "0" * 40, "src/a.py", (11, 11)),
+            ),
+        )
         encoded = encode_relationship(relationship)
         self.assertEqual(encoded["from"], "svc-a")
         self.assertNotIn("from_", encoded)
-        self.assertEqual(encoded["evidence"], ["ev-1"])
+        self.assertEqual(
+            encoded["evidence"], ["ev:inventory/ev-1", f"example/repo@{'0' * 40}:src/a.py:11"]
+        )
         self.assertEqual(decode_relationship(encoded), relationship)
         with self.assertRaises(KctxError):
             decode_relationship({**encoded, "from_": "svc-other"})
         with self.assertRaises(KctxError):
             decode_relationship({**encoded, "evidence": [1]})
+        # A bare slug addresses neither an evidence record nor a code position.
+        for raw in ("ev-1", "ev:ev-1", "example/repo@main:src/a.py", "see the runbook"):
+            with self.subTest(raw=raw), self.assertRaises(KctxError):
+                decode_relationship({**encoded, "evidence": [raw]})
 
     def test_observation_nested_validation_and_immutable_evidence(self):
         observation = Observation(ObservationId("obs-1"), RunId("run-20261031T123456Z-abc123"),

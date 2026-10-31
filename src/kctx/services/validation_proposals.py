@@ -9,7 +9,7 @@ from kctx.domain.ids import ProposalId
 from kctx.domain.proposals import ProposalDocument, ProposalProfile
 from kctx.errors import KctxError
 from kctx.semantics.model import AuthoredReplacement
-from kctx.semantics.workflow import authored_candidate_valid
+from kctx.semantics.workflow import authored_candidate_problems
 from kctx.services.gates import load_results
 from kctx.services.proposals import DECIDED_STATUSES, all_paths, persisted_assessment
 from kctx.services.validation_common import Diagnostics
@@ -65,13 +65,21 @@ def validate_proposals(root: Path, diagnostics: Diagnostics) -> int:
                 replacements=replacements,
                 root=root,
             )
-            if not authored_candidate_valid(model, model.status, now):
+            if record.proposal.profile is ProposalProfile.LEGACY_LIMITED and (
+                record.proposal.status in DECIDED_STATUSES
+            ):
+                diagnostics.warn(
+                    record.proposal.id.val,
+                    "legacy_limited authored profile: historical status is not verified "
+                    "knowledge or release authority",
+                )
+            problems = authored_candidate_problems(model, model.status, now)
+            if problems:
                 diagnostics.problem(
                     "incomplete",
                     record.proposal.id.val,
-                    f"status={record.proposal.status.value} violates authored candidate invariants: "
-                    "review readiness, recorded actors, accepted proposal revision, explicit landed references, "
-                    "current fully scoped gates, regression note, or resolving acyclic supersession",
+                    f"status={record.proposal.status.value} violates authored candidate "
+                    f"invariants: {', '.join(problems)}",
                 )
         except (KctxError, ValueError, OSError) as error:
             diagnostics.malformed(record.path, error)

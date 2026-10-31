@@ -1,11 +1,11 @@
 {
   "schema_version": 2,
-  "generated": "2026-10-31T11:12:24.111336+00:00",
+  "generated": "2026-10-31T20:38:28.845393+00:00",
   "source_sha256": "50e7b86725191aed583861a33aa73a2aba28aa5d6d0d4b7a8d043a154ad82b68",
   "command": "formal/scripts/proof_check.sh",
   "result": "pass",
   "scope": "kernel build and registry axiom integrity, not handover theorem fidelity",
-  "implementation_revision": "984e7c8c2fa210b6acdc565c17bb07d8f8a58e57",
+  "implementation_revision": "c44cec553d7bd364b500c4a5f39774e2cb0d0cfb",
   "open_obligations": [],
   "semantic_version": "2.0.0",
   "toolchain": "Lean (version 4.21.0, x86_64-unknown-linux-gnu, commit 6741444a63ee, Release)",

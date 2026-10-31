@@ -31,6 +31,7 @@ def decode_gate_result(raw: object) -> GateResult:
         optional={
             "by",
             "rev",
+            "repo_rev",
             "target_revision",
             "checker",
             "observed_at",
@@ -74,6 +75,7 @@ def decode_gate_result(raw: object) -> GateResult:
             else None,
             optional("environment"),
             optional("scope"),
+            optional("repo_rev"),
         )
     except ValueError as exc:
         raise KctxError("malformed", f"invalid gate result: {exc}") from exc
@@ -133,6 +135,7 @@ def encode_gate_result(result: GateResult) -> dict[str, object]:
     for key, value in (
         ("by", result.by),
         ("rev", result.rev),
+        ("repo_rev", result.repo_rev),
         (
             "target_revision",
             result.target_revision.val if result.target_revision is not None else None,

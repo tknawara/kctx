@@ -99,15 +99,28 @@ def line_range(raw: str | None) -> tuple[int, int] | None:
         return None
 
 
-def parse_use_target(raw: str) -> UseTarget:
-    match = LOCATOR_RE.fullmatch(raw)
-    if match:
-        return CodeLocator(match["repo"], match["sha"], match["path"], line_range(match["line"]))
+EvidenceAddress = EvidenceRef | CodeLocator
+
+
+def parse_evidence_address(raw: str) -> EvidenceAddress:
+    """An evidence record address or an exact code position, never bare prose."""
     if raw.startswith("ev:"):
         home, separator, stem = raw[3:].rpartition("/")
         if not separator or not home:
             raise KctxError("malformed", f"bad ev: id {raw!r}, expected <home>/<stem>")
         return EvidenceRef(home, EvidenceId(stem))
+    match = LOCATOR_RE.fullmatch(raw)
+    if match:
+        return CodeLocator(match["repo"], match["sha"], match["path"], line_range(match["line"]))
+    raise KctxError(
+        "malformed",
+        f"evidence must be ev:<home>/<stem> or a code locator org/repo@<sha>:<path>, got {raw!r}",
+    )
+
+
+def parse_use_target(raw: str) -> UseTarget:
+    if raw.startswith("ev:") or LOCATOR_RE.fullmatch(raw):
+        return parse_evidence_address(raw)
     if raw.startswith("sig:"):
         return SigRef(SignatureId(raw[4:]))
     if raw.startswith("inv:"):

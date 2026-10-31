@@ -13,6 +13,47 @@ from kctx.citations.rendering import render_one
 from kctx.errors import KctxError
 
 
+class MalformedTokenScanTest(KctxTestCase):
+    GOOD = '⟦cite kind=ticket id=T1 seen=2020-01-01T00:00Z ttl=none⟧'
+
+    def test_duplicate_field_is_reported_in_place_without_aborting_the_scan(self):
+        path = self.root / "notes.md"
+        path.write_text(
+            "dup ⟦cite kind=ticket kind=web seen=2020-01-01T00:00Z ttl=none⟧\n"
+            f"good {self.GOOD}\n",
+            encoding="utf-8",
+        )
+        result = run_check([str(path)])
+        self.assertEqual(result["exit_code"], 3)
+        self.assertEqual(result["results"][0]["file"], str(path))
+        self.assertEqual(result["results"][0]["line_no"], 1)
+        self.assertEqual(result["results"][0]["status"], "unverifiable")
+        self.assertIn("duplicate citation field 'kind'", result["results"][0]["reason"])
+        self.assertEqual(result["results"][1]["line_no"], 2)
+        self.assertEqual(result["results"][1]["status"], "fresh")
+        stale = run_stale([str(path)], offline=True)
+        self.assertEqual(
+            [(entry["line_no"], entry["reason"].startswith("malformed")) for entry in stale["entries"]],
+            [(1, True)],
+        )
+
+    def test_unterminated_token_is_diagnosed_and_does_not_swallow_the_next(self):
+        path = self.root / "notes.md"
+        path.write_text(
+            f"good {self.GOOD}\n"
+            "bad ⟦cite kind=ticket seen=2020-01-01T00:00Z ttl=none\n"
+            f"later {self.GOOD}\n",
+            encoding="utf-8",
+        )
+        result = run_check([str(path)])
+        self.assertEqual(result["exit_code"], 3)
+        malformed = [entry for entry in result["results"] if entry["status"] == "unverifiable"]
+        self.assertEqual(len(malformed), 1)
+        self.assertEqual(malformed[0]["line_no"], 2)
+        self.assertIn("unterminated citation token", malformed[0]["reason"])
+        # The later token is scanned on its own line, not merged into the open one.
+        self.assertEqual([entry["line_no"] for entry in result["results"]], [1, 2, 3])
+
 class CitationScanTest(KctxTestCase):
     def test_mark_preserves_crlf_surrounding_bytes_and_unknown_fields(self):
         path = self.root / "note.md"

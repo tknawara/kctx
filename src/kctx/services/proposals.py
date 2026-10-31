@@ -701,7 +701,7 @@ def gate(
     outcome: GateOutcome,
     evidence: str,
     by: str | None = None,
-    rev: str | None = None,
+    repo_rev: str | None = None,
     target_revision: TargetRevision | None = None,
     checker: str | None = None,
     expires_at: int | None = None,
@@ -745,26 +745,32 @@ def gate(
             )
         if not evidence.strip() or not by or not by.strip():
             raise KctxError("incomplete", "gate requires evidence and recording actor --by")
+        if repo_rev is not None and not repo_rev.strip():
+            raise KctxError("incomplete", "gate requires non-blank repository evidence --rev")
         target = resolve_target(root, target)
+        # The published candidate is what the result must bind: this same write
+        # introduces the ``profile`` field on a first-touched legacy file, which
+        # is material — binding the pre-mutation document would self-invalidate.
+        line = f"- {today()}: gate {gate_id.val} -> {outcome.value} by {by} ({evidence})"
+        candidate = found.document.append_section("Decision log", line).update_fields(
+            {"updated": today(), "profile": found.proposal.profile.value}
+        )
         entry = GateResult(
             gate_id,
             outcome,
             evidence,
             iso_now(),
             by,
-            rev or gates_mod.gates_rev(found.document.sections),
+            gates_mod.gates_rev(candidate.sections),
             target,
             checker,
             now,
             expires_at,
             definition,
-            material_revision(found.document),
+            material_revision(candidate),
             bound_environment,
             bound_scope,
-        )
-        line = f"- {today()}: gate {gate_id.val} -> {outcome.value} by {by} ({evidence})"
-        candidate = found.document.append_section("Decision log", line).update_fields(
-            {"updated": today(), "profile": found.proposal.profile.value}
+            repo_rev,
         )
         decode_proposal(candidate)
         publish(found, candidate.text, (*gates_mod.load_results(found.path), entry))

@@ -57,7 +57,8 @@ def stale(
             3 if not result["citations_available"] else (0 if result["total_remaining"] == 0 else 2)
         )
         return Reply(result, code, presentation="drain")
-    return Reply(freshness.stale(state.root, project=project, offline=offline))
+    result = freshness.stale(state.root, project=project, offline=offline)
+    return Reply(result, 2 if result.get("warnings") else 0)
 
 
 @click.command(cls=RichCommand)
@@ -81,7 +82,11 @@ def match(state: CliState, text: str) -> Reply:
     """Match incident signatures, investigations and tickets."""
     result = discovery.match(state.root, text)
     return Reply(
-        result, 0 if result["signatures"] or result["investigations"] or result["ktlo"] else 2
+        result,
+        0
+        if not result.get("warnings")
+        and (result["signatures"] or result["investigations"] or result["ktlo"])
+        else 2,
     )
 
 

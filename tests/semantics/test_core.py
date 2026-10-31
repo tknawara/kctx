@@ -213,3 +213,20 @@ class AdmissionGuardTests(unittest.TestCase):
         self.assertEqual(assess_fresh(M.ttl_expire_after(10), 100, 110), M.Freshness.FRESH)
         self.assertEqual(assess_fresh(M.TTL_NO_EXPIRY, 100, 110), M.Freshness.FRESH)
         self.assertEqual(assess_fresh(M.TTL_MISSING, 100, 110), M.Freshness.UNKNOWN)
+
+
+class AssessmentGapTests(unittest.TestCase):
+    def test_gaps_name_each_failed_requirement(self) -> None:
+        kb = valid_kb()
+        self.assertEqual(checker.assessment_gaps(kb, context(), REF), ())
+        stale = checker.assessment_gaps(kb, context(now=200), REF)
+        self.assertTrue(any("observations are stale under policy ttl" == gap for gap in stale), stale)
+        unsupported = replace(kb, attestations=(), derivations=())
+        gaps = checker.assessment_gaps(unsupported, context(), REF)
+        self.assertTrue(any("support=none" in gap for gap in gaps), gaps)
+        self.assertTrue(any("observations are unknown under policy ttl" == gap for gap in gaps), gaps)
+        elsewhere = replace(context(), target=M.Scope(M.ProjectId("other"), ""))
+        self.assertIn(
+            "claim is not applicable to the context target",
+            checker.assessment_gaps(kb, elsewhere, REF),
+        )

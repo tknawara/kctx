@@ -49,7 +49,7 @@ from kctx.domain.ids import (
 )
 from kctx.domain.json import JsonObject, JsonValue, object_value, text
 from kctx.errors import KctxError
-from kctx.semantics.checker import accepted, assess
+from kctx.semantics.checker import accepted, assess, assessment_gaps
 from kctx.semantics.model import (
     KB,
     Authority,
@@ -766,7 +766,16 @@ class KnowledgeEngine:
             self._key(policy, actor, target_use)
             self._validate_sources(plan, base, policy)
             if not plan_valid(base, context, plan.semantic):
-                raise KctxError("conflict", "candidate rejected by calculus preflight")
+                gaps = assessment_gaps(
+                    plan.semantic.candidate,
+                    replace(context, snapshot=plan.semantic.candidate.snapshot),
+                    plan.semantic.claim,
+                )
+                raise KctxError(
+                    "conflict",
+                    "candidate rejected by calculus preflight"
+                    + (f": {'; '.join(gaps)}" if gaps else ""),
+                )
             save(self.root / "plans" / (identity.val + ".json"), plan.wire())
             return plan
 

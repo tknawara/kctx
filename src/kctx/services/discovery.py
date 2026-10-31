@@ -67,6 +67,7 @@ class MatchResult(TypedDict):
     investigations: list[IncidentHit]
     ktlo: list[KtloHit]
     note: NotRequired[str]
+    warnings: NotRequired[list[str]]
 
 
 def is_project_name(name: str) -> bool:
@@ -166,6 +167,9 @@ def timeline(root: Path, ident: str) -> TimelineResult:
 
 
 def match(root: Path, text: str) -> MatchResult:
+    """Search signatures, investigations and KTLO notes; unreadable records are
+    skipped and disclosed rather than aborting the search for readable ones."""
+    skipped: list[str] = []
     signature_hits: list[SignatureHit] = [
         {
             "id": hit.id.val,
@@ -176,29 +180,37 @@ def match(root: Path, text: str) -> MatchResult:
             "last_seen": hit.last_seen,
             "matched_patterns": list(hit.matched_patterns),
         }
-        for hit in signatures.match_signatures(root, text)
+        for hit in signatures.match_signatures(root, text, skipped=skipped)
     ]
     investigation_hits: list[IncidentHit] = []
     for path in investigations.all_paths(root):
-        full = path.read_text(encoding="utf-8")
-        if text.lower() in full.lower():
-            record = investigations.parse(full).frontmatter
-            investigation_hits.append(
-                {"id": record.id.val, "title": record.title, "status": record.status.value}
-            )
+        try:
+            full = path.read_text(encoding="utf-8")
+            if text.lower() in full.lower():
+                record = investigations.parse(full).frontmatter
+                investigation_hits.append(
+                    {"id": record.id.val, "title": record.title, "status": record.status.value}
+                )
+        except (KctxError, ValueError, OSError) as error:
+            skipped.append(f"investigation {path.relative_to(root)}: {error}")
     ktlo_hits: list[KtloHit] = []
     for path in ktlo.all_paths(root):
-        parsed = ktlo.parse(path.read_text(encoding="utf-8"))
-        if text.lower() in parsed.body.get("Symptom", "").lower():
-            ktlo_hits.append(
-                {"ticket": parsed.frontmatter.ticket.val, "path": str(path.relative_to(root))}
-            )
+        try:
+            parsed = ktlo.parse(path.read_text(encoding="utf-8"))
+            if text.lower() in parsed.body.get("Symptom", "").lower():
+                ktlo_hits.append(
+                    {"ticket": parsed.frontmatter.ticket.val, "path": str(path.relative_to(root))}
+                )
+        except (KctxError, ValueError, OSError) as error:
+            skipped.append(f"ktlo {path.relative_to(root)}: {error}")
     result: MatchResult = {
         "query": text,
         "signatures": signature_hits,
         "investigations": investigation_hits,
         "ktlo": ktlo_hits,
     }
+    if skipped:
+        result["warnings"] = sorted(dict.fromkeys(skipped))
     if not signature_hits and not investigation_hits and not ktlo_hits:
         result["note"] = MATCH_BOUNDARY_NOTE
     return result

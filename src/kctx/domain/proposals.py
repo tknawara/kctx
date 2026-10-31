@@ -111,6 +111,7 @@ class GateResult:
     proposal_revision: ProposalMaterialRevision | None = None
     environment: str | None = None
     scope: str | None = None
+    repo_rev: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

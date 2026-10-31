@@ -203,6 +203,7 @@ is excluded from the runtime artifact.
 - [Implementation/refactor decisions](docs/kctx/refactor-plan.md)
 - [Sound calculus revision](docs/kctx/calculus-revision.md)
 - [Rust implementation handover and R00–R13 gates](docs/kctx/greenfield-design.md)
+- [Migration hardening after the first v2 migration](docs/kctx/migration-hardening.md)
 - [Provider-neutral asset catalog design](docs/kctx/catalog-design.md)
 - [Full requirements and Q/D scenario registries](docs/kctx/handover.md)
 

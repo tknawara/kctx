@@ -1,0 +1,112 @@
+{
+  "generated": "2026-10-31T00:06:16.593287+00:00",
+  "toolchain": "Lean (version 4.21.0, x86_64-unknown-linux-gnu, commit 6741444a63ee, Release)",
+  "build": "ok",
+  "semantic_version": "1.0.0",
+  "audit": {
+    "Kctx.T02_observation": [
+      "propext",
+      "Quot.sound"
+    ],
+    "Kctx.T02_claim": [
+      "propext",
+      "Quot.sound"
+    ],
+    "Kctx.T02_binding": [
+      "propext",
+      "Quot.sound"
+    ],
+    "Kctx.T02_correction": [
+      "propext",
+      "Quot.sound"
+    ],
+    "Kctx.T02_derivation": [
+      "propext",
+      "Quot.sound"
+    ],
+    "Kctx.T04_checker_sound": [
+      "propext",
+      "Quot.sound"
+    ],
+    "Kctx.T05_derives_sound": [
+      "propext",
+      "Quot.sound"
+    ],
+    "Kctx.T06_reusable_iff": [
+      "propext",
+      "Quot.sound"
+    ],
+    "Kctx.T08_missing_dep_not_reusable": [
+      "propext",
+      "Classical.choice",
+      "Quot.sound"
+    ],
+    "Kctx.T09_alternative_survives": [
+      "propext",
+      "Quot.sound"
+    ],
+    "Kctx.T10_all_support_removed": [
+      "propext",
+      "Quot.sound"
+    ],
+    "Kctx.assessFresh_stale_mono": [
+      "propext",
+      "Quot.sound"
+    ],
+    "Kctx.assessFresh_fresh_iff": [
+      "propext"
+    ],
+    "Kctx.assessFresh_future_not_fresh": [
+      "propext",
+      "Quot.sound"
+    ],
+    "Kctx.T12_footprint_declared": [
+      "propext"
+    ],
+    "Kctx.T13_witness_required": [
+      "propext"
+    ],
+    "Kctx.T14_derives_only_enabled": [
+      "propext"
+    ],
+    "Kctx.T16_add_correction_no_new_support": [
+      "propext",
+      "Quot.sound"
+    ],
+    "Kctx.T17_usable_conditions": [
+      "propext"
+    ],
+    "Kctx.T18_transition_conditions": [
+      "propext"
+    ],
+    "Kctx.T19_conclude_conditions": [
+      "propext",
+      "Quot.sound"
+    ],
+    "Kctx.T20_predecessor_conflict": [
+      "propext",
+      "Quot.sound"
+    ],
+    "Kctx.T21_replay_same": [
+      "propext"
+    ],
+    "Kctx.T21_replay_conflict": [
+      "propext"
+    ],
+    "Kctx.T01_observation": [],
+    "Kctx.T01_claim": [],
+    "Kctx.T01_binding": [],
+    "Kctx.T01_correction": [],
+    "Kctx.T01_derivation": [],
+    "Kctx.T02_evalCtx": [],
+    "Kctx.T03_commit_wf": [],
+    "Kctx.T12_copy_keeps_freshness": [],
+    "Kctx.T22_deterministic": [],
+    "Kctx.T22_commit_deterministic": []
+  },
+  "open_obligations": [
+    "T07",
+    "T15"
+  ],
+  "result": "pass"
+}

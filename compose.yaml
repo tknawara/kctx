@@ -1,0 +1,13 @@
+services:
+  # Dev/CI-only proof service (profile `formal`). Production kctx is
+  # Python-only and never requires Docker or Lean (G16).
+  proofs:
+    build:
+      context: ./formal
+      dockerfile: Dockerfile
+    image: kctx-formal:lean-4.21.0
+    profiles: ["formal"]
+    volumes:
+      - ./formal:/work/kctx/formal
+    working_dir: /work/kctx/formal
+    command: ["./scripts/proof_check.sh"]

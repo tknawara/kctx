@@ -330,8 +330,8 @@ def build_parser() -> argparse.ArgumentParser:
     # installed. Under the real `kctx` wrapper (always `uv run`) the import
     # succeeds and both subcommands register normally.
     try:
-        from graph.cli_graph import add_graph_subparser
-        from graph.observability import add_logs_subparser
+        from kctx.graph.cli_graph import add_graph_subparser
+        from kctx.graph.observability import add_logs_subparser
     except ImportError:
         pass
     else:
@@ -626,12 +626,12 @@ def dispatch(args: argparse.Namespace, root) -> Tuple[Any, int]:
             return proposals_mod.show(root, args.id), 0
 
     if cmd == "graph":
-        from graph.cli_graph import dispatch as graph_dispatch
+        from kctx.graph.cli_graph import dispatch as graph_dispatch
 
         return graph_dispatch(args, root)
 
     if cmd == "logs":
-        from graph.observability import logs_dispatch
+        from kctx.graph.observability import logs_dispatch
 
         return logs_dispatch(args)
 
@@ -780,7 +780,7 @@ def main(argv=None) -> int:
     if as_json:
         print(json.dumps(result, indent=2, default=str))
     elif args.command in ("graph", "logs"):
-        from graph.render import render_graph_text
+        from kctx.graph.render import render_graph_text
 
         render_graph_text(args, result)
     else:

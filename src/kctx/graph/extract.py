@@ -27,10 +27,10 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from errors import KctxError
 
-from graph.cite_loader import load_cite_module
-from graph.identity import canonical_repo
-from graph.models import Edge, Node
-from graph.observability import get_logger, run_logged, span
+from kctx.graph.cite_loader import load_cite_module
+from kctx.graph.identity import canonical_repo
+from kctx.graph.models import Edge, Node
+from kctx.graph.observability import get_logger, run_logged, span
 
 # Mirrors nav._uses_boundary_pattern's id-character class exactly (kept as
 # its own copy rather than importing nav, which is being edited concurrently

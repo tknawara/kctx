@@ -21,21 +21,21 @@ from typing import List, Optional, Tuple
 
 from storage import iso_now
 
-from graph.dolt_store import (
+from kctx.graph.dolt_store import (
     DoltStore,
     EDGE_COLUMNS,
     KB_COMMIT_COLUMNS,
     NODE_COLUMNS,
     SYNC_STATE_COLUMNS,
 )
-from graph.extract import (
+from kctx.graph.extract import (
     commit_date,
     commit_subject,
     extract_graph,
     first_parent_record_commits,
     read_tree_at_sha,
 )
-from graph.observability import get_logger, run_logged, span
+from kctx.graph.observability import get_logger, run_logged, span
 
 
 def graph_dir() -> Path:

@@ -5,8 +5,11 @@ by tests/test_graph_extract.py, which does load the real module)."""
 
 import unittest
 from pathlib import Path
+import sys
 
-from graph.identity import canonical_repo
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from kctx.graph.identity import canonical_repo
 
 
 class _StubCite:

@@ -1,10 +1,15 @@
 """graph.quoting has no third-party deps, so these run unconditionally under
 plain `python3 -m unittest` -- no skip guard needed."""
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
+
 
 import unittest
 
 from errors import KctxError
-from graph.quoting import sql_quote, validate_id
+from kctx.graph.quoting import sql_quote, validate_id
 
 
 class SqlQuoteTest(unittest.TestCase):

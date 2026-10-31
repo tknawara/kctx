@@ -25,7 +25,7 @@ from typing import Any, Dict, List, Optional
 
 from errors import KctxError
 
-from graph.observability import run_logged, span
+from kctx.graph.observability import run_logged, span
 
 DOLT_INSTALL_HINT = (
     "dolt is not installed. Install the sha-pinned release manually into "

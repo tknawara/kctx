@@ -11,12 +11,12 @@ from typing import Any, Dict, List, Optional
 import nav as nav_mod
 from errors import KctxError
 
-from graph.cite_loader import load_cite_module
-from graph.dolt_store import DoltStore
-from graph.extract import extract_graph, read_tree_at_sha
-from graph.observability import span
-from graph.quoting import sql_quote, validate_id
-from graph.sync import dolt_db_dir, head_sha, latest_sync_state
+from kctx.graph.cite_loader import load_cite_module
+from kctx.graph.dolt_store import DoltStore
+from kctx.graph.extract import extract_graph, read_tree_at_sha
+from kctx.graph.observability import span
+from kctx.graph.quoting import sql_quote, validate_id
+from kctx.graph.sync import dolt_db_dir, head_sha, latest_sync_state
 
 
 def _store() -> DoltStore:

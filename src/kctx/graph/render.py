@@ -7,7 +7,7 @@ per row. `--json` still returns the full structure.
 
 from typing import Any
 
-from graph.observability import format_event_line
+from kctx.graph.observability import format_event_line
 
 
 def _short(node: str, width: int = 110) -> str:

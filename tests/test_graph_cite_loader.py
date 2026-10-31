@@ -2,11 +2,16 @@
 
 import unittest
 from pathlib import Path
+import sys
 
 from _base import KctxTestCase, no_cite_available
 
+# after _base: it puts the repo root on sys.path, where the kctx.py entry
+# script would otherwise shadow the kctx package.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
 from errors import KctxError
-from graph import cite_loader
+from kctx.graph import cite_loader
 
 
 class LocateCitePyTest(KctxTestCase):

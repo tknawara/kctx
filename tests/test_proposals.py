@@ -219,9 +219,37 @@ class LifecycleTransitionTest(KctxTestCase):
         self.assertEqual(fm["status"], "applied")
         self.assertNotIn("warnings", fm)
 
-    def test_draft_to_proposed_is_legal(self):
+    def test_draft_to_proposed_requires_readiness(self):
+        # Intentional contract change (handover 8.1): draft -> proposed must
+        # clear the same review gate as filing directly as proposed. The old
+        # bypass — any draft could be promoted bare — is gone.
         added = _add(self.root, research="", alternatives="", gates="")
         self.assertEqual(added["frontmatter"]["status"], "draft")
+        with self.assertRaises(KctxError) as ctx:
+            proposals.set_status(self.root, added["id"], status="proposed")
+        self.assertEqual(ctx.exception.category, "incomplete")
+        self.assertIn("missing for review", str(ctx.exception))
+
+    def test_ready_draft_promotes_to_proposed(self):
+        # A draft whose sections are later filled in promotes cleanly: the
+        # readiness predicate is the same review gate, evaluated on the
+        # candidate body at promotion time.
+        added = _add(self.root, research="", alternatives="", gates="")
+        self.assertEqual(added["frontmatter"]["status"], "draft")
+        path = proposals.load(self.root, added["id"])["path"]
+        text = path.read_text()
+        text = text.replace(
+            "## Research\n", "## Research\nlooked at three options\n", 1
+        ).replace(
+            "## Alternatives considered\n",
+            "## Alternatives considered\n" + TWO_ALTERNATIVES + "\n",
+            1,
+        ).replace(
+            "## Acceptance gates\n",
+            "## Acceptance gates\n" + GATES_TABLE_FULL + "\n",
+            1,
+        )
+        path.write_text(text)
         fm = proposals.set_status(self.root, added["id"], status="proposed")
         self.assertEqual(fm["status"], "proposed")
 

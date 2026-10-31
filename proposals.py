@@ -418,6 +418,20 @@ def set_status(
         require_choice(status, PROPOSAL_STATUSES, "status")
         _check_transition(fm.get("status"), status)
 
+        # One readiness predicate for both filing paths (handover 8.1):
+        # draft -> proposed must clear the same review gate as filing
+        # directly as proposed. The earlier bypass (any draft could be
+        # promoted) is an intentional contract change; the old fixture
+        # test_draft_to_proposed_is_legal was updated accordingly.
+        if status == "proposed" and fm.get("status") == "draft":
+            missing = review_gate_missing(body)
+            if missing:
+                raise KctxError(
+                    "incomplete",
+                    "status='proposed' blocked: still missing for review: "
+                    + ", ".join(missing),
+                )
+
         if status in PROPOSAL_DECIDED_STATUSES and not by:
             raise KctxError("incomplete", f"status={status!r} requires --by")
         if status == "regressed" and not note:

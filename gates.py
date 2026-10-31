@@ -95,6 +95,23 @@ def parse_gates_table(section: Union[str, Dict[str, str]]) -> List[Dict[str, str
     return gates
 
 
+def gates_rev(section: Union[str, Dict[str, str]]) -> str:
+    """Digest of the Acceptance-gate *definitions* — the revision gate
+    results are bound to (handover 8.1: gate-definition identity). Stable
+    across unrelated edits (status flips, Decision-log lines), changes
+    exactly when the gate table changes, so a pass recorded against an
+    older table stops winning the moment the definitions change."""
+    import hashlib
+
+    if isinstance(section, dict):
+        text = section.get("Acceptance gates") or _extract_nested_gates_text(
+            section
+        )
+    else:
+        text = section
+    return hashlib.sha256((text or "").encode("utf-8")).hexdigest()[:16]
+
+
 def gates_json_path(proposal_md_path: Path) -> Path:
     """The gates.json sibling for a given proposal record path.
 
@@ -121,11 +138,23 @@ def load_results(proposal_md_path: Path) -> List[Dict[str, Any]]:
     return data
 
 
-def latest_outcomes(results: List[Dict[str, Any]]) -> Dict[str, str]:
+def latest_outcomes(
+    results: List[Dict[str, Any]], rev: Optional[str] = None
+) -> Dict[str, str]:
     """Last recorded outcome per gate id; results is append-only so the last
-    entry for a given gate id wins."""
+    entry for a given gate id wins.
+
+    Revision binding (handover 8.1): when `rev` is given, entries that carry
+    a different `rev` are skipped — a pass recorded against an older
+    proposal revision must not win merely because its gate id matches.
+    Entries with no `rev` are legacy results: they predate revision binding
+    and keep their old semantics (they are consulted regardless). They do
+    not acquire the modern guarantee; binding starts when `rev` is recorded.
+    """
     latest: Dict[str, str] = {}
     for r in results:
+        if rev is not None and r.get("rev") not in (None, rev):
+            continue
         latest[r["gate"]] = r["outcome"]
     return latest
 
@@ -158,11 +187,14 @@ def append_result(
 
 
 def pending_for_when(
-    table: List[Dict[str, str]], results: List[Dict[str, Any]], whens: set
+    table: List[Dict[str, str]],
+    results: List[Dict[str, Any]],
+    whens: set,
+    rev: Optional[str] = None,
 ) -> List[str]:
     """Gate ids in `table` whose `when` is in `whens` and whose latest
-    outcome isn't 'pass' (including never-run)."""
-    latest = latest_outcomes(results)
+    outcome (within `rev` when given) isn't 'pass' (including never-run)."""
+    latest = latest_outcomes(results, rev)
     return [
         g["id"]
         for g in table

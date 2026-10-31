@@ -340,7 +340,9 @@ def list_proposals(
             if not table:
                 continue
             results = gates_mod.load_results(p)
-            pending = gates_mod.pending_for_when(table, results, {"deploy", "use"})
+            pending = gates_mod.pending_for_when(
+                table, results, {"deploy", "use"}, rev=_gate_rev(parsed["body"])
+            )
             if not pending:
                 continue
             fm = dict(fm)
@@ -379,6 +381,13 @@ def _check_transition(current: Optional[str], new: str) -> None:
         )
 
 
+def _gate_rev(body: Dict[str, str]) -> str:
+    """Digest of the Acceptance-gate definitions — the revision gate
+    results are bound to. Stable across unrelated edits (status flips,
+    Decision-log lines); changes exactly when the gate table changes."""
+    return gates_mod.gates_rev(body)
+
+
 def _gate_block(path: Path, body: Dict[str, str], status: str) -> Optional[str]:
     """None if the transition to `status` may proceed; otherwise the message
     for why it's blocked. A legacy proposal with no Acceptance gates table at
@@ -388,7 +397,7 @@ def _gate_block(path: Path, body: Dict[str, str], status: str) -> Optional[str]:
         return None
     whens = {"land"} if status == "applied" else {"deploy", "use"}
     results = gates_mod.load_results(path)
-    pending = gates_mod.pending_for_when(table, results, whens)
+    pending = gates_mod.pending_for_when(table, results, whens, rev=_gate_rev(body))
     if pending:
         return f"status={status!r} blocked: gate(s) {', '.join(pending)} haven't passed"
     return None
@@ -510,8 +519,14 @@ def gate(
             f"gate {gate_id!r} not declared in {proposal_id}'s Acceptance gates table",
         )
 
+    recorded_rev = rev or _gate_rev(body)
     entry = gates_mod.append_result(
-        path, gate=gate_id, outcome=outcome, evidence=evidence, by=by, rev=rev
+        path,
+        gate=gate_id,
+        outcome=outcome,
+        evidence=evidence,
+        by=by,
+        rev=recorded_rev,
     )
 
     log_line = f"- {today()}: gate {gate_id} -> {outcome}"

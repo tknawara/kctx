@@ -173,6 +173,24 @@ def _append_proposal_correction(root: Path, proposal_id: str, entry_line: str) -
     return found["path"]
 
 
+def _target_kind(root: Path, target: str) -> str:
+    """Kind label for a target, resolved without mutating anything (the
+    plan half of the plan/apply split: kind resolution is a read)."""
+    if target.startswith("ev:"):
+        return "ev"
+    if target.startswith("sig:"):
+        return "signature"
+    if target.startswith("proposal/"):
+        return "proposal"
+    if target.startswith("inv:"):
+        raise KctxError(
+            "malformed",
+            "retract doesn't support inv: targets (no Corrections/Decision-log "
+            "slot) -- ev:, a dossier asset id, sig:, and proposal/ only",
+        )
+    return "dossier"
+
+
 def _append_target_correction(root: Path, target: str, entry_line: str) -> Tuple[str, Path]:
     if target.startswith("ev:"):
         return "ev", _append_ev_correction(root, target, entry_line)
@@ -220,8 +238,14 @@ def retract(
     entry_line = format_entry(
         date=created, kind=kind, reason=reason, by_replacement=by_replacement
     )
-    target_kind, target_path = _append_target_correction(root, target, entry_line)
 
+    # Plan (handover 8.4): resolve kind and referrers against the pinned
+    # pre-mutation state -- referrer discovery must not see the target's own
+    # just-appended correction text. Then commit in recoverable order:
+    # the durable correction event (with its pending-review rows) is written
+    # first, so a failure before/while updating the target leaves a visible,
+    # replayable operation rather than a lost one.
+    target_kind = _target_kind(root, target)
     uses_result = nav.uses(root, target)
     referrers = [r for r in uses_result["referrers"] if not r.get("self")]
 
@@ -239,6 +263,8 @@ def retract(
         ),
         encoding="utf-8",
     )
+
+    _, target_path = _append_target_correction(root, target, entry_line)
 
     return {
         "target": target,

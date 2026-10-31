@@ -1,0 +1,194 @@
+{
+  "fixture_root": "/tmp/kctx-parity-counterexamples-ed4e7mih",
+  "tool_versions": {
+    "dolt": "dolt version 2.6.1",
+    "git": "git version 2.43.0",
+    "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]"
+  },
+  "parser": {
+    "qualification": "built-in kctx citation grammar imported from the supplied source"
+  },
+  "binding_corruption": {
+    "kb_root": "/tmp/kctx-parity-counterexamples-ed4e7mih/binding-corruption/kb",
+    "kb_sha": "59ac7687dd29b990aeecb617ad6d65fbc8aa9091",
+    "source_token": "⟦cite kind=code repo=acme/source path=src/a.py rev=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa L=10-12⟧",
+    "expected_binding": {
+      "dst_node": "code:acme/source:src/a.py",
+      "rev": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "L": "10-12"
+    },
+    "initial_sync": {
+      "status": "synced",
+      "kb_sha": "59ac7687dd29b990aeecb617ad6d65fbc8aa9091",
+      "dolt_commit": "eu32etof7jatq7co5s59ckebispeo8v8",
+      "node_count": 3,
+      "edge_count": 2,
+      "commits_replayed": 1
+    },
+    "initial_check": {
+      "parity": {
+        "kb_sha": "59ac7687dd29b990aeecb617ad6d65fbc8aa9091",
+        "direct_cite_tokens": 2,
+        "direct_illus_tokens": 0,
+        "graph_binding_rows": 2,
+        "graph_illus_rows": 0,
+        "skipped_tokens": 0,
+        "skips": [],
+        "unexplained": [],
+        "match": true
+      },
+      "uses_comparison": []
+    },
+    "initial_rows": [
+      {
+        "dst_node": "code:acme/source:src/a.py",
+        "edge_id": "c4666e06c8355068b42b",
+        "raw": "⟦cite kind=code repo=acme/source path=src/a.py rev=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa L=10-12⟧",
+        "rev": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "src_line": 1,
+        "src_path": "note.md"
+      },
+      {
+        "dst_node": "code:acme/source:src/b.py",
+        "edge_id": "edb2196ae473e5f54f79",
+        "raw": "⟦cite kind=code repo=acme/source path=src/b.py rev=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa L=20-22⟧",
+        "rev": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "src_line": 2,
+        "src_path": "note.md"
+      }
+    ],
+    "corrupt_data_hash": "ohkt2lpuflll05u8auvbfflidl9hht9e",
+    "corrupt_metadata_hash": "8lc4tuhvhg33pocp5l9ok80352a6odco",
+    "corrupted_rows_at_exact_commit": [
+      {
+        "dst_node": "code:acme/source:src/b.py",
+        "edge_id": "c4666e06c8355068b42b",
+        "raw": "⟦cite kind=code repo=acme/source path=src/a.py rev=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa L=10-12⟧",
+        "rev": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "src_line": 1,
+        "src_path": "note.md"
+      },
+      {
+        "dst_node": "code:acme/source:src/b.py",
+        "edge_id": "edb2196ae473e5f54f79",
+        "raw": "⟦cite kind=code repo=acme/source path=src/b.py rev=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa L=20-22⟧",
+        "rev": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "src_line": 2,
+        "src_path": "note.md"
+      }
+    ],
+    "actual_graph_check": {
+      "parity": {
+        "kb_sha": "59ac7687dd29b990aeecb617ad6d65fbc8aa9091",
+        "direct_cite_tokens": 2,
+        "direct_illus_tokens": 0,
+        "graph_binding_rows": 2,
+        "graph_illus_rows": 0,
+        "skipped_tokens": 0,
+        "skips": [],
+        "unexplained": [],
+        "match": true
+      },
+      "uses_comparison": []
+    },
+    "false_positive_reproduced": true
+  },
+  "extraction_loss": {
+    "kb_root": "/tmp/kctx-parity-counterexamples-ed4e7mih/extraction-loss/kb",
+    "kb_sha": "ceed09feaf7627745b9f38b3f4af9386282515d6",
+    "sync": {
+      "status": "synced",
+      "kb_sha": "ceed09feaf7627745b9f38b3f4af9386282515d6",
+      "dolt_commit": "atudj06t7jbj0hucfq8896pqspqevjcs",
+      "node_count": 5,
+      "edge_count": 3,
+      "commits_replayed": 1
+    },
+    "expected_source_tokens": 4,
+    "source_tokens": [
+      "⟦cite kind=code repo=acme/source path=src/a.py rev=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa L=10-12⟧",
+      "⟦cite kind=code repo=acme/source path=src/long.py rev=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa L=33-35 note=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx⟧",
+      "⟦cite kind=ticket id=ASSET-1 seen=2026-10-30T00:00Z⟧",
+      "⟦cite kind=ticket id=REL-1 seen=2026-10-30T00:00Z⟧"
+    ],
+    "actual_binding_rows": [
+      {
+        "cite_kind": "code",
+        "dst_node": "code:acme/source:src/a.py",
+        "edge_id": "c4666e06c8355068b42b",
+        "illus": 0,
+        "raw": "⟦cite kind=code repo=acme/source path=src/a.py rev=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa L=10-12⟧",
+        "rel": "cites",
+        "rev": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "seen": "2026-10-31T06:42:26+00:00",
+        "src_line": 1,
+        "src_node": "doc:note.md",
+        "src_path": "note.md"
+      },
+      {
+        "cite_kind": "code",
+        "dst_node": "code:acme/source:src/long.py",
+        "edge_id": "211a51eaf20a1660f946",
+        "illus": 0,
+        "raw": "⟦cite kind=code repo=acme/source path=src/long.py rev=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa L=33-35 note=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "rel": "cites",
+        "rev": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "seen": "2026-10-31T06:42:26+00:00",
+        "src_line": 2,
+        "src_node": "doc:note.md",
+        "src_path": "note.md"
+      }
+    ],
+    "line_range_expected": "10-12",
+    "first_code_binding": [
+      {
+        "cite_kind": "code",
+        "dst_node": "code:acme/source:src/a.py",
+        "edge_id": "c4666e06c8355068b42b",
+        "illus": 0,
+        "raw": "⟦cite kind=code repo=acme/source path=src/a.py rev=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa L=10-12⟧",
+        "rel": "cites",
+        "rev": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "seen": "2026-10-31T06:42:26+00:00",
+        "src_line": 1,
+        "src_node": "doc:note.md",
+        "src_path": "note.md"
+      }
+    ],
+    "long_token_length": 759,
+    "stored_long_token_length": 500,
+    "missing_json_citation_paths": [
+      "inventory/assets/service-a.json",
+      "inventory/relationships/depends-on__service-a__service-b.json"
+    ],
+    "extractor_tokens_seen": 2,
+    "extractor_recorded_drops": [],
+    "actual_graph_check": {
+      "parity": {
+        "kb_sha": "ceed09feaf7627745b9f38b3f4af9386282515d6",
+        "direct_cite_tokens": 4,
+        "direct_illus_tokens": 0,
+        "graph_binding_rows": 2,
+        "graph_illus_rows": 0,
+        "skipped_tokens": 0,
+        "skips": [],
+        "unexplained": [
+          {
+            "src_path": "inventory/assets/service-a.json",
+            "direct": 1,
+            "graph": 0,
+            "skipped": 0
+          },
+          {
+            "src_path": "inventory/relationships/depends-on__service-a__service-b.json",
+            "direct": 1,
+            "graph": 0,
+            "skipped": 0
+          }
+        ],
+        "match": false
+      },
+      "uses_comparison": []
+    }
+  }
+}

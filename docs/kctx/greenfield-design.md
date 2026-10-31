@@ -1,122 +1,315 @@
-# kctx greenfield design — a rebuild for other people
+# Rust host design
 
-Date: 31 October 2026. Question asked: *if kctx were rebuilt from scratch and
-made available for other people — what language, what shape, what
-distribution?* This is a design position, not a commitment to abandon the
-Python implementation; the Python core remains the production system and the
-Lean calculus remains the semantic authority either way.
+Design position for the distributable product; the Rust implementation and native
+first-run provisioning are not yet shipped. The typed Python host remains the
+implementation under qualification. See [catalog design](catalog-design.md) for
+provider-neutral extensibility and [calculus revision](calculus-revision.md) for
+the semantic contract that every host must satisfy.
 
-## TL;DR
+## Decision
 
-**Rust, single static binary, workspace of small crates, the Lean calculus
-compiled to a decision kernel behind a stable crate boundary, Git for
-authored assets, Dolt (or SQLite in the small case) for the relation/graph
-projection, agents served over a JSONL protocol with the same envelopes the
-conformance suite already uses.** The calculus — not the language — is the
-product; the Rust rewrite is a faster, safer *host* for the same proved
-verbs, re-qualified against the same Lean reference before anything ships.
+A native Rust application with a pure, typed semantic kernel; Git for authored
+assets and release manifests; Dolt for versioned structured knowledge and SQL
+projections. One user-facing application manages the engine and persistence.
+Do not embed vendor names or Dolt operations into the calculus. Do not compile
+Lean into the runtime or imply that a Rust translation inherits proof status.
 
-## Why Rust (and not Go, not Python)
+The Rust decision functions implement the same versioned semantics as Lean and
+Python. The reference suite gains a Rust column; all actual hosts must agree on
+reviewed, generated, stateful and mutation cases. Lean remains development/CI
+infrastructure, absent from the runtime artifact.
 
-| Option | Verdict | Reasoning |
-| --- | --- | --- |
-| **Rust** | **yes** | This is already the house language: `gripsack` (14 crates) and `strop` (21 crates) share conventions — `-core`/`-fs`/`-trace` crate splits, `edition` pins, compose-gated verification, Verus/TLA+ alongside, `rustls`-only, static musl binaries with `install.sh` + homebrew tap + self-update. Distribution to "other people" is a solved problem here; every dependency choice is pre-litigated. |
-| Go | no | Fine for CLIs, but the house has no Go toolchain investment, no shared CI patterns, and no proof story; we would rebuild conventions from zero. |
-| Python (stay) | keep as the reference host | The typed core we just built *is* the semantic definition of record and the conformance twin; a rewrite must displace it, not duplicate it. Python stays until the Rust core passes the same conformance suite and the same gate discipline (handover §15.1 says exactly this). |
+## Why Rust
 
-## The shape
+Rust provides nominal newtypes, exhaustive enums, ownership, immutable views and
+explicit error/result contracts suitable for a portable native application. It
+also fits the existing gripsack/strop project conventions. This is a host and
+operational implementation choice, not a reason to change the knowledge language.
+
+Python remains until the Rust host passes the applicable behavior, persistence,
+compatibility and conformance gates. Profiling determines which adapters deserve
+replacement; language choice alone is not a latency or correctness result.
+
+## Boundaries
+
+| Crate responsibility | Contract |
+| --- | --- |
+| Semantic kernel | Pure finite witnesses, assessment, reuse, workflows and conditional operations; no IO/clock/database/client SDKs |
+| Wire and codecs | Versioned envelopes, nominal decoding, retained citation grammar, lossless authored documents |
+| Catalog | Pinned kind/provider/schema identities and validated extension payloads; no dynamic inference rules |
+| Store | Native snapshot selection, expected predecessor, authenticated publication, journal/recovery and retention |
+| Git/source adapters | Exact authored/source identity, retained bytes, worktree capture and provider acquisition |
+| Dolt adapter | Normalized records and pinned SQL; cannot authorize a claim or operation by itself |
+| CLI/agent protocol | Stable structured commands, bounded results, context/receipt identities and explicit omissions |
+| Provisioning | Pinned engine installation, private local lifecycle, migrations, backup and diagnostics |
+
+Use a narrow storage interface that captures actual guarantees, not a generic
+repository framework. Do not silently replace Dolt with SQLite when unavailable:
+versioned history/publication semantics are part of the adapter contract.
+
+## Dolt integration and native distribution
+
+The semantic kernel does not require Dolt. Dolt is retained as the initial backend
+because versioned SQL/history/snapshots avoid recreating those mechanisms inside
+kctx. A query-only disposable index could use SQLite, but the admitted structured
+store is more than a graph cache; any replacement requires measured operational
+benefit and full requalification.
+
+Dolt's documented in-process embedding route is a Go `database/sql` driver. A Rust
+embedding would introduce a Go runtime/FFI lifecycle and build boundary we would
+own. Prefer a managed local `dolt sql-server` and a supported MySQL client rather
+than that integration. Batch or long-lived sessions avoid a separate native
+process startup for every SQL query; qualify concurrency, commit pinning and
+resource use on the chosen client/protocol.
+
+- Ship a statically linked Rust application on supported Linux targets; use
+  normal platform-native packaging on macOS rather than calling it a musl target.
+- Provision a checksum/signature-verified pinned Dolt executable as an immutable
+  companion tool version. Never let ambient PATH choose an incompatible engine.
+- Provide an offline bundle containing both executables for restricted networks.
+  A self-extracting single download is possible but still contains two runtime
+  components; it is not library embedding.
+- Bind managed services to private local sockets or authenticated loopback;
+  never inherit Dolt's unauthenticated public-server defaults accidentally.
+- Manage startup, readiness, cancellation, clean shutdown and crashed-process
+  recovery. An upgrade changes tool generation, not database contents by fiat.
+- Docker Compose remains the reproducible development/qualification path, not a
+  requirement to operate the eventual native Rust product.
+
+## Opinionated workspace ownership
+
+The user initializes or opens a KB and operates knowledge verbs. Kctx owns the
+internal schemas, engine version, DB location, candidate directories, locks,
+release pointers and recovery protocol. Agents do not administer SQL tables or
+edit internal publication pointers.
+
+Git contains editable documents, catalog/policy artifacts, workspace identity,
+and immutable release manifests. Live `.dolt` directories are not committed as
+ordinary files on the authored branch. Native mutable state and immutable tool
+installations remain separate, with disposable caches separate from both.
+
+Default local state is derived from logical KB identity plus local instance
+identity so distinct checkouts cannot overwrite one another. Advanced users may
+relocate managed state through the single `config.toml`; default provisioning
+should not require choosing ports or directory internals. Preserve readable
+ordinary Markdown, while providing conventions for managed inventory/proposals/
+retained sources rather than imposing a proprietary document filesystem.
+
+A hosted Git repository can transport both authored history and native Dolt data
+through different refs. Dolt's Git-backed remote normally uses `refs/dolt/data`;
+release manifests pin the native Dolt commit independently of that transport ref.
+`kctx sync`/restore coordinate both components and retained evidence. A normal
+Git clone alone is not advertised as a complete knowledge restore.
+
+The current Python host has explicit managed-store configuration; the automatic
+native provisioning above is a product design, not an implemented command.
+
+## Qualification and rejected shortcuts
+
+Keep exact source/evidence identities; model truth is not manufactured by a SQL
+join, a successful fetch, a catalog schema or a session summary. Unknown or
+incomplete retrieval remains visible. Kernel proofs and adapter refinement are
+separate evidence; a clean axiom audit does not prove a theorem says enough.
+
+Rejected: vendor enums in the kernel, optional silent backend substitution,
+embedding Go into Rust merely to claim one binary, committing a live DB tree to
+Git, treating an ordinary clone as a complete restore, and adopting a backend
+on preference without the fixed correctness/cost evaluation.
+
+## Execution handover
+
+This is a port of a qualified semantic and operational contract, not an
+opportunity to simplify away difficult cases. Complete the current Python/Lean
+qualification first and freeze its source, wire, fixtures and reports. An
+unresolved baseline defect is not a Rust compatibility requirement: fix it in
+the semantic authority and both hosts, then update the reviewed expectations.
+
+### Fixed decisions
+
+1. The calculus is provider- and storage-neutral. No Humio/Grafana/GitHub/Dolt
+   types or SDKs in the kernel; no database IO, wall clock, randomness or implicit
+   current HEAD.
+2. Nominal identities are not interchangeable strings. Entity identity, record
+   revision, source revision, Git release, native Dolt commit, content digest,
+   policy revision and operation identity remain distinct types.
+3. Git authored bytes, native structured snapshots and retained captures have
+   explicit ownership. A projection or exported context never writes canonical
+   facts back without a proposed and authorized operation.
+4. The product manages Dolt as a pinned companion. Do not introduce Go/Rust FFI,
+   silent backend fallback, or dependency on a separately administered server
+   merely to start the application.
+5. One `config.toml` controls deployment. Catalogs, policies and release manifests
+   are versioned domain artifacts, not additional configuration-precedence layers.
+6. Database internals are automatic; trust is not. Users/operators still control
+   authority, external credentials, sharing and retention. Initializing a store
+   must not silently authorize every agent to admit arbitrary knowledge.
+7. The public agent contract is machine-readable, versioned and bounded. Missing
+   evidence, partial acquisition, contradiction, omitted context and stale
+   receipts remain explicit outcomes.
+
+### Phases and dependencies
 
 ```mermaid
-flowchart LR
-    subgraph authored["Git (ordinary files)"]
-        md[Markdown notes / dossiers]
-        cfg[policies, schemas, migrations]
-    end
-    subgraph engine["kctxd core (Rust)"]
-        sem[decision kernel\n(sealed, versioned)]
-        idx[extractor + graph projection]
-        q[typed query engine\nSQL over Dolt / SQLite]
-    end
-    subgraph agents["any agent, any language"]
-        cli[kctx CLI]
-        jl[JSONL protocol\nsame envelopes as today]
-    end
-    md --> idx --> q
-    sem --> q
-    q --> cli & jl
+flowchart TD
+    A[Freeze qualified Lean and Python contract] --> B[Nominal Rust values and strict codecs]
+    B --> C[Pure kernel and three-host correspondence]
+    C --> D[Real source, Git and Dolt adapters]
+    D --> E[Authenticated publication, recovery and pinned retrieval]
+    E --> F[Managed provisioning and provider-neutral catalog]
+    F --> G[Migration, restore and held-out evaluation]
+    G --> H[Release and clean Python cutover]
 ```
 
-### Crate layout (mirroring the house style)
+**Phase 0 — baseline.** Inventory actual commands and formats, freeze the
+theorem/operator/fixture registry, retain the original audit counterexamples as
+corrected regression cases, and record every supported filesystem/platform.
+Do not derive requirements from old test names alone.
 
-| Crate | Role | Notes |
+**Phase 1 — values and codecs.** Implement the smallest useful kernel/wire crates
+first. Use exhaustive tagged unions and validated private constructors. Decode
+untrusted bytes directly into validated values; do not first collapse duplicate
+keys through a generic JSON map. Preserve canonical operation serialization,
+unknown-version refusal and the reference language's resource bounds. Prefer
+borrowed views and explicit ownership to avoid needless clones; optimize only
+without changing semantic identity or diagnostics.
+
+**Phase 2 — semantics.** Translate the checked functions, not an approximation
+of their names. Cover recursive witness checking, positive/negative/both support,
+inventory certificates, source selections, material footprints, validation,
+authored workflows, admission, replay and retained selection. The Rust reference
+runner implements every supported operation; no Python subprocess fallback.
+
+**Phase 3 — adapters and orchestration.** Implement exact Git/capture access,
+native Dolt snapshots and SQL sessions, signature verification, expected-base
+publication and durable recovery. Use existing qualified protocols rather than
+inventing a generic storage framework. Pin a complete generation once per
+request, including pagination. Preserve historical versus current-corrected
+query modes and do not renew originating evidence times.
+
+**Phase 4 — product experience.** Implement initialization/opening, managed
+companion installation, private local service lifecycle, diagnostics, offline
+bundles and default workspace storage. Add the catalog contract from
+`catalog-design.md`; port legacy provider spellings through explicit profiles.
+The agent discovers capabilities and works with typed knowledge verbs, not
+raw SQL, engine ports or hidden directories.
+
+**Phase 5 — qualify and cut over.** Exercise migration on representative copies,
+native transport/restore, interrupted upgrades, mixed-host interoperability and
+the frozen held-out evaluation. Retire Python only after the Rust implementation
+passes the same applicable gates. Historical reader versions may be retained as
+explicit isolated artifacts; obsolete runtime aliases and fallback paths are
+not the cutover design.
+
+## Rust acceptance gates
+
+These gates supplement, not replace, G00–G18 and Q01–Q76/D01–D72 in the
+[consolidated handover](handover.md). A kernel-only pass does not qualify the
+host. Every row requires commands and receipts from the actual Rust artifact.
+
+| Gate | Required observable evidence | Blocks |
 | --- | --- | --- |
-| `kctx-core` | The decision kernel: claims, evidence, derivations, freshness, workflow transitions | A **mechanical translation of `formal/Kctx` + `src/kctx/semantics`** — same names, same rejection order, same wire format. No new semantics, ever. |
-| `kctx-wire` | Positional-array JSON codec, envelopes, `SEMANTIC_VERSION` | Byte-compatible with `formal/Kctx/Codec.lean` and `kctx/semantics/wire.py`. |
-| `kctx-store` | Content-addressed record store; conditional writes; journal | The T20/T21 protocol made real; SQLite in the small case. |
-| `kctx-graph` | Extractor + projection to Dolt (or SQLite when Dolt is absent) | Generation manifests, pinned reads, parity checks — the M2 shadow semantics, hardened per handover §9. |
-| `kctx-git` | Snapshot enumeration, worktree identity, `git archive` audit | `git2 default-features = false` (strop rule). |
-| `kctx-trace` | Structured operation logging | House pattern (`gripsack-trace`, `strop-trace`). |
-| `kctx-cli` | Clap subcommands mirroring today's surface (`context`, `check`, `admit`, `uses`, `graph`, `doctor`…) | Stable exit codes `0/2/3/1` carried over verbatim. |
-| `kctxd` (optional) | Long-lived query server speaking the JSONL protocol | Only if measured agent overhead justifies it (handover G15). |
+| R00 Baseline freeze | Source/wire/semantic versions, representative fixtures, authoritative fields, current gate reports, original counterexamples and explicit intended behavior changes recorded | Starting a port from guessed or knowingly unsound behavior |
+| R01 Reproducible artifact | Pinned Rust toolchain and `Cargo.lock`; clean Compose build; supported-target binaries identified by checksum; no host compiler or hidden tool downloads during required offline checks | Distribution claims |
+| R02 Nominal values and codecs | Compile-fail wrong-ID/ref/digest tests; malformed/unknown/duplicate/version refusal; canonical round trips; immutable retained inputs; explicit wire-depth/size boundary fixtures | Routing production through unvalidated values |
+| R03 Kernel correspondence | Lean/Python/Rust agree on complete responses for every reviewed, generated and stateful case; unsupported/skipped operations fail; all selected semantic mutants are killed | Any Rust semantic assurance claim |
+| R04 Real source and citation adapters | Exact original revision/span/bytes survive rename, refresh and correction; live advisory is separate; partial/denied/timeout/missing history remain distinct; source movement and complete declared worktree identity exercised | Replacing acquisition/resolution |
+| R05 Authenticated operations | Exact complete candidate/policy/context/source selection signed and checked; self-issued approval and changed material inputs rejected; all new claims authorized; independent actor fields and bound gates; same-input replay and conflicting replay distinguished | Admitted writes |
+| R06 Publication and concurrency | Real separate processes interrupted at every durable boundary; one winner per predecessor; last completed generation readable; retry/recovery reuse exact operation; unknown dirty work preserved | Multi-agent authoritative use |
+| R07 Dolt/query refinement | Native commits, normalized typed rows, exact binding parity, extraction provenance, pinned multi-table reads/continuation, bounded work and explicit completeness; no WORKING or latest fallback | Reliable relationship or knowledge retrieval |
+| R08 Provisioning and lifecycle | Fresh install/start/query/stop with no manually installed Dolt; verified pinned companion; private endpoint; repeated/interrupted install; occupied socket/port, missing permission, crash, offline bundle and rollback exercised; tool rollback never rewinds data | Zero-configuration product claim |
+| R09 Catalog and domain neutrality | At least two distinct domains/providers; namespaced kinds and schema versions; rename-stable IDs; unknown extension refusal; catalog changes cannot inject inference or authority; legacy profiles replay faithfully | General-purpose engine claim |
+| R10 Migration, retention and restore | Dry-run classifications account for every legacy input; exact bytes/IDs/citations preserved; unresolved records quarantined; repeat idempotent; clean independent restore and authorized rollback/rollforward preserve intervening audit/corrections | Rewriting or retiring existing stores |
+| R11 Cost and agent usefulness | Frozen held-out protocol; same selected inputs/meaning; actual model/harness/prompt/tool metadata; correctness and cold/warm latency, memory, IO, subprocess, context/token measures; no post-hoc threshold weakening | Performance or adoption claims |
+| R12 Release/cutover | Real installed CLI/agent flows, no Lean/Python/formal artifacts required at runtime; operator guide and recovery drill; applicable earlier gates pass; coherent pushed source and linked reports; old runtime/shims removed | Replacing Python for users |
 
-### What stays exactly as designed
+### Required negative cases
 
-- **The Lean calculus is the authority.** A Rust kernel is a third host of the
-  same semantics; the conformance harness grows a third column (Lean | Python
-  | Rust) and all three must agree on every case before any Rust release.
-  "Faster language inherits no proof status" is already written into the
-  handover (§15.1); the theorem registry covers the *model*, and the Rust
-  core is qualified by conformance, not by hope.
-- **Git for authored assets; Dolt for relations; evidence by exact identity.**
-  The storage-authority table in `docs/kctx/handover.md` §2.1 is
-  implementation-independent and carries over unchanged.
-- **One readiness predicate, one TTL convention, one rejection order.** These
-  are now proved contracts; the rewrite inherits them as wire-level
-  invariants with cross-implementation tests.
+The Rust suite must include, not merely mention:
 
-### The one thing Rust uniquely enables
+- An OK capture that attests nothing about an unrelated false atom.
+- A derived conclusion with an unsupported premise; a mismatching conclusion
+  scope; false completeness without an inventory certificate/member witnesses.
+- Contradictory evidence without erasure or explosion; a policy change with the
+  same friendly policy ID that invalidates the old signed input.
+- A newly discovered member; a changed dependency; a retained older capture
+  falsely offered as the currently selected source.
+- A forged approval, changed signed candidate, unauthorized extra item, malformed
+  retained-selection ID and reuse of an immutable snapshot ID for different data.
+- Invalid/duplicate modern gates, wrong definition/proposal/target/environment/
+  scope/checker/time, and landed refs that resolve to a tree/blob rather than the
+  required commit or to unavailable historical bytes.
+- A crash after durable candidate creation but before acknowledgement; concurrent
+  publishers; an older pinned reader while a new generation is activated.
+- Equal graph row counts with swapped destinations/revisions, parser/schema
+  change under unchanged authored SHA, and malformed/escaped JSON citations.
+- Untrusted retrieved instructions, secret-like error data, ambiguous aliases,
+  unsafe paths, unexpected schema versions and resource-limit exhaustion.
 
-A **sealed kernel crate with `#[no_std]`-friendly pure functions and zero
-I/O**, plus exhaustive `match` over the rejection/transition enums — the
-compiler then enforces what the Python side enforces by review. Add
-`proptest` on the same generators the conformance corpus uses, and mutation
-testing (flip a TTL boundary, drop a footprint dep — the deliberate-mutation
-suite from handover §13.1) as a CI gate, exactly like strop's
-`check_mutants.py`.
+### Verification entry points to implement
 
-## Distribution (copying the house playbook)
+These are future Rust workflow requirements, not commands already present in
+this repository:
 
-1. Static musl binaries (Linux x86_64/aarch64, macOS arm64) via
-   `install.sh` + homebrew tap — the strop channel (`strop.dev/install.sh`,
-   `stropdev/tap`) is the template, including "installer refuses unsupported
-   targets rather than guessing".
-2. `cargo install kctx-cli --locked` for the Rust-native audience (gripsack
-   publishes to crates.io the same way).
-3. **Agents don't install anything** where possible: the JSONL protocol means
-   any harness can drive the kernel over stdin/stdout with the versioned
-   envelope, and `kctx doctor --json` reports exact kernel/wire/store
-   versions the way `kb doctor` is specified to in the handover.
-4. Proof artifacts never ship: `docker compose --profile formal` builds and
-   audits them (gripsack's `model`/`tlaps`/`verify` services are the
-   template), and releases cite the `proof-report.json` digest.
+1. A Compose quality job runs locked formatting/lint/type/build/unit/property
+   checks and the real Rust CLI smoke.
+2. The shared conformance orchestrator launches three real hosts and verifies
+   response cardinality, IDs, schemas, semantic versions, golden expectations
+   and mutation outcomes. Missing a host is a failing gate.
+3. The storage/remote qualification harness accepts the Rust executable and
+   exercises the same scenarios with native Git/Dolt and process interruption.
+4. An isolated runtime image/archive contains no Python, Lean, Lake, Elan or
+   formal source, and runs initialization, capture, proposal, signed admission,
+   context/explain, citation, recovery and restore through installed entry points.
+5. The frozen evaluation protocol runs matched Python/Rust and storage-backend
+   trials. A Rust rewrite does not exempt engine startup, maintenance or recovery
+   cost from measurement.
 
-## Qualification discipline (unchanged, non-negotiable)
+Use platform-specific builds and tests rather than assuming a Linux musl artifact
+qualifies macOS or another filesystem. Record native engine version and actual
+driver/protocol configuration, not just the Rust package version.
 
-The handover's gates apply to the rewrite unchanged: conformance must pass on
-every case; a missing reference column fails the job; deliberate mutations
-must be caught; adoption of any new backend (Dolt) still needs the measured
-benefit. The greenfield risk is not the language — it is *drift from the
-proved semantics*; the three-host conformance matrix is the control for
-exactly that.
+## Required handover and release artifacts
 
-## If I had to start from zero tomorrow
+Each gate receipt records implementation revision plus source digest, exact
+binary and toolchain identities, fixture/corpus/protocol hashes, command, platform,
+passed/failed/skipped counts, raw failures, and the scope actually exercised.
+Secret material never enters reports. Byte/character proxies are labelled as
+proxies rather than presented as measured model-token usage.
 
-1. Write the calculus first (this exists: `formal/Kctx`), freeze the wire
-   format (this exists: `Codec.lean` + `wire.py`), and the case corpus (this
-   exists: `tests/conformance/cases.jsonl`).
-2. Implement `kctx-core` + `kctx-wire` in Rust against those artifacts; run
-   the three-way matrix until green.
-3. Grow outward: `kctx-store` (journal + conditional writes), `kctx-git`,
-   then `kctx-graph` behind the shadow-mode rules, then the CLI.
-4. Ship the binary; the Python core retires when — and only when — the
-   Rust host has passed every gate the Python host passes today.
+The Rust delivery includes:
+
+- Kernel/operator/codec correspondence and theorem-assumption maps.
+- Versioned schemas, catalog defaults and legacy migration profiles.
+- Reproducible build, runtime and companion-install manifests.
+- CLI/API compatibility results and actual source/admission/retrieval examples.
+- Real publication/crash/concurrency/restore qualification receipts.
+- Exact migration/rollback steps and retained restore points.
+- Predeclared cost/agent-evaluation protocol and matched results.
+- Operator guidance for initialization, trust bootstrap, credentials, managed
+  state locations, upgrade, recovery, backup and diagnostics.
+- A per-capability cutover decision. Unverified enterprise policy assumptions
+  are not inferred from local Git transport; environment-specific deployment
+  testing remains with the operator/work agent as requested.
+
+## First actions for the Rust implementer
+
+1. Read this document, `catalog-design.md`, the consolidated handover, the final
+   calculus/operator registry and the latest qualification receipts.
+2. Verify the frozen Python/Lean baseline yourself through Compose. Resolve any
+   mismatch between documentation, schemas and executable behavior before coding.
+3. Establish the pinned workspace and implement nominal values plus the reference
+   protocol; prove wrong namespaces cannot compile.
+4. Port one coherent semantic slice at a time, retaining independent expected
+   cases. Keep the three-host matrix green before adding IO.
+5. Follow the dependency phases above, commit/push checked checkpoints, and attach
+   evidence. Do not call a parser, compiling scaffold or happy-path demo a finished
+   engine.
+
+## Sources
+
+- [Dolt's Go embedded driver](https://www.dolthub.com/blog/2026-01-23-golang-sql-drivers/)
+  describes the supported in-process Go boundary.
+- [Dolt SQL clients](https://www.dolthub.com/docs/sql-reference/supported-clients/clients/)
+  documents MySQL compatibility and explicitly lists the Rust `mysql` crate.
+- [Dolt Git-backed remotes](https://www.dolthub.com/docs/sql-reference/version-control/remotes/)
+  documents native database transport through Git refs and its retention settings.

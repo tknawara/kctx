@@ -94,6 +94,12 @@ def planOutcomeToJson (o : PlanOutcome) : Json :=
       | .gatesNotPassed => "gatesNotPassed"
       | .landedRefsUnresolved => "landedRefsUnresolved")]
 
+def decOptNull {a : Type} (g : Json -> Except String a) : Json -> Except String (Option a)
+  | .null => pure none
+  | j@(.str _) => some <$> g j
+  | j@(.arr _) => decOpt g j
+  | j => decOpt g j
+
 def handle (j : Json) : Except String Json := do
   let op ← field j "op" >>= fun o => o.getStr?
   match op with
@@ -129,7 +135,7 @@ def handle (j : Json) : Except String Json := do
     pure (Json.bool (Reusable kb.view ctx d observed))
   | "plan_transition" =>
     let pj ← field j "proposal"
-    let target ← field pj "status" >>= fun x => decProposalStatus x
+    let target ← field j "target" >>= fun x => decProposalStatus x
     let researchPresent ← field pj "researchPresent" >>= fun x => decBool x
     let researchJustifiedSkip ← field pj "researchJustifiedSkip" >>= fun x => decBool x
     let alternativesCount ← field pj "alternativesCount" >>= fun x => decInt x
@@ -137,13 +143,13 @@ def handle (j : Json) : Except String Json := do
     let legacyProfile ← field pj "legacyProfile" >>= fun x => decBool x
     let landGatesPassed ← field pj "landGatesPassed" >>= fun x => decBool x
     let deployUseGatesPassed ← field pj "deployUseGatesPassed" >>= fun x => decBool x
-    let actor ← field pj "actor" >>= fun x =>
-      decOpt decStr x
-    let landedRefs ← field pj "landedRefs" >>= fun x => decList decStr x
-    let refsResolvable ← field pj "refsResolvable" >>= fun x => decBool x
+    let actor ← field j "actor" >>= fun x => decOptNull decStr x
+    let landedRefs ← field j "landedRefs" >>= fun x => decList decStr x
+    let refsResolvable ← field j "refsResolvable" >>= fun x => decBool x
     let pid ← field pj "id" >>= fun x => decStr x
+    let status ← field pj "status" >>= fun x => decProposalStatus x
     let p : Proposal :=
-      { id := ⟨pid⟩, status := .draft, researchPresent, researchJustifiedSkip,
+      { id := ⟨pid⟩, status, researchPresent, researchJustifiedSkip,
         alternativesCount, gatesTablePresent, legacyProfile, decidedBy := none,
         landedRefs, landGatesPassed, deployUseGatesPassed }
     pure (planOutcomeToJson (planTransition p target actor landedRefs refsResolvable))
@@ -164,13 +170,13 @@ def handleLine (line : String) : String :=
   let j := Json.parse line.trim
   match j with
   | .error e =>
-    toString (Json.mkObj [("id", .str ""), ("ok", Json.bool False), ("error", .str ("parse: " ++ e))])
+    toString (Json.mkObj [("id", .str ""), ("ok", Json.bool False), ("error", .str ("parse: " ++ e))]).compress
   | .ok req =>
     match handle req with
     | .error e =>
-      toString (Json.mkObj [("id", .str (reqId req)), ("ok", Json.bool False), ("error", .str e)])
+      toString (Json.mkObj [("id", .str (reqId req)), ("ok", Json.bool False), ("error", .str e)]).compress
     | .ok res =>
-      toString (Json.mkObj [("id", .str (reqId req)), ("ok", Json.bool True), ("result", res)])
+      toString (Json.mkObj [("id", .str (reqId req)), ("ok", Json.bool True), ("result", res)]).compress
 
 end Kctx.Reference
 

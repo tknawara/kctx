@@ -1,0 +1,50 @@
+# kctx gate report
+
+Working record of `docs/kctx/handover.md` §13 gates. A gate passes only with
+recorded evidence tied to an implementation revision; required-skipped tests
+mean *unqualified*, not passed. Everything here was executed in this
+repository on the revision recorded below.
+
+## Evidence index
+
+| Gate | Status | Evidence |
+| --- | --- | --- |
+| G00 Baseline | **pass** | `docs/kctx/discovery.md` (zip SHA verified, env inventory, 266-test baseline, authority map). |
+| G01 Toolchains | **partial** | Lean pinned `leanprover/lean4:v4.21.0` via elan + `formal/lean-toolchain`; `formal/scripts/proof_check.sh` runs clean from checkout (build + axiom audit + report + reference smoke). Python dev tooling (Ruff/Pyright via `uv`) and the pinned Docker image build are *not yet wired* — no network-pullable base image was available in this environment; `formal/Dockerfile` + `compose.yaml` are written but unbuilt. |
+| G02 Types | **partial** | `src/kctx/semantics` introduces nominal identity (`Ident` with `IdKind`), `ClaimRef`, tagged-union `ClaimProp`, frozen dataclasses, explicit rejection unions; negative fixtures reject id mix indirectly via wire decoding. The *existing* CLI modules are not yet routed through these types (staged per handover §16 M2). |
+| G03 Language | **pass** | Vocabulary, scope/time/coverage contracts and positive/negative examples reviewed alongside this implementation (Lean model + `formal/theorems.json` assumptions fields). |
+| G04 Proofs | **partial (20/22)** | T01–T06, T08–T14, T16–T22 proved; axiom audit clean (propext/Classical.choice/Quot.sound only); non-vacuity examples kernel-decided. **T07/T15 (footprint locality + historical extension) are specified but open** — recorded in `formal/theorems.json` and `formal/proof-report.json`. |
+| G05 Correspondence | **pass** | `scripts/conformance_check.py`: 35 reviewed cases, Lean reference evaluator vs actual Python `kctx.semantics` functions, **0 mismatches** (`conformance-report.json`). |
+| G06 Workflows | **partial** | Pure `plan_transition`/`can_conclude` implemented in both sides with one readiness predicate (bypass fixed) and covered by conformance + 25 unit tests; existing `proposals.py`/`investigations.py` CLI paths not yet routed through them. |
+| G07 Compatibility | **partial** | Existing 266-test suite still green (291 total with semantics tests, 30 skips = absent graph deps). Frozen compatibility fixtures for legacy Markdown/citations not yet extracted (needs work-KB corpus). |
+| G08 Persistence | **not started** | Modeled conditional commit proved (T20/T21) and unit-tested; filesystem adapters untouched. |
+| G09 CLI/agent use | **not started** | No CLI changes yet (deliberate: typed core first, cutover later). |
+| G10 Migration | **not started** | Requires corpus (absent locally). |
+| G11–G13 Graph/Dolt/Remote | **not started** | Requires Dolt binary + bbgithub access (absent locally). |
+| G14 Restore/history | **not started** | — |
+| G15 Cost/usefulness | **not started** | Needs held-out corpus. |
+| G16 Runtime separation | **pass** | `src/kctx/semantics` is stdlib-only (asserted by `scripts/check_contracts.py`); tests + conformance Python side ran in an environment with no Lean/Docker on PATH for the CLI. Lean artifacts live only under `formal/`. |
+| G17 Cutover | **not applicable yet** | No authority change made; files remain canonical. |
+| G18 Delivery | **in progress** | Regular commits pushed to `tknawara/kctx`; this report is part of the delivery evidence. |
+
+## Reproduction
+
+```bash
+# Python-only (no Lean/Docker needed)
+python3 -m unittest discover -s tests
+python3 scripts/check_contracts.py
+python3 scripts/conformance_check.py          # Lean side required; --skip-lean exits 3
+
+# Proof environment (elan with the pinned toolchain, or compose --profile formal)
+cd formal && ./scripts/proof_check.sh         # writes formal/proof-report.json
+```
+
+## Open obligations and blockers
+
+1. **T07/T15 proofs** (footprint locality; historical extension). Specified in
+   `formal/theorems.json`; proof work remains.
+2. **G01 Docker image** — needs a network-reachable base image pull
+   (unavailable in this environment); files are in place.
+3. **G10/G11 corpora and Dolt** — require the work environment (real KB,
+   `cite` provider, Dolt, bbgithub). None can be qualified from this machine,
+   and none were faked.

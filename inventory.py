@@ -1,5 +1,14 @@
 """Asset and relationship records, plus bounded impact traversal."""
 
+# M2 typing slice: asset/relationship identities enter through the nominal
+# validated types in kctx.domain.ids (parse once, at the boundary).
+import sys as _sys
+from pathlib import Path as _Path
+
+_SRC = _Path(__file__).resolve().parent / "src"
+if str(_SRC) not in _sys.path:
+    _sys.path.insert(0, str(_SRC))
+
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -54,7 +63,9 @@ def asset_add(
 ) -> Dict[str, Any]:
     require_choice(kind, ASSET_KINDS, "kind")
     require_choice(lifecycle, LIFECYCLES, "lifecycle")
-    asset_id = id or f"{kind}-{slugify(name)}"
+    from kctx.domain.ids import AssetId
+
+    asset_id = str(AssetId(id or f"{kind}-{slugify(name)}"))
     path = assets_dir(root) / f"{asset_id}.json"
     if path.exists():
         raise KctxError("conflict", f"asset {asset_id} already exists")
@@ -118,15 +129,18 @@ def rel_add(
 ) -> Dict[str, Any]:
     require_choice(type, REL_TYPES, "type")
     require_choice(status, REL_STATUSES, "status")
-    rel_id = id or f"{slugify(type)}__{slugify(from_)}__{slugify(to)}"
+    from kctx.domain.ids import AssetId, RelationshipId
+
+    endpoints = (str(AssetId(from_)), str(AssetId(to)))
+    rel_id = str(RelationshipId(id or f"{slugify(type)}__{slugify(from_)}__{slugify(to)}"))
     path = relationships_dir(root) / f"{rel_id}.json"
     if path.exists():
         raise KctxError("conflict", f"relationship {rel_id} already exists")
     rel = Relationship(
         id=rel_id,
         type=type,
-        from_=from_,
-        to=to,
+        from_=endpoints[0],
+        to=endpoints[1],
         status=status,
         evidence=list(evidence or []),
         applicability=applicability,

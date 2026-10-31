@@ -19,6 +19,16 @@ then `$CLAUDE_CONFIG_DIR/skills/grounding/cite`, then
 `~/.claude/skills/grounding/cite`, then the dotfiles checkout, and report
 citations as `unverifiable` (never `fresh`) if none of those exist.
 
+## The calculus (proved decision layer)
+
+Behind the CLI sits a small, Lean-proved knowledge calculus: claims, evidence,
+derivations, freshness, corrections, and workflow transitions — specified and
+proved in `formal/Kctx` (22/22 theorem obligations discharged, axiom-audited),
+implemented as a pure Python core (`src/kctx/semantics`), and cross-checked
+case-by-case against a Lean reference evaluator. The reference card — nouns,
+verbs, rules, rejection vocabulary, wire examples — is
+[`docs/kctx/calculus.md`](docs/kctx/calculus.md).
+
 ## Running it
 
 ```

@@ -113,12 +113,57 @@ def load_cursor(root: Path, org: str, name: str) -> Optional[Dict[str, Any]]:
 
 
 def save_cursor(
-    root: Path, org: str, name: str, sha: str, by: str = "kctx admit"
+    root: Path,
+    org: str,
+    name: str,
+    sha: str,
+    by: str = "kctx admit",
+    pending: Optional[List[Dict[str, Any]]] = None,
 ) -> None:
+    """Write the cursor.
+
+    Handover 8.3: the cursor records *scanned-through* `sha` separately from
+    completed admission — unresolved judgment items are persisted alongside
+    it (never dropped by advancing), so pending work survives a second
+    no-change invocation, a restart, or a partial failure.
+    """
     atomic_write_json(
         cursor_path(root, org, name),
-        {"repo": f"{org}/{name}", "sha": sha, "admitted_at": iso_now(), "by": by},
+        {
+            "repo": f"{org}/{name}",
+            "sha": sha,
+            "admitted_at": iso_now(),
+            "by": by,
+            "pending": pending or [],
+        },
     )
+
+
+def _judgment_key(item: Dict[str, Any]) -> str:
+    """Stable identity for deduplicating pending judgment items across
+    runs: file + line (position-stable) falling back to reason + excerpt."""
+    return "{file}:{line}:{reason}:{excerpt}".format(
+        file=item.get("file", ""),
+        line=item.get("line_no", item.get("line", "")),
+        reason=item.get("reason", ""),
+        excerpt=item.get("excerpt", ""),
+    )
+
+
+def merge_pending(
+    prior: Optional[List[Dict[str, Any]]], new: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    """Idempotent merge: prior pending items survive, new duplicates of
+    them don't double up."""
+    seen = set()
+    out: List[Dict[str, Any]] = []
+    for item in list(prior or []) + list(new):
+        key = _judgment_key(item)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(item)
+    return out
 
 
 def parse_org_repo(repo: str) -> Tuple[str, str]:
@@ -512,10 +557,17 @@ def admit_repo(
         root, repo_full, changed_paths, dry_run=dry_run
     )
     pr_result = refresh_pr_citations(root, repo_full, dry_run=dry_run)
-    judgment = judgment_scan(root, repo_full, pr_result["merged_numbers"])
+    judgment_new = judgment_scan(root, repo_full, pr_result["merged_numbers"])
+
+    # Pending judgment work is carried in the cursor: a second no-change
+    # invocation re-reports it (it is not re-discovered — the PR range is
+    # empty once the cursor has advanced), and advancing the cursor never
+    # drops it.
+    prior_pending = list((cursor or {}).get("pending") or [])
+    judgment = merge_pending(prior_pending, judgment_new)
 
     if not dry_run and code_result["citations_available"]:
-        save_cursor(root, org, name, head)
+        save_cursor(root, org, name, head, pending=judgment)
 
     total_remaining = code_result["total_remaining"] + len(judgment)
     if not code_result["citations_available"]:
@@ -534,6 +586,9 @@ def admit_repo(
         "code_citations": code_result,
         "pr_citations": pr_result,
         "judgment": judgment,
+        "judgment_new": judgment_new,
+        "pending_judgment": judgment,
+        "scanned_through": head,
         "cursor_advanced": (not dry_run) and code_result["citations_available"],
         "exit_code": exit_code,
     }

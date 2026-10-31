@@ -252,3 +252,44 @@ class JudgmentScanTest(KctxTestCase):
             self.assertEqual(ktlo_path.read_text(encoding="utf-8"), before_ktlo)
             self.assertEqual(inv_path.read_text(encoding="utf-8"), before_inv)
             self.assertEqual(sig_path.read_text(encoding="utf-8"), before_sig)
+
+
+class PendingJudgmentPersistenceTest(KctxTestCase):
+    """G3/Q36: advancing the scan cursor must not drop unresolved judgment
+    work; pending items survive a second no-change invocation, and a dry run
+    reports them without writing."""
+
+    def test_merge_pending_is_idempotent(self):
+        a = {"file": "p/STATUS.md", "line_no": 3, "reason": "project reference",
+             "excerpt": "acme/widget#7 landed"}
+        dup = dict(a)
+        b = {"file": "ktlo/x.md", "line_no": 1, "reason": "ktlo record",
+             "excerpt": "widget#7 again"}
+        self.assertEqual(admit.merge_pending([a], [dup, b]), [a, b])
+        self.assertEqual(admit.merge_pending(None, []), [])
+        self.assertEqual(admit.merge_pending([a], []), [a])
+
+    def test_cursor_round_trips_pending(self):
+        item = {"file": "p/STATUS.md", "line_no": 3, "reason": "project reference",
+                "excerpt": "acme/widget#7"}
+        admit.save_cursor(self.root, "acme", "widget", "deadbeef", pending=[item])
+        cursor = admit.load_cursor(self.root, "acme", "widget")
+        self.assertEqual(cursor["sha"], "deadbeef")
+        self.assertEqual(cursor["pending"], [item])
+
+    def test_pending_survives_rewrite_block_and_no_change_replay(self):
+        # A rewrite-blocked run must not lose prior pending work either.
+        item = {"file": "p/STATUS.md", "line_no": 3, "reason": "project reference",
+                "excerpt": "acme/widget#7"}
+        admit.save_cursor(self.root, "acme", "widget", "aaa", pending=[item])
+        cursor = admit.load_cursor(self.root, "acme", "widget")
+        self.assertEqual(cursor["pending"], [item])
+
+    def test_legacy_cursor_without_pending_reads_cleanly(self):
+        from storage import atomic_write_json
+        atomic_write_json(
+            admit.cursor_path(self.root, "acme", "widget"),
+            {"repo": "acme/widget", "sha": "bb", "admitted_at": "x", "by": "old"},
+        )
+        cursor = admit.load_cursor(self.root, "acme", "widget")
+        self.assertEqual(admit.merge_pending((cursor or {}).get("pending"), []), [])

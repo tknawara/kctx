@@ -1,6 +1,7 @@
 import Kctx.AuthoredCodec
 import Kctx.Theorems2
 import Kctx.SelectionCodec
+import Kctx.WorkflowV3Reference
 
 set_option autoImplicit false
 set_option maxRecDepth 4096
@@ -105,13 +106,17 @@ def unwrap (j : Json) : Except String (Json × List VerifiedApproval × List Ver
       return (request, approvals, selections, retained)
 
 def response (j : Json) : Json :=
-  match unwrap j with
-  | .error _ => Json.mkObj [("id", .str ""), ("ok", .bool false), ("error", .str "invalid_request")]
-  | .ok (request, trusted, selections, retained) =>
-      let id := (field request "id" >>= decStr).toOption.getD ""
-      match evaluate request trusted selections retained with
-      | .ok result => Json.mkObj [("id", .str id), ("ok", .bool true), ("result", result)]
-      | .error _ => Json.mkObj [("id", .str id), ("ok", .bool false), ("error", .str "invalid_request")]
+  let request := (field j "request").toOption.getD j
+  if (field request "schema_version" >>= decNat).toOption == some 3 then
+    WorkflowV3Reference.response j
+  else
+    match unwrap j with
+    | .error _ => Json.mkObj [("id", .str ""), ("ok", .bool false), ("error", .str "invalid_request")]
+    | .ok (request, trusted, selections, retained) =>
+        let id := (field request "id" >>= decStr).toOption.getD ""
+        match evaluate request trusted selections retained with
+        | .ok result => Json.mkObj [("id", .str id), ("ok", .bool true), ("result", result)]
+        | .error _ => Json.mkObj [("id", .str id), ("ok", .bool false), ("error", .str "invalid_request")]
 
 structure ObjectFrame where
   object : Bool

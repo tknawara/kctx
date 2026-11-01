@@ -16,6 +16,11 @@ import Kctx.CodecRecords
 import Kctx.Footprint
 import Kctx.WorkflowCodecProofs
 import Kctx.CompositionLaws
+import Kctx.Portfolio
+import Kctx.DesignWorkflow
+import Kctx.WorkflowV3Codec
+import Kctx.PortfolioExamples
+import Kctx.DesignWorkflowExamples
 
 /-! # kctx knowledge calculus — root
 

@@ -8,7 +8,7 @@ inductive IdKind where
   | asset | project | claim | claimRev | citation | observation | attestation
   | enumeration | derivation | correction | receipt | proposal | proposalRev
   | investigation | signature | rule | ruleVersion | operation | snapshot
-  | policy | checker | source | sourceRev | content | actor | gate | targetRev
+  | policy | checker | source | sourceRev | content | actor | gate | targetRev | context
   deriving DecidableEq, Repr, Inhabited
 
 structure Ident (kind : IdKind) where
@@ -51,6 +51,7 @@ abbrev ContentId := Ident .content
 abbrev ActorId := Ident .actor
 abbrev GateId := Ident .gate
 abbrev TargetRevision := Ident .targetRev
+abbrev ContextId := Ident .context
 
 /-- A generic lookup never erases the key's namespace. -/
 def lookup {kind : IdKind} {α : Type} (key : α → Ident kind)

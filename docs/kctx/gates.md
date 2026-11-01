@@ -10,7 +10,80 @@ are different evidence. A fixture name or a skipped capability is not a pass.
 Enterprise endpoint qualification is explicitly owned by the user's work agent;
 local native transports do not stand in for it.
 
-## Verified checkpoint
+## Workflow 3 extension evidence
+
+The FR5/FR6 cutover keeps inference semantic version `2.0.0` and adds workflow
+schema 3 plus RPC protocol `"2"`. It was implemented Lean first, then mirrored
+and connected to Python services. These are scoped qualification results, not a
+universal Python refinement or hosted-deployment claim.
+
+- Clean Lean 4.21.0 build and registry audit passed: **353 declarations**, including
+  **159 new public workflow/codec/example declarations**, no open obligations or
+  unapproved axioms, and all six nominal compile-fail fixtures rejected.
+  Formal source SHA256:
+  `a2ccd0a20dfe4c4e0e410cbee6554729e3fe73e523bc935857524078087c9fb3`.
+- Full-response Lean/Python correspondence passed **334 scenarios**: 203 fixtures,
+  112 generated and 19 stateful; **11/11 deliberate decision mutants killed**.
+  Evidence: `conformance-report.json`, including schema-3 authorization, context
+  retirement, exact binding and historical-selection boundaries.
+- The [actual CLI/RPC smoke](reports/workflow-v3/runtime.json) exercised three
+  named contexts across two projects, distinct intended uses, rejected unsupported
+  assignments/context borrowing, history, continuation across a later publication,
+  and identical CLI/RPC diff payloads with four context–claim pairs.
+- The authored smoke accepted a design before its repository existed, executed
+  two real local implementations before recording gates, rebound without losing
+  design approval, rejected old-target passes, applied with new evidence, and
+  verified deploy/use phases. Stale CAS, finalized rewriting and material changes
+  without reopening were rejected; whole-workspace `validate` passed.
+- The [native storage campaign](reports/workflow-v3/storage/report.json) passed
+  **13 case rows**, including seven real process-death boundaries, competing
+  publishers, tampering, migration, independent retained-store restore and
+  rollback/rollforward. Production source remained stable throughout the run.
+  The restore fixture has knowledge refs without a populated authored branch;
+  it does not close FR9's separately reported matching-unborn-branch defect.
+- The rebuilt `kctx-runtime:python-only` image passed its installed/module CLI
+  smoke with no Lean/Lake/Elan/Docker/formal files in the runtime.
+- Final behavioral suite: **740 passed, zero failures/errors/skips**
+  (`test-report.json`). Source/fixture SHA256:
+  `e7fa422508aaf434619f1a04fbcc2ae79cdfa5c756b315cf0ecbd9062ace8777`.
+- Ruff lint/format passed for **136 runtime files**; strict Pyright reported zero
+  diagnostics. The valid typed consumer passed, all **12 ID/enum misuse sites**
+  were rejected, and the repository contract checks passed.
+
+Integration retained regressions for long inline gate tables, historical custom
+metadata remaining non-authoritative, disjoint `design-v3:` material identities,
+and refusal to infer a missing acceptor from legacy attribution. An initial
+735-test run reported two test-migration failures (a pinned mutation count and a
+draft fixture missing its new source); neither semantic guard was weakened.
+
+The later 739-test run exposed a native reader cleanup race. Dolt 2.6.1
+[starts detached event flushers without waiting](https://github.com/dolthub/dolt/blob/v2.6.1/go/cmd/dolt/dolt.go#L834-L879);
+waiting for the SQL server alone did not own every writer of its private root.
+A Linux child-subreaper regression observed three orphan descendants before
+the fix. Private readers now disable only those background flushers in their
+subprocess environment; synchronous logging still finishes before process exit.
+No deletion retry or error suppression was added, and user configuration is
+unchanged. All eight focused native-reader, pinned-session and RPC tests passed.
+The rebuilt installed CLI and RPC surface returned the exact relationship source;
+its one live private reader disappeared at EOF with exit zero.
+[Source-delta linkage and observed results](reports/workflow-v3/runtime.json)
+record this sole runtime-source change since the native knowledge campaign.
+
+Independent read-only reviews found one additional reference-protocol mismatch:
+schema-3 Lean accepted an empty request ID while Python rejected it. The direct
+counterexample is retained as a conformance boundary; the Lean decoder now
+requires the same nonempty ID. Neither finding changes an inference rule or
+relaxes an authorization predicate.
+
+The earlier checkpoints below retain their original source and scope.
+
+
+## Earlier v2 verified checkpoint
+
+This section and the G00–G18 table describe the historical checkpoint associated
+with `921437a` and its recorded source-delta linkage, not a claim that every
+campaign was rerun for workflow 3. Root proof/conformance/test reports advance
+with later qualification; the immutable reports linked below retain old evidence.
 
 The complete Compose `verify` job exited zero and printed `VERIFY_ALL_OK`.
 A final human-help color correction was then checked with the full Python
@@ -45,7 +118,7 @@ hashes and the final verification; old reports keep their original identities.
 
 ## G00–G18 disposition
 
-| Gate | Current disposition | Evidence and boundary |
+| Gate | Historical disposition | Evidence and boundary |
 | --- | --- | --- |
 | G00 Baseline | Pass | [Discovery](discovery.md), original archive identity and compatibility inventory retained. |
 | G01 Toolchains | Pass on Linux amd64 Compose | Locked Python quality job, Lean 4.21.0, native Dolt 2.6.1; no required dependency skips. Git and the GitHub CLI ship in images. |

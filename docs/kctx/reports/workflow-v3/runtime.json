@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "kind": "workflow-v3-cli-rpc-smoke",
+  "result": "pass",
+  "image": "kctx-verify:lean-4.21.0-dolt",
+  "command": "python3 /smoke/smoke.py",
+  "temporary_harness_sha256": "55e9fd33d35fc04b656f71f1d88c27a57e3862f008e77f562aac85e16d253900",
+  "temporary_harness_retained": false,
+  "source_evidence": "storage/report.json",
+  "native": {
+    "workflow_schema": 3,
+    "rpc_protocol": "2",
+    "contexts": [
+      "scope-a",
+      "scope-b",
+      "other-project"
+    ],
+    "historical_read": true,
+    "unsupported_added_claim_rejected": true,
+    "context_borrowing_rejected": true,
+    "continuation_pinned_across_publication": true,
+    "diff_context_claim_pairs": 4,
+    "cli_rpc_payload_parity": true
+  },
+  "authored": {
+    "accepted_before_repository_existed": true,
+    "retarget_preserved_design_acceptance": true,
+    "old_gate_became_unknown": true,
+    "actual_local_program_outputs_checked": [
+      "first",
+      "second"
+    ],
+    "new_gate_permitted_application": true,
+    "deploy_use_gates_permitted_verification": true,
+    "stale_cas_and_finalized_rewrites_rejected": true,
+    "explicit_reopen_required_new_acceptance": true
+  },
+  "workspace_validate": true,
+  "post_campaign_reader_qualification": {
+    "result": "pass",
+    "source_delta_since_storage": {
+      "path": "src/kctx/adapters/dolt/read_session.py",
+      "qualified_sha256": "976b9ccc54aabc559fbb5ad7bb4ab254489f46d38e6d5ec497ea11f90f037fc2",
+      "current_sha256": "f48cd4f5e112639393844015880768895c59103d67c9f23473db7ad56ae540b1",
+      "other_recorded_runtime_sources_unchanged": true
+    },
+    "subreaper_regression": {
+      "before_detached_children": 3,
+      "result": "failing-before-passing-after",
+      "path": "tests/test_dolt_read_session.py",
+      "sha256": "fe7a1d655851d01ea23e59ba28f16897969d3ff9a4b37a15bf59db58d8d43ad1"
+    },
+    "focused_native_tests_passed": 8,
+    "installed_surface": {
+      "image": "kctx-runtime:python-only",
+      "temporary_harness_sha256": "3811fd8c6ed38e5adaa879b0e64ffda7c0c7dadb33a17b9ae2f2ade4122c740f",
+      "temporary_harness_retained": false,
+      "rpc_protocol": "2",
+      "cli_referrers": 1,
+      "rpc_referrers": 1,
+      "source_paths": ["inventory/relationships/consumes__api__queue.json"],
+      "active_private_readers": 1,
+      "remaining_private_readers_after_eof": 0,
+      "rpc_exit_code": 0
+    }
+  },
+  "scope": "Isolated local Git/Dolt fixtures and actual CLI/JSON-RPC processes; no hosted endpoint or whole-Python refinement claim."
+}

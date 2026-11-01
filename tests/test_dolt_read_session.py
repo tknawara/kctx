@@ -4,7 +4,10 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import subprocess
+import sys
 import tempfile
+import textwrap
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -26,6 +29,55 @@ class ReadValueTest(unittest.TestCase):
 
 @unittest.skipUnless(shutil.which("dolt"), "requires pinned native Dolt in verify image")
 class ReadSessionIntegrationTest(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == "linux", "Linux child-subreaper lifecycle witness")
+    def test_private_reader_leaves_no_detached_descendants(self) -> None:
+        # A subreaper observes even already-exited orphan children as zombies,
+        # making the ownership check independent of the metrics network's speed.
+        probe = textwrap.dedent(r"""
+            import ctypes
+            import os
+            from pathlib import Path
+            import shutil
+            import signal
+            import tempfile
+            from kctx.graph.dolt_store import DoltStore
+
+            with tempfile.TemporaryDirectory(prefix="kctx-reader-owner-") as directory:
+                os.environ["DOLT_DISABLE_EVENT_FLUSH"] = "1"
+                store = DoltStore(Path(directory) / "db")
+                store.ensure_init()
+                os.environ.pop("DOLT_DISABLE_EVENT_FLUSH")
+                libc = ctypes.CDLL(None, use_errno=True)
+                pr_set_child_subreaper = 36
+                if libc.prctl(pr_set_child_subreaper, 1, 0, 0, 0) != 0:
+                    raise OSError(ctypes.get_errno(), "cannot become a child subreaper")
+                reader = store.read_session()
+                private = None
+                children = []
+                try:
+                    with reader:
+                        assert reader.socket_path is not None
+                        private = reader.socket_path.parent
+                        assert reader.sql_read("SELECT 1 AS observed") == [{"observed": 1}]
+                finally:
+                    children_path = Path(f"/proc/{os.getpid()}/task/{os.getpid()}/children")
+                    children = [int(pid) for pid in children_path.read_text().split()]
+                    print(f"detached_children_after_close={children}")
+                    for pid in children:
+                        try:
+                            os.kill(pid, signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
+                        os.waitpid(pid, 0)
+                    if private is not None and private.exists():
+                        shutil.rmtree(private)
+                assert children == [], "native subprocesses outlived the private reader"
+        """)
+        result = subprocess.run(
+            [sys.executable, "-c", probe], capture_output=True, text=True, timeout=60
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_native_session_security_parity_and_lifecycle(self) -> None:
         with tempfile.TemporaryDirectory(prefix="kctx-reader-test-") as name:
             root = Path(name)

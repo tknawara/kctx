@@ -204,6 +204,9 @@ class DoltReadSession:
             environment.pop("DOLT_ROOT_PASSWORD", None)
             environment.pop("DOLT_ROOT_HOST", None)
             environment["DOLT_ROOT_PATH"] = str(private / "root")
+            # Dolt otherwise starts detached send-metrics processes at command exit.
+            # They must not outlive the private root shared by these subprocesses.
+            environment["DOLT_DISABLE_EVENT_FLUSH"] = "1"
             Path(environment["DOLT_ROOT_PATH"]).mkdir(mode=0o700)
             backup = private / "backup"
             self._native(

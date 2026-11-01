@@ -34,6 +34,7 @@ from kctx.adapters.files.knowledge import (
 from kctx.adapters.git.knowledge import RELEASE_REF, GitReleases
 from kctx.domain.ids import (
     ActorId,
+    AssetId,
     AuthorityKeyId,
     ContentDigest,
     ContentId,
@@ -52,10 +53,14 @@ from kctx.errors import KctxError
 from kctx.semantics.checker import accepted, assess, assessment_gaps
 from kctx.semantics.model import (
     KB,
+    Atomic,
     Authority,
+    Claim,
     ClaimRef,
     CommitOutcome,
+    Conjunction,
     Context,
+    Formula,
     Plan,
     ReceiptResult,
     SelectionPlan,
@@ -95,6 +100,24 @@ from kctx.services.knowledge_models import (
 )
 
 TOOLCHAIN = "kctx-semantic-2.0.0"
+
+
+def _formula_assets(formula: Formula, assets: frozenset[str]) -> frozenset[str]:
+    """Exact structured identity relevance, never semantic scope or support."""
+    if isinstance(formula, Atomic):
+        return assets.intersection((formula.atom.subject, *formula.atom.args))
+    if isinstance(formula, Conjunction):
+        return _formula_assets(formula.left, assets) | _formula_assets(formula.right, assets)
+    return frozenset()
+
+
+def _claim_assets(claim: Claim, assets: frozenset[str]) -> tuple[str, ...]:
+    return tuple(
+        sorted(
+            _formula_assets(claim.statement.formula, assets)
+            | assets.intersection((claim.statement.scope.selector,))
+        )
+    )
 
 
 class KnowledgeEngine:
@@ -1030,17 +1053,19 @@ class KnowledgeEngine:
         limit: int = 20,
         continuation: JsonObject | None = None,
         release: ReleaseId | None = None,
+        *,
+        assets: tuple[AssetId, ...] | None = None,
     ) -> JsonObject:
         if limit < 1 or limit > 100:
             raise KctxError("malformed", "context limit must be between 1 and 100")
-        query = digest(
-            canonical(
-                {
-                    "claims": [object_value(enc_ref(ref)) for ref in claims],
-                    "context": object_value(enc_context(context)),
-                }
-            )
-        )
+        query_input: JsonObject = {
+            "claims": [object_value(enc_ref(ref)) for ref in claims],
+            "context": object_value(enc_context(context)),
+        }
+        asset_ids = None if assets is None else frozenset(asset.val for asset in assets)
+        if asset_ids is not None:
+            query_input["assets"] = [identity for identity in sorted(asset_ids)]
+        query = digest(canonical(query_input))
         offset = 0
         if continuation:
             if (
@@ -1068,11 +1093,17 @@ class KnowledgeEngine:
             )
         wanted = set(claims)
         active = set(self._selected(release))
+        asset_matches = (
+            {}
+            if asset_ids is None
+            else {claim.ref: _claim_assets(claim, asset_ids) for claim in kb.claims}
+        )
         selected = [
             claim
             for claim in kb.claims
             if claim.ref in active
             and (not wanted or claim.ref in wanted)
+            and (asset_ids is None or bool(asset_matches[claim.ref]))
             and narrower(context.target, claim.statement.scope)
         ]
         page = selected[offset : offset + limit]
@@ -1119,6 +1150,10 @@ class KnowledgeEngine:
                     ],
                 }
             )
+            if asset_ids is not None:
+                record = object_value(records[-1])
+                record["matched_assets"] = list(asset_matches[claim.ref])
+                records[-1] = record
         end = offset + len(page)
         omitted = max(0, len(selected) - end)
         manifest = self.git.manifest(release.val)
@@ -1133,7 +1168,10 @@ class KnowledgeEngine:
             "omitted": omitted,
             "complete": omitted == 0,
             "missing": [
-                object_value(enc_ref(ref)) for ref in claims if find_claim(kb, ref) is None
+                # Exact-ref diagnostics remain independent of relevance filtering.
+                object_value(enc_ref(ref))
+                for ref in claims
+                if find_claim(kb, ref) is None
             ],
             "continuation": {"release": release.val, "offset": end, "query": query}
             if omitted
@@ -1146,11 +1184,14 @@ class KnowledgeEngine:
             for claim in kb.claims
             if (not wanted or claim.ref in wanted)
             and not narrower(context.target, claim.statement.scope)
+            and (asset_ids is None or bool(asset_matches[claim.ref]))
         )
         result["selection_omitted"] = sum(
             1
             for claim in kb.claims
-            if claim.ref not in active and (not wanted or claim.ref in wanted)
+            if claim.ref not in active
+            and (not wanted or claim.ref in wanted)
+            and (asset_ids is None or bool(asset_matches[claim.ref]))
         )
         result["not_selected"] = [
             object_value(enc_ref(ref))
@@ -1202,6 +1243,28 @@ class KnowledgeEngine:
         self, claim: ClaimRef, context: Context, release: ReleaseId | None = None
     ) -> JsonObject:
         return self.context((claim,), context, 1, release=release)
+
+    def context_for_assets(
+        self,
+        assets: tuple[AssetId, ...],
+        *,
+        limit: int = 100,
+        release: ReleaseId | None = None,
+        continuation: JsonObject | None = None,
+    ) -> JsonObject:
+        """Read relevant claims under one release's authenticated evaluation context."""
+        if continuation is not None:
+            release = ReleaseId(text(continuation.get("release"), "continuation release"))
+        release = release or self._current()
+        if release is None:
+            return {"status": "no_release", "release": None, "records": [], "complete": False}
+        manifest, plan, _ = self._release_operation(release)
+        context = replace(plan.context, snapshot=SnapshotId(text(manifest["snapshot"], "snapshot")))
+        result = self.context((), context, limit, continuation, release, assets=assets)
+        result["status"] = "available"
+        result["context"] = object_value(enc_context(context))
+        result["relevance"] = "exact asset ID in formula subject/arguments or scope selector"
+        return result
 
     def backup(self, destination: Path) -> JsonObject:
         with writer_lock(self.lock):

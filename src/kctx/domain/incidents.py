@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import Generic, TypeVar
 
 from kctx.codecs.documents import MarkdownDocument
-from kctx.domain.ids import AssetId, InvestigationId, ProposalId, SignatureId, TicketId
+from kctx.domain.ids import AssetId, InvestigationId, SignatureId, TicketId
+from kctx.domain.targets import FixReference
 from kctx.domain.vocabulary import (
     HypothesisStatus,
     InvestigationStatus,
@@ -99,7 +100,7 @@ class Signature:
     first_seen: str | None
     last_seen: str | None
     workaround: str
-    fix: tuple[ProposalId, ...]
+    fix: tuple[FixReference, ...]
     fixed_at: str | None
     verified_at: str | None
     ttl: str | None

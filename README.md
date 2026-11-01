@@ -46,6 +46,7 @@ module shims. The installed runtime does not need Lean or formal source files.
 | Need | Command family | Meaning |
 | --- | --- | --- |
 | Record entities and explicit relations | `asset`, `rel`, `impact` | Inventory and bounded navigation; absence is not proof of no dependents |
+| Review an unpushed commit diff | `impact --diff BASE..HEAD [--repo PATH]` | Citation/hunk overlap, related inventory, signatures and pinned admitted claims; a checklist, not a safety verdict |
 | Orient a session | `home`, `context`, `match`, `timeline`, `uses` | Authored-workspace navigation with provenance and coverage boundaries |
 | Make or inspect durable citations | `cite make/check/stale/render` | Built-in grammar, exact source identity, current advisories and safe rendering |
 | Refresh after source changes | `admit --repo …`, `admit <PR>` | Source/citation refresh and durable pending judgment work—not approval of new facts |
@@ -204,6 +205,7 @@ is excluded from the runtime artifact.
 - [Sound calculus revision](docs/kctx/calculus-revision.md)
 - [Rust implementation handover and R00–R13 gates](docs/kctx/greenfield-design.md)
 - [Migration hardening after the first v2 migration](docs/kctx/migration-hardening.md)
+- [Tracked fixes and local diff review: rationale and kernel boundary](docs/kctx/review-feature-requests.md)
 - [Provider-neutral asset catalog design](docs/kctx/catalog-design.md)
 - [Full requirements and Q/D scenario registries](docs/kctx/handover.md)
 

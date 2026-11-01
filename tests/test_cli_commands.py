@@ -21,6 +21,38 @@ def _run(argv):
 
 
 class CliCommandsTest(KctxTestCase):
+    def test_signature_fix_addresses_round_trip_and_reverse_lookup(self):
+        refs = (
+            "config/2026-01-02-repair",
+            "ev:project/fixing-pr",
+            "acme/widget@abcdef1234:src/fix.py:10-20",
+        )
+        args = ["--json", "sig", "new", "tracked"]
+        for reference in refs:
+            args.extend(("--fix", reference))
+        code, created = _run(args)
+        self.assertEqual(code, 0)
+        self.assertEqual(created["frontmatter"]["fix"], list(refs))
+        self.assertIsNone(created["frontmatter"]["fixed_at"])
+        self.assertEqual(created["frontmatter"]["status"], "suspected")
+        code, shown = _run(["--json", "sig", "show", "tracked"])
+        self.assertEqual(code, 0)
+        self.assertEqual(shown["frontmatter"]["fix"], list(refs))
+        for reference in refs[1:]:
+            code, uses = _run(["--json", "uses", reference])
+            self.assertEqual(code, 0)
+            self.assertEqual(
+                {row["file"] for row in uses["referrers"]}, {"signatures/tracked.md"}
+            )
+
+    def test_signature_fix_rejects_untyped_pr_and_ticket_text(self):
+        for raw in ("acme/widget#7", "TICKET 1234"):
+            with self.subTest(raw=raw):
+                code, error = _run(["--json", "sig", "new", "invalid", "--fix", raw])
+                self.assertEqual(code, 1)
+                self.assertEqual(error["error"], "malformed")
+                self.assertFalse((self.root / "signatures" / "invalid.md").exists())
+
     def test_home_no_match_exits_2(self):
         code, payload = _run(["--json", "home", "nothing-here"])
         self.assertEqual(code, 2)

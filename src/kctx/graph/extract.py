@@ -28,7 +28,9 @@ from typing import TypedDict
 from kctx.adapters.git.citations import ORG_REPO_RE
 from kctx.citations.syntax import CITE_LINE_RE, is_illustrative, parse_cite_body
 from kctx.codecs.frontmatter import read_frontmatter, split_commas_respecting_brackets
+from kctx.domain.ids import ProposalId
 from kctx.domain.json import JsonObject, JsonValue, object_value, optional_text, texts
+from kctx.domain.targets import CodeLocator, EvidenceRef, parse_fix_reference
 from kctx.errors import KctxError
 from kctx.graph.identity import RepositoryIdentity, canonical_repo, capture_repository_identity
 from kctx.graph.models import Edge, ExtractionDiagnostic, GraphEdgeId, GraphNodeId, Node
@@ -71,7 +73,6 @@ SHORT_LOCATOR_RE = re.compile(
     r"^(?P<repo>[\w./-]+)@(?P<rev>[0-9a-fA-F]{7,40}(?:\+dirty)?):(?P<path>[^:]+)"
     r"(?::(?P<L>\d+(?:-\d+)?))?$"
 )
-PR_REF_RE = re.compile(r"^(?P<repo>[\w./-]+)#(?P<n>\d+)$")
 PROPOSAL_ID_RE = re.compile(r"^[\w-]+/\d{4}-\d{2}-\d{2}-[\w-]+$")
 
 
@@ -755,12 +756,53 @@ def extract_graph(
             if a not in asset_ids:
                 b.add_node(a, "asset", a)
             b.add_edge(sid, a, "signature_of", src_path=path)
-        for fixref in parse_list_value(fm.get("fix")):
-            m = PR_REF_RE.match(fixref)
-            if m:
-                prid = f"pr:{fixref}"
-                b.add_node(prid, "pr", fixref)
-                b.add_edge(sid, prid, "mentions", src_path=path, cite_kind="pr")
+        for ordinal, raw_fix in enumerate(parse_list_value(fm.get("fix"))):
+            try:
+                fix = parse_fix_reference(raw_fix)
+            except KctxError as exc:
+                b.stats.add_diagnostic(
+                    ExtractionDiagnostic(
+                        category="record-malformed",
+                        src_path=path,
+                        src_line=1,
+                        reason=f"invalid signature fix: {exc}",
+                        raw=raw_fix,
+                    )
+                )
+                continue
+            fields: dict[str, str]
+            if isinstance(fix, ProposalId):
+                kind = "proposal"
+                fields = {"id": fix.val}
+            elif isinstance(fix, EvidenceRef):
+                kind = "ev"
+                fields = {"id": f"{fix.home}/{fix.stem.val}"}
+            else:
+                kind = "code"
+                fields = {"repo": fix.repo, "rev": fix.sha, "path": fix.path}
+                if fix.line is not None:
+                    fields["L"] = (
+                        str(fix.line[0])
+                        if fix.line[0] == fix.line[1]
+                        else f"{fix.line[0]}-{fix.line[1]}"
+                    )
+            dst, dst_kind, label, extra = _cite_target(fields, kind, identity)
+            if dst is None:
+                continue
+            if isinstance(fix, CodeLocator):
+                repo = canonical_repo(fix.repo, None, identity)
+                _record_unresolved_repo(b, repo, path, None, raw_fix)
+            b.add_node(dst, dst_kind, label)
+            b.add_edge(
+                sid,
+                dst,
+                "mentions",
+                src_path=path,
+                cite_kind=kind,
+                ordinal=ordinal,
+                raw=raw_fix,
+                **extra,
+            )
         scan_cites(b, sid, path, text, identity)
 
     # pass 5: investigations

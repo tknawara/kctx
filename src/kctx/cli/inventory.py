@@ -1,7 +1,10 @@
 """Native Click inventory commands with nominal service boundaries."""
 
+from pathlib import Path
+
 import click
 
+from kctx.adapters.files.knowledge import load
 from kctx.cli.context import CliState
 from kctx.cli.help import RichCommand, RichGroup
 from kctx.cli.result import Reply
@@ -11,6 +14,7 @@ from kctx.domain.ids import AssetId, RelationshipId
 from kctx.domain.targets import parse_evidence_address
 from kctx.domain.vocabulary import AssetKind, Lifecycle, RelationshipStatus, RelationshipType
 from kctx.services import inventory
+from kctx.services.diff_impact import impact_diff
 
 
 @click.group(cls=RichGroup)
@@ -136,13 +140,43 @@ def rel_add(
 
 
 @click.command(cls=RichCommand)
-@click.argument("asset")
+@click.argument("asset", required=False)
 @click.option("--depth", type=int, default=2)
+@click.option("--diff", "diff_range", help="Local commit comparison: <base>..<head>.")
+@click.option("--repo", type=click.Path(path_type=Path, exists=True, file_okay=False))
+@click.option(
+    "--claims-limit", type=click.IntRange(1, 100), help="Admitted claims per page (default 100)."
+)
+@click.option("--claims-continuation", type=click.Path(path_type=Path, exists=True, dir_okay=False))
 @click.pass_obj
-def impact(state: CliState, asset: str, depth: int) -> Reply:
-    """Trace an asset's downstream impact."""
-    result = inventory.impact(state.root, asset, depth=depth)
-    return Reply(encode_impact(result), 2 if result.warnings else 0)
+def impact(
+    state: CliState,
+    asset: str | None,
+    depth: int,
+    diff_range: str | None,
+    repo: Path | None,
+    claims_limit: int | None,
+    claims_continuation: Path | None,
+) -> Reply:
+    """Trace an asset's impact or assemble a local diff review checklist."""
+    if diff_range is not None:
+        if asset is not None:
+            raise click.UsageError("provide an asset or --diff, not both")
+        result = impact_diff(
+            state.root,
+            diff_range,
+            repo=repo,
+            depth=depth,
+            claims_limit=100 if claims_limit is None else claims_limit,
+            claims_continuation=load(claims_continuation) if claims_continuation else None,
+        )
+        return Reply(result, 0 if result["complete"] is True else 2, presentation="diff-impact")
+    if asset is None:
+        raise click.UsageError("provide an asset or --diff")
+    if repo is not None or claims_continuation is not None or claims_limit is not None:
+        raise click.UsageError("--repo and --claims-* require --diff")
+    traced = inventory.impact(state.root, asset, depth=depth)
+    return Reply(encode_impact(traced), 2 if traced.warnings else 0)
 
 
 def register(root: click.Group) -> None:

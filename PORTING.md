@@ -12,7 +12,7 @@ counts and earlier v1 conformance results are not current assurance claims.
 | Domain records and vocabulary | `domain/records.py`, `proposals.py`, `incidents.py`, `capture.py`, `corrections.py`, `targets.py`, `vocabulary.py`, `time.py`, `json.py`: typed records, closed variants, parsed targets and boundary JSON. |
 | Codecs | `codecs/records.py`, `frontmatter.py`, `documents.py`, `gates.py`, `proposals.py`, `capture.py`, `validation.py`: explicit decode/encode boundaries and span-preserving authored document updates. |
 | Filesystem adapters | `adapters/files/`: contained reads, conditional mutations, root discovery and retained knowledge artifacts. |
-| Git adapters | `adapters/git/`: exact citation objects, captured worktree identities and retained release manifests/publication refs. |
+| Git adapters | `adapters/git/`: exact citation objects, local pinned-commit diffs, captured worktree identities and retained release manifests/publication refs. |
 | Dolt adapters | `adapters/dolt/`: native candidate commits, normalized structured knowledge, backup/restore and pinned read sessions. |
 | Semantic decisions | `semantics/model.py`, `checker.py`, `wellformed.py`, `workflow.py`, `time.py`, `wire.py`: current version 2 finite witnesses, independent assessments, approval/selection and authored workflow predicates. |
 | Application services | `services/`: inventory/navigation, proposals/gates, investigations/signatures/KTLO/dossiers, observations/coverage/runs, corrections, citation refresh, validation and authenticated knowledge admission/retrieval. |
@@ -47,6 +47,12 @@ are required. The authored navigation command `context` and authenticated
   disclose it as a warning and exit partial; named-record readers and `validate`
   stay strict. Relationship evidence holds evidence addresses (`ev:<home>/<stem>`
   or a code locator), not bare slugs.
+- Signature fixes retain valid proposal IDs and also accept the closed evidence
+  address grammar. External PRs/tickets use evidence records; `fixed_at` remains
+  explicit authored metadata, not an inferred merge time or proof.
+- `impact --diff BASE..HEAD` / `authored.impact_diff` join local citation hunks,
+  authored inventory and release-pinned admitted claims without changing the
+  calculus. The query reports absent releases, unmapped ranges and omissions.
 - `proposal gate --rev` is repository evidence retained verbatim in `repo_rev`;
   the gate-definition binding digest is always computed from the authored table.
 - Corrections persist recoverable operation intent before review projections;

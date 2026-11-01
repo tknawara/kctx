@@ -16,7 +16,7 @@ from kctx.errors import KctxError
 from kctx.domain.time import today
 from dataclasses import replace
 from kctx.domain.ids import AssetId, InvestigationId, ProposalId, SignatureId, TicketId
-from kctx.domain.targets import parse_use_target
+from kctx.domain.targets import parse_fix_reference, parse_use_target
 from kctx.domain.vocabulary import AssetKind, RelationshipType, InvestigationTrigger, SignatureStatus, ProposalKind, ProposalOrigin, RunMode, ObservationSystem, ObservationRole, CoverageOutcome, CorrectionKind
 
 GATES_TABLE = (
@@ -281,6 +281,29 @@ class MatchTest(KctxTestCase):
 
 
 class RegressionFlagTest(KctxTestCase):
+    def test_evidence_fixes_preserve_explicit_strict_regression_date_rule(self):
+        fixes = (
+            parse_fix_reference("ev:project/fixing-pr"),
+            parse_fix_reference("acme/widget@abcdef1234:src/fix.py:10-20"),
+        )
+        for index, fix in enumerate(fixes):
+            sig_mod.new(
+                self.root, f"fixed-{index}", fix=(fix,), fixed_at="2026-06-01",
+                status=SignatureStatus.SUSPECTED,
+            )
+            sig_mod.new(self.root, f"undated-{index}", fix=(fix,), status=SignatureStatus.FIXED)
+        ids = tuple(SignatureId(f"{prefix}-{index}") for prefix in ("fixed", "undated") for index in range(2))
+        for label, date in (("before", "2026-05-31"), ("equal", "2026-06-01"), ("after", "2026-06-02")):
+            created = inv_mod.new(self.root, label, trigger=InvestigationTrigger.ADHOC, created=date)
+            loaded = inv_mod.load(self.root, created.id)
+            loaded.path.write_text(
+                inv_mod.render(replace(loaded.frontmatter, signatures=ids), dict(loaded.body)),
+                encoding="utf-8",
+            )
+        flags = freshness.regression_flags(self.root)
+        self.assertEqual({flag["signature"] for flag in flags}, {"fixed-0", "fixed-1"})
+        self.assertEqual({flag["investigation"] for flag in flags}, {"2026/2026-06-02-after"})
+
     def test_investigation_after_fixed_at_is_flagged(self):
         sig_mod.new(self.root, 'fixed-sig', status=SignatureStatus.FIXED, fixed_at='2026-01-01')
         inv_mod.new(self.root, 'after-fix', trigger=InvestigationTrigger.ADHOC, created='2026-06-01')
@@ -504,6 +527,44 @@ class UsesTest(KctxTestCase):
     """G1/Q43: `kctx uses` is a reverse lookup over the citation graph --
     find every tracked file that literally mentions a durable id, grouped by
     kind, with the id's own home file marked `self` rather than a referrer."""
+
+    def test_fix_addresses_reverse_lookup_live_and_pinned_files(self):
+        refs = {
+            "evidence": "ev:project/fixing-pr",
+            "long-evidence": "ev:project/fixing-pr-extended",
+            "code": "acme/widget@abcdef1234:src/fix.py:10-20",
+            "other-repo": "acme/widget-extra@abcdef1234:src/fix.py:10-20",
+            "other-revision": "acme/widget@abcdef12345:src/fix.py:10-20",
+            "other-path": "acme/widget@abcdef1234:src/fix.py.extra:10-20",
+            "other-range": "acme/widget@abcdef1234:src/fix.py:100-200",
+        }
+        files = {}
+        for slug, raw in refs.items():
+            created = sig_mod.new(self.root, slug, fix=(parse_fix_reference(raw),))
+            files[f"signatures/{slug}.md"] = created.path.read_text()
+        for query, expected in (
+            ("ev:project/fixing-pr", {"signatures/evidence.md"}),
+            ("acme/widget@abcdef1234:src/fix.py:20", {"signatures/code.md"}),
+            ("acme/widget@ABCDEF1234:src/fix.py:10", {"signatures/code.md"}),
+            ("acme/widget@abcdef1:src/fix.py:10", set()),
+            ("acme/widget@abcdef1234:src/fix.py:21", set()),
+            ("acme/widget@abcdef1234:src/fix.py:1-9", set()),
+        ):
+            for result in (
+                backlinks.uses(self.root, parse_use_target(query)),
+                backlinks.uses_from_files(self.root, parse_use_target(query), files),
+            ):
+                with self.subTest(query=query):
+                    self.assertEqual({row["file"] for row in result["referrers"]}, expected)
+
+    def test_malformed_fix_disclosed_by_reverse_lookup(self):
+        text = "---\nid: broken\nstatus: suspected\nfix: [acme/widget#7]\n---\n"
+        result = backlinks.uses_from_files(
+            self.root, parse_use_target("acme/widget@abcdef1234:src/fix.py"),
+            {"signatures/broken.md": text},
+        )
+        self.assertEqual(result["referrers"], [])
+        self.assertIn("signatures/broken.md", result["warnings"][0])
 
     def _make_investigation_with_evidence(self):
         inv = inv_mod.new(self.root, 'spike', trigger=InvestigationTrigger.ADHOC, created='2026-10-21')

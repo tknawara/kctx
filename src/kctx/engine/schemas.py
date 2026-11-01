@@ -99,6 +99,14 @@ class AuthoredContext(Home):
     depth: Annotated[int, Field(ge=0, le=10)] = 2
 
 
+class ImpactDiff(Params):
+    diff: str
+    repo: str | None = None
+    depth: Annotated[int, Field(ge=0, le=10)] = 2
+    claims_limit: Annotated[int, Field(ge=1, le=100)] = 100
+    claims_continuation: dict[str, JsonValue] | None = None
+
+
 class CiteCode(Params):
     kind: Literal["code"]
     repo: str
@@ -218,6 +226,7 @@ METHODS: dict[str, type[Params]] = {
     "knowledge.rollback": Rollback,
     "knowledge.recover": Params,
     "authored.context": AuthoredContext,
+    "authored.impact_diff": ImpactDiff,
     "authored.home": Home,
     "authored.uses": Target,
     "cite.make": CiteMake,

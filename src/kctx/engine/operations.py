@@ -23,6 +23,7 @@ from kctx.graph.models import GraphNodeId
 from kctx.graph.query_session import QuerySession
 from kctx.semantics.wire import dec_context, dec_ref
 from kctx.services import backlinks, context, discovery
+from kctx.services.diff_impact import impact_diff
 from kctx.services.knowledge import KnowledgeEngine
 from kctx.services.knowledge_models import Approval, CaptureKind
 
@@ -266,6 +267,29 @@ class Operations:
                     for fields, _raw in rendering.extract_cite_items(target)
                 ]
             }
+        elif isinstance(params, s.ImpactDiff):
+            payload = impact_diff(
+                self.root,
+                params.diff,
+                repo=Path(params.repo) if params.repo is not None else None,
+                depth=params.depth,
+                claims_limit=params.claims_limit,
+                claims_continuation=(
+                    None
+                    if params.claims_continuation is None
+                    else object_value(params.claims_continuation)
+                ),
+            )
+            knowledge = object_value(payload["knowledge"])
+            generation = {
+                "selection": "local_diff_and_release",
+                "base": payload["base"],
+                "head": payload["head"],
+                "release": knowledge.get("release"),
+                "authored": "workspace",
+            }
+            complete = payload["complete"] is True
+            exit_code = 0 if complete else 2
         elif isinstance(params, s.AuthoredContext):
             payload = object_value(context.context(self.root, params.ident, depth=params.depth))
             freshness = object_value(payload["freshness"])

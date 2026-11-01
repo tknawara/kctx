@@ -6,6 +6,7 @@ separate and only answers questions about the current repository state.
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import time
@@ -33,6 +34,8 @@ def run_git(
     args: Sequence[str],
     cwd: Path | None = None,
     timeout: float = 15,
+    *,
+    local_only: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     # These operations inspect source; repository-configured programs must not
     # execute as a side effect of reading it. Replacement objects are likewise
@@ -52,9 +55,42 @@ def run_git(
         command.extend(("diff", "--no-ext-diff", "--no-textconv", *args[1:]))
     else:
         command.extend(args)
+    environment = None
+    if local_only:
+        environment = {
+            key: value
+            for key, value in os.environ.items()
+            if key
+            not in {
+                "GIT_DIR",
+                "GIT_WORK_TREE",
+                "GIT_INDEX_FILE",
+                "GIT_COMMON_DIR",
+                "GIT_OBJECT_DIRECTORY",
+                "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+                "GIT_DIFF_OPTS",
+            }
+            and not key.startswith("GIT_CONFIG_")
+        }
+        environment.update(GIT_NO_LAZY_FETCH="1", GIT_TERMINAL_PROMPT="0")
     try:
+        if local_only:
+            # Text mode's universal-newline conversion corrupts CR in NUL path
+            # records. Keep local Git bytes lossless, including non-UTF8 names.
+            raw = subprocess.run(command, capture_output=True, timeout=timeout, env=environment)
+            return subprocess.CompletedProcess(
+                raw.args,
+                raw.returncode,
+                raw.stdout.decode("utf-8", errors="surrogateescape"),
+                raw.stderr.decode("utf-8", errors="surrogateescape"),
+            )
         return subprocess.run(
-            command, capture_output=True, text=True, encoding="utf-8", timeout=timeout
+            command,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=timeout,
+            env=environment,
         )
     except subprocess.TimeoutExpired as error:
         raise KctxError(
@@ -139,8 +175,8 @@ def git_file_content(repo_path: Path, rev: str, path: str) -> str | None:
     return result.stdout
 
 
-def get_origin_url(repo_path: Path) -> str | None:
-    result = run_git(["remote", "get-url", "origin"], cwd=repo_path)
+def get_origin_url(repo_path: Path, *, local_only: bool = False) -> str | None:
+    result = run_git(["remote", "get-url", "origin"], cwd=repo_path, local_only=local_only)
     return result.stdout.strip() or None if result.returncode == 0 else None
 
 

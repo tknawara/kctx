@@ -121,6 +121,65 @@ binding and current advisory fields are described in [flows.md](flows.md).
 Dirty code citation construction requires explicit `--allow-dirty`; do not
 mistake that permission for authenticated admission of worktree facts.
 
+## Review a local diff before pushing
+
+```sh
+uv run kctx --json impact --diff 'HEAD~1..HEAD'
+uv run kctx --json impact --diff "$BASE..$HEAD" --repo /path/to/local/checkout --depth 2
+```
+
+`--repo` here is a **local path**, not the `org/repo` acquisition argument of
+`admit`. Without it, use the current directory. Both endpoints resolve once to
+local commits; unpushed commits work, but uncommitted/index changes are not
+included. Triple-dot ranges are rejected. No fetch, clone, PR lookup, external
+diff or textconv helper runs. `impact <asset>` retains its existing behavior.
+
+The reply gives exact `base`/`head` identities and a `files` checklist:
+
+- Old/new paths, Git change status, binary flag and zero-context hunks.
+- All same-file code citation occurrences for that repository. `cited_range`
+  preserves the authored range; `overlaps` indexes the file's `hunks` and names
+  the `old` or `new` coordinate side. Endpoint pins and identical historical
+  blobs permit comparison. Other pins remain `unmapped_revision`, not a false
+  `nonoverlap`. Zero-count sides are gaps, not changed lines. Illustrative
+  citations are excluded; malformed tokens and unreadable sources are disclosed.
+- Repository-locator assets, inbound/outbound relationships, bounded impact and
+  related assets, plus signatures explicitly listing those assets. This is
+  repository-level candidate ownership, not a guessed path ownership proof.
+- `claims` from the single selected completed release, with existing assessment,
+  contrary refs and evidence. Exact asset IDs in structured formula subjects,
+  arguments or scope selectors determine relevance; names/prose are not aliases.
+  Scope filtering and release selection remain authoritative.
+
+Top-level `knowledge` carries the pinned release, approved evaluation `context`,
+provenance, omission counts and continuation. Its `context.now` is the release's
+explicit evaluation time—not the current wall clock. A newer publication cannot
+mix claim generations within one reply. With no completed publication, the
+status is `no_release`; broken storage/configuration is `unavailable`, never an
+empty admitted result. Both are partial (`complete: false`, exit 2), as are
+warnings, depth cutoffs or omitted claims.
+
+Use `--claims-limit 1..100` to bound a claim page (default 100). Save only
+`knowledge.continuation` and continue with the same resolved diff and asset set:
+
+```sh
+uv run kctx --json impact --diff "$BASE..$HEAD" --repo /path/to/local/checkout \
+  --claims-continuation claim-page.json
+```
+
+JSON-RPC exposes the same service after initialization:
+
+```jsonl
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocol_version":"1"}}
+{"jsonrpc":"2.0","id":2,"method":"authored.impact_diff","params":{"diff":"HEAD~1..HEAD","repo":"/path/to/local/checkout","depth":2,"claims_limit":100}}
+```
+
+Supply the returned continuation object as `claims_continuation` for the next
+RPC page. The result is a review checklist, **not** contradiction detection or
+admission. Workspace citations/inventory are separate from the authenticated
+release, and an empty checklist proves neither safety nor absence of dependents.
+See the [acceptance rationale](review-feature-requests.md).
+
 ## Authored proposals and gates
 
 ```sh
@@ -196,6 +255,30 @@ hypothesis remains. It does **not** prove an incident cause or admit factual
 claims. Malformed hypotheses are errors, not silently accepted unknowns.
 `services/investigations.py::conclusion_problems` is shared by mutation and
 validation; see `tests/test_investigations.py` and `tests/test_validate.py`.
+
+## Track a signature's external fix
+
+```sh
+uv run kctx --json sig new cache-timeout --asset service-cache \
+  --fix ev:cache-project/fixing-pr --fixed-at 2026-10-31
+uv run kctx --json sig new retry-loop --asset service-cache \
+  --fix 'example-org/example-repo@abcdef1234567:src/retry.py:20-30'
+uv run kctx --json uses ev:cache-project/fixing-pr
+uv run kctx --json uses 'example-org/example-repo@abcdef1234567:src/retry.py:20-30'
+```
+
+`fix` accepts existing valid proposal IDs, evidence-record addresses, and pinned
+code locators. Record a PR or ticket in an evidence record and use its `ev:`
+address; raw `example-org/example-repo#7` and `TICKET 1234` remain invalid fix
+values. Use the recorded SHA spelling for code-fix reverse lookup. `uses` retains
+its existing tracked-file coverage in Git workspaces, so add the signature to
+Git before querying it.
+
+A fix link does not set `fixed_at`, change signature status or prove resolution.
+Set the date explicitly when warranted. An investigation citing the signature
+and created after that date remains an advisory regression candidate regardless
+of whether the fix names a proposal, evidence record or code location. No merge
+time is fetched and no semantic support is inferred from the reference.
 
 ## Observation worktrees, provenance and coverage
 

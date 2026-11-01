@@ -6,7 +6,8 @@ from kctx.cli.context import CliState
 from kctx.cli.help import RichCommand, RichGroup
 from kctx.cli.result import Reply
 from kctx.cli.values import decode, many, optional
-from kctx.domain.ids import AssetId, InvestigationId, OperationId, ProposalId, SignatureId
+from kctx.domain.ids import AssetId, InvestigationId, OperationId, SignatureId
+from kctx.domain.targets import parse_fix_reference
 from kctx.domain.vocabulary import CorrectionKind, InvestigationTrigger, SignatureStatus
 from kctx.services import corrections, dossiers, investigations, ktlo, signatures
 
@@ -183,7 +184,7 @@ def sig() -> None:
 @click.option("--first-seen")
 @click.option("--last-seen")
 @click.option("--workaround", default="")
-@click.option("--fix", multiple=True)
+@click.option("--fix", multiple=True, help="Proposal ID, ev:<home>/<stem>, or pinned code locator.")
 @click.option("--fixed-at")
 @click.option("--verified-at")
 @click.option("--ttl")
@@ -219,7 +220,7 @@ def sig_new(
                 first_seen=first_seen,
                 last_seen=last_seen,
                 workaround=workaround,
-                fix=many("fix", fix, ProposalId),
+                fix=many("fix", fix, parse_fix_reference),
                 fixed_at=fixed_at,
                 verified_at=verified_at,
                 ttl=ttl,

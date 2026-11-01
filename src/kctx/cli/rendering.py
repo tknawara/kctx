@@ -80,7 +80,7 @@ def _table(rows: list[Mapping[str, object]], columns: list[str] | None = None) -
     return table
 
 
-def _render(value: object) -> RenderableType:
+def _render(value: object, *, tables: bool = True) -> RenderableType:
     if _is_mapping(value):
         elements: list[RenderableType] = []
         for key, item in _mapping(value).items():
@@ -88,7 +88,7 @@ def _render(value: object) -> RenderableType:
                 continue
             label = literal(key.replace("_", " "), style="bold")
             if (_is_mapping(item) or _is_items(item)) and item:
-                elements.extend((label, Padding(_render(item), (0, 0, 0, 2))))
+                elements.extend((label, Padding(_render(item, tables=tables), (0, 0, 0, 2))))
             else:
                 label.append(": ")
                 label.append(_cell(item))
@@ -101,10 +101,10 @@ def _render(value: object) -> RenderableType:
         if all(_is_mapping(item) for item in values):
             rows = [_mapping(item) for item in values]
             keys = {key for row in rows for key in row if key != "warnings"}
-            if len(keys) <= 6:
+            if tables and len(keys) <= 6:
                 return _table(rows)
-            return Group(*(Padding(_render(row), (0, 0, 1, 0)) for row in rows))
-        return Group(*(_render(item) for item in values))
+            return Group(*(Padding(_render(row, tables=tables), (0, 0, 1, 0)) for row in rows))
+        return Group(*(_render(item, tables=tables) for item in values))
     return _scalar(value)
 
 
@@ -193,6 +193,8 @@ def render_text(reply: Reply, *, color: bool | None = None) -> None:
             output.print(Text("Missing for review: ", style="yellow") + literal(missing))
     elif reply.presentation == "drain":
         _drain(output, _mapping(result))
+    elif reply.presentation == "diff-impact":
+        output.print(_render(result, tables=False), soft_wrap=True)
     elif reply.presentation == "logs":
         for raw_event in _items(result):
             event = _mapping(raw_event)

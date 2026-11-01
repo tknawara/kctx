@@ -9,7 +9,7 @@ from pathlib import Path
 from kctx.adapters.files.storage import slugify
 from kctx.codecs.documents import MarkdownDocument, parse_document, read_document, render_document
 from kctx.codecs.frontmatter import split_list_value
-from kctx.domain.ids import AssetId, ProposalId, SignatureId
+from kctx.domain.ids import AssetId, SignatureId
 from kctx.domain.incidents import (
     LoadedDocument,
     ParsedDocument,
@@ -18,6 +18,7 @@ from kctx.domain.incidents import (
     SignatureMatch,
     SignatureShown,
 )
+from kctx.domain.targets import FixReference, fix_reference_spelling, parse_fix_reference
 from kctx.domain.vocabulary import SignatureStatus
 from kctx.errors import KctxError
 
@@ -51,7 +52,7 @@ def _decode(doc: MarkdownDocument) -> Signature:
             fm.get("first_seen") or None,
             fm.get("last_seen") or None,
             fm.get("workaround", ""),
-            tuple(ProposalId(v) for v in split_list_value(fm.get("fix", ""))),
+            tuple(parse_fix_reference(v) for v in split_list_value(fm.get("fix", ""))),
             fm.get("fixed_at") or None,
             fm.get("verified_at") or None,
             fm.get("ttl") or None,
@@ -77,7 +78,7 @@ def frontmatter_to_wire(record: Signature) -> dict[str, object]:
         "first_seen": record.first_seen,
         "last_seen": record.last_seen,
         "workaround": record.workaround,
-        "fix": [v.val for v in record.fix],
+        "fix": [fix_reference_spelling(v) for v in record.fix],
         "fixed_at": record.fixed_at,
         "verified_at": record.verified_at,
         "ttl": record.ttl,
@@ -96,7 +97,7 @@ def render(record: Signature, body: Mapping[str, str]) -> str:
         "first_seen": record.first_seen,
         "last_seen": record.last_seen,
         "workaround": record.workaround,
-        "fix": "[" + ", ".join(v.val for v in record.fix) + "]",
+        "fix": "[" + ", ".join(fix_reference_spelling(v) for v in record.fix) + "]",
         "fixed_at": record.fixed_at,
         "verified_at": record.verified_at,
         "ttl": record.ttl,
@@ -124,7 +125,7 @@ def new(
     first_seen: str | None = None,
     last_seen: str | None = None,
     workaround: str = "",
-    fix: tuple[ProposalId, ...] = (),
+    fix: tuple[FixReference, ...] = (),
     fixed_at: str | None = None,
     verified_at: str | None = None,
     ttl: str | None = None,

@@ -100,6 +100,7 @@ def line_range(raw: str | None) -> tuple[int, int] | None:
 
 
 EvidenceAddress = EvidenceRef | CodeLocator
+FixReference = ProposalId | EvidenceAddress
 
 
 def parse_evidence_address(raw: str) -> EvidenceAddress:
@@ -111,11 +112,31 @@ def parse_evidence_address(raw: str) -> EvidenceAddress:
         return EvidenceRef(home, EvidenceId(stem))
     match = LOCATOR_RE.fullmatch(raw)
     if match:
-        return CodeLocator(match["repo"], match["sha"], match["path"], line_range(match["line"]))
+        lines = line_range(match["line"])
+        if lines is not None and (lines[0] < 1 or lines[1] < lines[0]):
+            raise KctxError("malformed", f"invalid code locator line range: {raw!r}")
+        return CodeLocator(match["repo"], match["sha"], match["path"], lines)
     raise KctxError(
         "malformed",
         f"evidence must be ev:<home>/<stem> or a code locator org/repo@<sha>:<path>, got {raw!r}",
     )
+
+
+def parse_fix_reference(raw: str) -> FixReference:
+    """Decode authored fix identity without inferring resolution or support."""
+    if raw.startswith("ev:") or "@" in raw:
+        return parse_evidence_address(raw)
+    return ProposalId(raw)
+
+
+def fix_reference_spelling(reference: FixReference) -> str:
+    match reference:
+        case ProposalId():
+            return reference.val
+        case EvidenceRef() | CodeLocator():
+            return reference.spelling
+        case _:
+            assert_never(reference)
 
 
 def parse_use_target(raw: str) -> UseTarget:

@@ -13,6 +13,7 @@ class Reply:
         "proposal-list",
         "proposal-single",
         "drain",
+        "diff-impact",
         "graph",
         "cite-make",
         "cite-render",

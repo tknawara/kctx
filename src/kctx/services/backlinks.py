@@ -45,6 +45,7 @@ class UsesResult(TypedDict):
     referrers: list[Referrer]
     by_kind: dict[str, list[Referrer]]
     note: str
+    warnings: NotRequired[list[str]]
 
 
 USES_COVERAGE_NOTE = (
@@ -206,6 +207,24 @@ def _uses_home_files(root: Path, target: UseTarget, asset: Asset | None) -> set[
     return homes
 
 
+def _code_locator_matches(candidate: CodeLocator, target: CodeLocator) -> bool:
+    if (
+        candidate.repo != target.repo
+        or candidate.sha.lower() != target.sha.lower()
+        or candidate.path != target.path
+    ):
+        return False
+    if target.line is None:
+        return True
+    return (
+        candidate.line is not None
+        and candidate.line[0] >= 1
+        and candidate.line[1] >= candidate.line[0]
+        and candidate.line[1] >= target.line[0]
+        and candidate.line[0] <= target.line[1]
+    )
+
+
 def _uses_code_locator_hit(text: str, locator: CodeLocator) -> bool:
     for match in CITE_LINE_RE.finditer(text):
         fields = parse_cite_body(match.group("body"))
@@ -266,6 +285,7 @@ def _scan_uses(
     patterns = tuple(_uses_boundary_pattern(needle) for needle in needles)
     referrers: list[Referrer] = []
     by_kind: dict[str, list[Referrer]] = {}
+    warnings: list[str] = []
     for relative, text in files:
         if Path(relative).suffix not in _USES_SCAN_SUFFIXES:
             continue
@@ -274,6 +294,18 @@ def _scan_uses(
             if isinstance(target, CodeLocator)
             else any(pattern.search(text) for pattern in patterns)
         )
+        if relative.startswith("signatures/") and isinstance(target, (EvidenceRef, CodeLocator)):
+            try:
+                fixes = sig_mod.parse(text).frontmatter.fix
+            except KctxError as error:
+                warnings.append(f"signature {relative}: {error}")
+            else:
+                hit = hit or any(
+                    _code_locator_matches(fix, target)
+                    if isinstance(fix, CodeLocator) and isinstance(target, CodeLocator)
+                    else fix == target
+                    for fix in fixes
+                )
         if not hit:
             continue
         referrer: Referrer = {"file": relative, "kind": _uses_group(root, relative, project_names)}
@@ -281,12 +313,15 @@ def _scan_uses(
             referrer["self"] = True
         referrers.append(referrer)
         by_kind.setdefault(referrer["kind"], []).append(referrer)
-    return {
+    result: UsesResult = {
         "target": target.spelling,
         "referrers": referrers,
         "by_kind": by_kind,
         "note": USES_COVERAGE_NOTE,
     }
+    if warnings:
+        result["warnings"] = warnings
+    return result
 
 
 def _snapshot_home_files(

@@ -11,7 +11,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from kctx.adapters.files.knowledge import canonical, digest, load, save
-from kctx.domain.ids import AuthorityKeyId, PlanId, PolicyDigest, ReceiptId, ReleaseId, SourceId, SourceRevision
+from kctx.domain.ids import AssetId, AuthorityKeyId, PlanId, PolicyDigest, ReceiptId, ReleaseId, SourceId, SourceRevision
 from kctx.domain.json import JsonObject, object_value
 from kctx.errors import KctxError
 from kctx.semantics.wire import dec_context, dec_kb, dec_ref, dec_witness, enc_context, enc_kb, enc_receipt
@@ -113,6 +113,13 @@ class KnowledgeAdmissionTests(unittest.TestCase):
         self.assertEqual(response["selection_omitted"], 1)
         self.assertIn(b'"support":"none"', canonical(response))
         self.assertIn(b'"correction-1"', canonical(response))
+        asset_context = self.engine.context_for_assets((AssetId("service"),))
+        self.assertEqual(asset_context["release"], selected_release.val)
+        self.assertEqual(
+            [row["claim"]["id"] for row in asset_context["records"]], ["reviewed"]
+        )
+        self.assertEqual(asset_context["records"][0]["assessment"]["support"], "none")
+        self.assertEqual(asset_context["selection_omitted"], 1)
         historical = self.engine.context((dec_ref(original),), replace(first.context, snapshot=first.semantic.candidate.snapshot), release=first_release)
         self.assertIn(b'"support":"positive"', canonical(historical))
         forward = self.engine.rollback(second_release, replace(selected_context, now=8), AuthorityKeyId("reviewer-key"))
@@ -221,6 +228,59 @@ class KnowledgeAdmissionTests(unittest.TestCase):
         changed["context"] = object_value(enc_context(current))
         with self.assertRaises(KctxError):
             self.engine.propose(changed, "review", 7)
+
+    def test_asset_context_filters_exact_identities_and_pins_continuation(self) -> None:
+        candidate = self.candidate(CaptureKind.DOCUMENT)
+        kb = object_value(candidate["kb"])
+        claims = kb["claims"]
+        assert isinstance(claims, list)
+        attestations, derivations = kb["attestations"], kb["derivations"]
+        assert isinstance(attestations, list) and isinstance(derivations, list)
+        for identity, subject, args in (
+            ("mentioned", "consumer", ["service"]),
+            ("not-this-asset", "service-extra", []),
+        ):
+            statement = {
+                "formula": {"tag": "atom", "atom": {
+                    "subject": subject, "predicate": "reviewed", "args": args,
+                }},
+                "scope": {"project": "test-kb", "selector": ""},
+                "polarity": "positive",
+            }
+            ref = {"id": identity, "revision": "r1"}
+            claims.append({**ref, "statement": statement})
+            attestations.append({
+                "id": f"attest-{identity}", "claim": ref,
+                "observation": "observation-1", "statement": statement,
+                "authority": "reviewer-key",
+            })
+            derivations.append({
+                "id": f"derive-{identity}", "claim": ref,
+                "witness": {"tag": "attest", "attestation": f"attest-{identity}"},
+            })
+        candidate["kb"] = kb
+        plan = self.engine.propose(candidate, "review", 5)
+        release = self.engine.admit(
+            plan.id, self.engine.sign(plan.id, self.key_file, AuthorityKeyId("reviewer-key"))
+        )["release"]
+        first = self.engine.context_for_assets((AssetId("service"),), limit=1)
+        self.assertEqual(first["release"], release)
+        self.assertEqual(first["context"]["now"], 5)
+        self.assertEqual(first["records"][0]["claim"]["id"], "reviewed")
+        self.assertEqual(first["records"][0]["assessment"]["support"], "positive")
+        self.assertEqual(first["records"][0]["matched_assets"], ["service"])
+        self.assertEqual(first["omitted"], 1)
+        second = self.engine.context_for_assets(
+            (AssetId("service"),), continuation=first["continuation"]
+        )
+        self.assertEqual(second["release"], release)
+        self.assertEqual([row["claim"]["id"] for row in second["records"]], ["mentioned"])
+        self.assertEqual(second["records"][0]["assessment"]["support"], "positive")
+        self.assertIsNone(second["continuation"])
+        with self.assertRaises(KctxError):
+            self.engine.context_for_assets(
+                (AssetId("service-extra"),), continuation=first["continuation"]
+            )
 
     def test_policy_edit_does_not_replace_bootstrap_trust(self) -> None:
         (self.repo / ".kctx" / "knowledge-policy.json").write_bytes(b"{}")

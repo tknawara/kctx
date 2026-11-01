@@ -2,8 +2,11 @@ from _base import KctxTestCase
 
 import kctx.services.signatures as sig_mod
 from kctx.domain.ids import SignatureId
+from kctx.domain.targets import parse_fix_reference
 from kctx.domain.vocabulary import SignatureStatus
 from kctx.errors import KctxError
+from kctx.services.validation_common import Diagnostics
+from kctx.services.validation_incidents import validate_incidents
 
 
 class NewRecordTest(KctxTestCase):
@@ -22,6 +25,43 @@ class NewRecordTest(KctxTestCase):
         for section in sig_mod.SECTION_ORDER:
             self.assertIn(section, parsed.body)
         self.assertEqual(sig_mod.result_to_wire(result)["id"], "pedl001-duplicate-element-customer-sql")
+
+    def test_all_fix_kinds_round_trip_without_inferred_resolution(self):
+        spellings = (
+            "config/2026-01-02-repair",
+            "ev:project/fixing-pr",
+            "acme/widget@abcdef1234:src/fix.py:10-20",
+        )
+        fixes = tuple(parse_fix_reference(raw) for raw in spellings)
+        created = sig_mod.new(self.root, "tracked-fixes", fix=fixes)
+        loaded = sig_mod.load(self.root, created.id).frontmatter
+        self.assertEqual(loaded.fix, fixes)
+        self.assertIs(loaded.status, SignatureStatus.SUSPECTED)
+        self.assertIsNone(loaded.fixed_at)
+        self.assertIsNone(loaded.verified_at)
+        self.assertEqual(sig_mod.frontmatter_to_wire(loaded)["fix"], list(spellings))
+        self.assertEqual(sig_mod.parse(sig_mod.render(loaded, {})).frontmatter, loaded)
+        diagnostics = Diagnostics()
+        validate_incidents(self.root, set(), diagnostics)
+        self.assertEqual(diagnostics.problems, [])
+
+    def test_bad_fix_is_rejected_and_aggregate_reader_discloses_it(self):
+        created = sig_mod.new(self.root, "bad-fix")
+        for raw in ("acme/widget#7", "TICKET 1234", "ev:missing-home"):
+            with self.subTest(raw=raw):
+                text = created.path.read_text().replace("fix: []", f"fix: [{raw}]")
+                with self.assertRaises(KctxError):
+                    sig_mod.parse(text)
+        created.path.write_text(text, encoding="utf-8")
+        skipped = []
+        self.assertEqual(sig_mod.list_signatures(self.root, skipped=skipped), ())
+        self.assertEqual(len(skipped), 1)
+        self.assertIn("signatures/bad-fix.md", skipped[0])
+        diagnostics = Diagnostics()
+        validate_incidents(self.root, set(), diagnostics)
+        self.assertEqual(len(diagnostics.problems), 1)
+        self.assertEqual(diagnostics.problems[0].category, "malformed")
+        self.assertIn("bad-fix.md", diagnostics.problems[0].where)
 
     def test_default_status_is_suspected(self):
         self.assertIs(sig_mod.new(self.root, "x").frontmatter.status, SignatureStatus.SUSPECTED)

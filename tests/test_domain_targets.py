@@ -15,10 +15,12 @@ from kctx.domain.targets import (  # noqa: E402
     InvRef,
     ProposalRef,
     SigRef,
+    fix_reference_spelling,
+    parse_fix_reference,
     parse_use_target,
     search_strings,
 )
-from kctx.domain.ids import EvidenceId, SignatureId, InvestigationId
+from kctx.domain.ids import EvidenceId, ProposalId, SignatureId, InvestigationId
 from kctx.errors import KctxError
 
 
@@ -74,6 +76,30 @@ class ParseUseTargetTests(unittest.TestCase):
     def test_malformed_evidence_rejected_at_boundary(self):
         with self.assertRaises(KctxError):
             parse_use_target("ev:missing-home")
+
+
+class ParseFixReferenceTests(unittest.TestCase):
+    def test_closed_fix_variants_round_trip(self):
+        for raw, kind in (
+            ("config/2026-01-02-thing", ProposalId),
+            ("simple-proposal", ProposalId),
+            ("ev:project/fixing-pr", EvidenceRef),
+            ("acme/widget@abcdef1234:src/fix.py:10-20", CodeLocator),
+        ):
+            with self.subTest(raw=raw):
+                reference = parse_fix_reference(raw)
+                self.assertIsInstance(reference, kind)
+                self.assertEqual(fix_reference_spelling(reference), raw)
+                self.assertEqual(parse_fix_reference(fix_reference_spelling(reference)), reference)
+
+    def test_malformed_fix_references_are_rejected(self):
+        for raw in (
+            "acme/widget#7", "TICKET 1234", "ev:missing-home", "ev:project/",
+            "acme/widget@main:src/fix.py", "acme/widget@abcdef1:src/fix.py:0",
+            "acme/widget@abcdef1:src/fix.py:20-10",
+        ):
+            with self.subTest(raw=raw), self.assertRaises(KctxError):
+                parse_fix_reference(raw)
 
 
 if __name__ == "__main__":

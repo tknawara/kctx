@@ -171,12 +171,24 @@ def impact(root: Path, ident: AssetId | str, depth: int = 2) -> Impact:
     """
     skipped: list[str] = []
     start = get_asset(root, ident) if isinstance(ident, AssetId) else resolve_asset(root, ident)
+    relationships = load_all_relationships(root, skipped=skipped)
+    return impact_from_records(start.id, relationships, depth, warnings=tuple(skipped))
+
+
+def impact_from_records(
+    start: AssetId,
+    relationships: tuple[Relationship, ...],
+    depth: int = 2,
+    *,
+    warnings: tuple[str, ...] = (),
+) -> Impact:
+    """Use one acquired inventory for all roots of a compound review query."""
     by_node: dict[AssetId, list[Relationship]] = {}
-    for relationship in load_all_relationships(root, skipped=skipped):
+    for relationship in relationships:
         by_node.setdefault(relationship.from_, []).append(relationship)
         by_node.setdefault(relationship.to, []).append(relationship)
-    visited = {start.id}
-    frontier = {start.id}
+    visited = {start}
+    frontier = {start}
     reached: list[ImpactReached] = []
     current_depth = 0
     while frontier and current_depth < depth:
@@ -202,10 +214,10 @@ def impact(root: Path, ident: AssetId | str, depth: int = 2) -> Impact:
             if other not in visited:
                 unexplored.append(ImpactUnexplored(node, relationship.id, other, relationship.type))
     return Impact(
-        start.id,
+        start,
         depth,
         tuple(reached),
         tuple(unexplored),
         IMPACT_BOUNDARY_NOTE,
-        tuple(dict.fromkeys(skipped)),
+        tuple(dict.fromkeys(warnings)),
     )

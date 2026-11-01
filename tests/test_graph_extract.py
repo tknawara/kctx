@@ -53,6 +53,46 @@ class ExtractGraphTest(KctxTestCase):
         files = read_tree_at_sha(self.repo, sha)
         return extract_graph(files, sha, "2026-10-30T00:00:00Z", self.repo)
 
+    def test_typed_signature_fixes_are_mentions_not_support(self):
+        self._write(
+            "signatures/repaired.md",
+            "---\nid: repaired\nstatus: fixed\nfixed_at: 2026-01-01\n"
+            "fix: [config/2026-01-01-repair, ev:project/fixing-pr, "
+            "acme/widget@abcdef1234:src/fix.py:10-20, "
+            "acme/widget@abcdef1234:src/fix.py:30]\n---\n",
+        )
+        graph = self._extract(self._commit())
+        edges = [
+            edge for edge in graph.edges.values()
+            if edge.src_node.val == "sig:repaired" and edge.cite_kind is not None
+        ]
+        self.assertEqual(len(edges), 4)
+        self.assertEqual({edge.rel for edge in edges}, {"mentions"})
+        self.assertEqual(
+            {(edge.dst_node.val, edge.cite_kind, edge.rev, edge.line_selector) for edge in edges},
+            {
+                ("proposal:config/2026-01-01-repair", "proposal", None, None),
+                ("ev:project/fixing-pr", "ev", None, None),
+                ("code:acme/widget:src/fix.py", "code", "abcdef1234", "10-20"),
+                ("code:acme/widget:src/fix.py", "code", "abcdef1234", "30"),
+            },
+        )
+        self.assertEqual(graph.stats.diagnostics, [])
+
+    def test_malformed_signature_fix_diagnosed_without_losing_citations(self):
+        self._write(
+            "signatures/broken.md",
+            "---\nid: broken\nfix: [acme/widget#7, TICKET 1234]\n---\n"
+            "⟦cite kind=ticket id=OPS-1⟧\n",
+        )
+        graph = self._extract(self._commit())
+        self.assertEqual(
+            [(row.category, row.raw) for row in graph.stats.diagnostics],
+            [("record-malformed", "acme/widget#7"), ("record-malformed", "TICKET 1234")],
+        )
+        self.assertFalse(any(node.kind == "pr" for node in graph.nodes.values()))
+        self.assertTrue(any(edge.rel == "cites" and edge.dst_node.val == "ticket:OPS-1" for edge in graph.edges.values()))
+
     def test_asset_and_directional_relationship(self):
         self._write(
             "inventory/assets/service-foo.json",

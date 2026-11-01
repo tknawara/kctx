@@ -6,7 +6,7 @@ from enum import Enum
 from pathlib import Path
 
 from kctx.codecs.documents import MarkdownDocument
-from kctx.domain.ids import GateId, ProposalId, ProposalMaterialRevision, TargetRevision
+from kctx.domain.ids import GateId, ProposalId, ProposalMaterialRevision, SourceId, TargetRevision
 from kctx.domain.vocabulary import (
     GateOutcome,
     GateWhen,
@@ -15,6 +15,7 @@ from kctx.domain.vocabulary import (
     ProposalStatus,
     ProposalType,
 )
+from kctx.semantics.workflow_models import ImplementationBinding
 
 
 class ProposalProfile(Enum):
@@ -52,6 +53,9 @@ class Proposal:
     scope: str | None = None
     last_actor: str | None = None
     regression_note: str | None = None
+    workflow_version: int = 3
+    target_source: SourceId | None = None
+    binding: ImplementationBinding | None = None
 
 
 @dataclass(frozen=True, slots=True)

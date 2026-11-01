@@ -2,18 +2,41 @@
 
 ## Review basis and status
 
-Reviewed on 2026-11-01 against committed `2da7036` **and the existing working-tree
-changes**. Those changes already implement FR1/FR2 and have their own
-[decision and qualification record](review-feature-requests.md). They are not
-committed at the reviewed HEAD; this review does not relabel them as an upstream
-release or overwrite that work.
+Originally reviewed on 2026-11-01 against `2da7036` and the working-tree FR1/FR2
+changes subsequently committed as `11f8911`. Their earlier
+[decision and qualification record](review-feature-requests.md) remains intact.
+The original dispositions and source-line references below describe that reviewed
+snapshot, not a claim that the later implementation still lacks these features.
 
 The supplied report's observations at `3a2bcd7` and `2da7036` are accepted as
 historical evidence. Its reported passing reruns are not new executions by this
-review. Current-source inspection and the isolated runtime smoke below establish
-the distinctions here. This document records accepted work and rejected
-shortcuts; **it does not implement or certify the proposed changes**. The current
-normative contract remains [calculus.md](calculus.md), version `2.0.0`, schema `2`.
+review. Source inspection and the isolated review smoke established the original
+dispositions. The subsequent workflow-3 implementation is separate from that
+review evidence. The current normative contract is [calculus.md](calculus.md):
+unchanged inference version `2.0.0`, core wire 2, workflow schema 3.
+
+## Implementation follow-through
+
+FR5 and FR6 were implemented **Lean first**, then mirrored in Python and connected
+to the production services. Named-context portfolios, explicit per-claim witness
+assignments, context retirement, retained selection, design binding and reopening
+now have executable definitions, registered proofs and nonvacuous examples.
+The original inference constructors and scope relation were not weakened.
+
+New knowledge envelopes/signatures use schema/domain 3, authored design revisions
+use `design-v3:<sha256>`, and public RPC initialization is protocol `"2"`.
+Historical signed schema-2 data retains its original interpretation; old custom
+authored metadata never becomes binding authority. Open proposal migration is
+explicit, drops old acceptance, and requires a fresh review. See
+[PORTING.md](../../PORTING.md#workflow-3-cutover) and [workflows](workflows.md).
+
+Schema-3 preflight diagnoses every failed assignment with its claim and context,
+addressing FR4's missing non-designated-claim attribution. C1's operational recipe
+now distinguishes draft/proposed adoption, accepted/landing reopening, and
+supersession of finalized history. The other independent P1/P2 requests below,
+including replication/read-only replicas, are not claimed implemented by this
+calculus cutover. Current exercised evidence is recorded in [gates.md](gates.md).
+
 
 ## Decision and implementation order
 
@@ -182,7 +205,7 @@ and the reassessment boundary. Do not fabricate claim edits or observation event
 for that change. Under FR5 this disclosure belongs to the affected context, not
 to a single implicit policy for every target.
 
-## Original C-items: disposition against the current tree
+## Original C-items: disposition against the reviewed tree
 
 The earlier implementation record is
 [migration-hardening.md](migration-hardening.md). Closing a reported case here

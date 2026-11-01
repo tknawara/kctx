@@ -22,6 +22,7 @@ class RevisionBoundSelectionTest(KctxTestCase):
 
     def test_unrelated_edit_does_not_invalidate(self):
         added = _add(self.root, gates=GATES_TABLE_LAND)
+        self.assertEqual(added.proposal.workflow_version, 3)
         proposals.gate(self.root, added.id, GateId("G1"), outcome=GateOutcome.PASS, evidence="ev1", checker="fixture-checker", expires_at=4102444800, by="agent")
         proposals.set_status(self.root, added.id, status=ProposalStatus.ACCEPTED, by="user")
         found = proposals.load(self.root, added.id)

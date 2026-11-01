@@ -21,6 +21,7 @@ from kctx.domain.ids import (
 )
 from kctx.domain.json import JsonObject, integer, object_value, text, texts
 from kctx.errors import KctxError
+from kctx.semantics.workflow_wire import dec_named_context
 
 RELEASE_REF = "refs/kctx/knowledge"
 
@@ -44,14 +45,15 @@ def _decode_manifest(value: JsonObject) -> JsonObject:
         "sources",
         "operation_kind",
     }
+    schema = integer(value.get("schema_version"), "schema_version")
+    if schema == 3:
+        required.remove("sources")
+        required.add("contexts")
     kind = value.get("operation_kind")
     expected: set[str] = required | ({"retained_release"} if kind == "selection" else set())
     if kind not in ("admission", "selection") or set(value) != expected:
         raise KctxError("malformed", "invalid completed-release manifest fields")
-    if (
-        integer(value["schema_version"], "schema_version") != 2
-        or value["semantic_version"] != "2.0.0"
-    ):
+    if schema not in (2, 3) or value["semantic_version"] != "2.0.0":
         raise KctxError("malformed", "unsupported completed-release manifest version")
     SnapshotId(text(value["snapshot"], "snapshot"))
     PlanId(text(value["operation"], "operation"))
@@ -90,6 +92,17 @@ def _decode_manifest(value: JsonObject) -> JsonObject:
         if claim_ref in refs:
             raise KctxError("malformed", "duplicate selected claim reference")
         refs.add(claim_ref)
+    if schema == 3:
+        contexts = value["contexts"]
+        if not isinstance(contexts, list) or not contexts:
+            raise KctxError("malformed", "release contexts must be a nonempty array")
+        try:
+            named = tuple(dec_named_context(raw) for raw in contexts)
+        except ValueError as exc:
+            raise KctxError("malformed", str(exc)) from exc
+        if len({entry.id for entry in named}) != len(named):
+            raise KctxError("malformed", "duplicate named context identity")
+        return value
     sources = value["sources"]
     if not isinstance(sources, list):
         raise KctxError("malformed", "release sources must be an array")

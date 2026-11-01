@@ -21,10 +21,11 @@ sys.path.insert(0,str(ROOT/'tests'/'semantics'))
 def worker(request_path: Path) -> int:
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-    from kctx.domain.ids import AuthorityKeyId, DoltCommitId, PlanId, PolicyDigest, ReleaseId, SourceId, SourceRevision
+    from kctx.domain.ids import AuthorityKeyId, ContextId, DoltCommitId, PlanId, PolicyDigest, ReleaseId, SourceId, SourceRevision
     from kctx.services.knowledge import KnowledgeEngine
     from kctx.services.knowledge_models import Approval, CaptureKind
     from kctx.semantics.wire import dec_context
+    from kctx.semantics.workflow_models import NamedContext
     from examples import wire_kb, wire_context
     request=json.loads(request_path.read_text())
     from kctx.observability import init_logging
@@ -63,6 +64,7 @@ def worker(request_path: Path) -> int:
                 kb[collection]=[]
         kb['snapshot']='snapshot-'+name
         captures=list(state['captures'])
+        assignments = []
         for kind in CaptureKind:
             suffix=name+'-'+kind.value
             payload=('Synthetic retained '+suffix+' evidence; statements require explicit reviewer attestation.').encode()
@@ -78,6 +80,7 @@ def worker(request_path: Path) -> int:
             attestation.update(id='attestation-'+suffix,claim=ref,observation=observation['id'],authority='reviewer-key')
             derivation=template['derivations'][0]
             derivation.update(id='derivation-'+suffix,claim=ref,witness={'tag':'attest','attestation':attestation['id']})
+            assignments.append({'claim':ref,'context':'review','witness':derivation['witness']})
             for collection,item in (('observations',observation),('claims',claim),('attestations',attestation),('derivations',derivation)):
                 kb[collection].append(item)
         if request.get('retract_initial'):
@@ -85,13 +88,13 @@ def worker(request_path: Path) -> int:
             kb['corrections'].append({'id':'correction-'+name,'kind':'retract',
                 'target':{'id':target['id'],'revision':target['revision']},
                 'replacement':None,'recorded_at':110})
-        context=wire_context(base['snapshot'] if base else 'bootstrap:qualification')
+        context=wire_context(kb['snapshot'])
         context['policy']['authorized_actors'] = ['reviewer-key']
         context['sources'] = [{key: observation[key] for key in ('source','revision','content')}
                               for observation in kb['observations']]
-        last=kb['derivations'][-1]
-        candidate={'kb':kb,'capture_ids':captures,'context':context,'claim':last['claim'],
-                   'witness':last['witness'],'authority_key':'reviewer-key'}
+        candidate={'schema_version':3,'expected_snapshot':base['snapshot'] if base else 'bootstrap:qualification',
+                   'kb':kb,'capture_ids':captures,'contexts':[{'id':'review','context':context}],
+                   'assignments':assignments,'retired_contexts':[],'authority_key':'reviewer-key'}
         plan=engine.propose(candidate,'review',110)
         approval=engine.sign(plan.id,root/'private.pem',AuthorityKeyId('reviewer-key'))
         state['plans'][name]={'plan':plan.id.val,'approval':approval.wire(),'captures':captures}
@@ -104,7 +107,7 @@ def worker(request_path: Path) -> int:
         context_wire['sources'] = [{key: observation[key] for key in ('source','revision','content')}
                                    for observation in state['current_kb']['observations']]
         retained=request.get('release') or state['releases'][request['target']]
-        plan=engine.rollback(ReleaseId(retained),dec_context(context_wire),AuthorityKeyId('reviewer-key'))
+        plan=engine.rollback(ReleaseId(retained),(NamedContext(ContextId('review'),dec_context(context_wire)),),AuthorityKeyId('reviewer-key'),target_use='review')
         approval=engine.sign(plan.id,root/'private.pem',AuthorityKeyId('reviewer-key'))
         kb=copy.deepcopy(state['current_kb'])
         kb['snapshot']=plan.semantic.new_snapshot.val
@@ -130,7 +133,7 @@ def worker(request_path: Path) -> int:
         selected=request.get('release') or state['releases'].get(name)
         result=engine.context((),context,limit=request.get('limit',100),
                               continuation=request.get('continuation'),
-                              release=ReleaseId(selected) if selected else None)
+                              release=ReleaseId(selected) if selected else None,context_id=ContextId('review'))
     elif action=='backup':
         result=engine.backup(Path(request['destination']))
     elif action=='restore':

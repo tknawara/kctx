@@ -2,9 +2,11 @@
 
 from pathlib import Path
 
-from kctx.domain.ids import AssetId, ClaimId, ClaimRevision, ProposalId, RunId
+from kctx.domain.ids import AssetId, ClaimId, ClaimRevision, PolicyId, ProposalId, RunId
 from kctx.domain.vocabulary import AssetKind, Lifecycle, ProposalStatus, RelationshipType
-from kctx.semantics.model import ClaimRef
+from kctx.semantics.model import ClaimRef, Context
+from kctx.semantics.portfolio import query_context_allowed
+from kctx.semantics.workflow_models import NamedContext, PortfolioState
 from kctx.services import inventory, proposals, runs
 
 
@@ -19,3 +21,8 @@ def invalid_consumer(root: Path) -> None:
     ClaimRef(ClaimId("same"), "r1")  # expect-error
     inventory.asset_add(root, kind=AssetKind.SERVICE, name="same", lifecycle=ProposalStatus.DRAFT)  # expect-error
     inventory.asset_add(root, kind=Lifecycle.ACTIVE, name="same")  # expect-error
+
+
+def invalid_context_consumer(state: PortfolioState, context: Context) -> None:
+    NamedContext(PolicyId("review"), context)  # expect-error
+    query_context_allowed(state, ClaimId("review"), context)  # expect-error

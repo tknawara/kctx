@@ -1104,6 +1104,12 @@ def evaluate_request(
 ) -> dict[str, object]:
     ident = request.get("id", "")
     try:
+        if request.get("schema_version") == 3:
+            if trusted_approvals or trusted_selections or retained:
+                raise ValueError("v2 capabilities cannot authorize workflow schema 3")
+            from kctx.semantics.workflow_reference import evaluate_request as evaluate_workflow
+
+            return evaluate_workflow(request)
         result = handle(request, trusted_approvals, trusted_selections, retained)
         return {"id": ident, "ok": True, "result": result}
     except (ValueError, KeyError, TypeError, RecursionError, KctxError):

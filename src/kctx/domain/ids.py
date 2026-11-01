@@ -187,6 +187,11 @@ class PolicyId(_Identity):
 
 
 @dataclass(frozen=True, slots=True)
+class ContextId(_Identity):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
 class CheckerId(_Identity):
     _pattern: ClassVar[str] = r"[\s\S]+"
 

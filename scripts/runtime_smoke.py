@@ -44,7 +44,7 @@ def main() -> int:
         assert covered["outcome"] == "supported"
         receipt = invoke("check", run["run_id"], "--require", "guide-reviewed")
         assert receipt["missing_required"] == []
-        proposal = invoke("proposal", "add", "--kind", "config", "--origin", "user-request", "--title", "Document API", "--context", "Explain service", "--evidence", observation["id"], "--change", "Write guide", "--why", "Scoped documentation")
+        proposal = invoke("proposal", "add", "--kind", "config", "--origin", "user-request", "--title", "Document API", "--context", "Explain service", "--evidence", observation["id"], "--change", "Write guide", "--why", "Scoped documentation", "--target-source", str(kb / "guide.md"))
         assert proposal["frontmatter"]["status"] == "draft"
         blocked = invoke("proposal", "set", proposal["id"], "--status", "proposed", code=1)
         assert blocked["error"] == "incomplete"

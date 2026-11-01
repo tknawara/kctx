@@ -15,7 +15,7 @@ import kctx.services.validate as validate_mod
 from kctx.errors import KctxError
 from kctx.domain.time import today
 from dataclasses import replace
-from kctx.domain.ids import AssetId, InvestigationId, ProposalId, SignatureId, TicketId
+from kctx.domain.ids import AssetId, InvestigationId, ProposalId, SignatureId, SourceId, TicketId
 from kctx.domain.targets import parse_fix_reference, parse_use_target
 from kctx.domain.vocabulary import AssetKind, RelationshipType, InvestigationTrigger, SignatureStatus, ProposalKind, ProposalOrigin, RunMode, ObservationSystem, ObservationRole, CoverageOutcome, CorrectionKind
 
@@ -615,7 +615,7 @@ class UsesTest(KctxTestCase):
         self.assertEqual(set(result["by_kind"].keys()), {"investigation", "signature"})
 
     def test_proposal_referrer_grouped_separately_in_bare_or_prefixed_form(self):
-        proposals_mod.add(self.root, kind=ProposalKind.CONFIG, origin=ProposalOrigin.USER_REQUEST, title='Widget', context='ctx', evidence='ev', change='chg', why='why', research='researched', alternatives=TWO_ALTERNATIVES, gates=GATES_TABLE)
+        proposals_mod.add(self.root, kind=ProposalKind.CONFIG, origin=ProposalOrigin.USER_REQUEST, title='Widget', context='ctx', evidence='ev', change='chg', why='why', research='researched', alternatives=TWO_ALTERNATIVES, gates=GATES_TABLE, target_source=SourceId(str(self.root / "widget-target")))
         proposal_id = f"config/{today()}-widget"
         found = proposals_mod.load(self.root, ProposalId(proposal_id))
         found.document.update_section("Context", f"see {proposal_id} for background").write(found.path)
@@ -795,7 +795,7 @@ class RetractTest(KctxTestCase):
         self.assertEqual(text.count("## Corrections"), 1)
 
     def test_retract_proposal_appends_decision_log(self):
-        proposals_mod.add(self.root, kind=ProposalKind.CONFIG, origin=ProposalOrigin.USER_REQUEST, title='Widget', context='ctx', evidence='ev', change='chg', why='why', research='researched', alternatives=TWO_ALTERNATIVES, gates=GATES_TABLE)
+        proposals_mod.add(self.root, kind=ProposalKind.CONFIG, origin=ProposalOrigin.USER_REQUEST, title='Widget', context='ctx', evidence='ev', change='chg', why='why', research='researched', alternatives=TWO_ALTERNATIVES, gates=GATES_TABLE, target_source=SourceId(str(self.root / "widget-target")))
         proposal_id = f"config/{today()}-widget"
 
         corrections_mod.retract(self.root, corrections_mod.parse_correction_target(f'proposal/{proposal_id}'), reason='superseded by a later filing', kind=CorrectionKind.SUPERSEDE, by_replacement='config/2026-11-01-widget-v2')

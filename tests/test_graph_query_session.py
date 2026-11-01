@@ -58,7 +58,7 @@ class QuerySessionIntegrationTest(KctxTestCase):
                     process.stdin.flush()
                     return response()
 
-                initialized = request("initialize", {"protocol_version": "1"})
+                initialized = request("initialize", {"protocol_version": "2"})
                 self.assertIn("cite.make", initialized["result"]["methods"])
                 self.assertIn("knowledge.admit", initialized["result"]["methods"])
                 citation = request("cite.make", {"citation": {"kind": "web", "fields": {"url": "https://example.test", "q": "reference"}}})
@@ -71,17 +71,18 @@ class QuerySessionIntegrationTest(KctxTestCase):
                 witness = {"tag": "attest", "attestation": "attestation-1"}
                 context = {"snapshot": "bootstrap:test-kb", "semantic_version": "2.0.0", "ruleset": "core-2", "checker": "kctx-2", "policy": {"id": "review-policy", "require_fresh": True, "require_validation": False, "require_uncontested": True, "ttl": 100, "authorized_actors": ["reviewer-key"]}, "now": 5, "target": scope, "intended_use": "review", "sources": [{"source": captured["source"], "revision": captured["revision"], "content": captured["content"]}]}
                 kb = {"snapshot": "generation-1", "observations": [{"id": "observation-1", "source": captured["source"], "revision": captured["revision"], "content": captured["content"], "observed_at": 1, "outcome": "ok"}], "claims": [{"id": "reviewed", "revision": "r1", "statement": statement}], "attestations": [{"id": "attestation-1", "claim": claim, "observation": "observation-1", "statement": statement, "authority": "reviewer-key"}], "enumerations": [], "derivations": [{"id": "derivation-1", "claim": claim, "witness": witness}], "corrections": [], "receipts": []}
-                candidate = {"kb": kb, "capture_ids": [captured["id"]], "context": context, "claim": claim, "witness": witness, "authority_key": "reviewer-key"}
+                context["snapshot"] = kb["snapshot"]
+                candidate = {"schema_version": 3, "expected_snapshot": "bootstrap:test-kb", "kb": kb, "capture_ids": [captured["id"]], "contexts": [{"id": "review", "context": context}], "assignments": [{"claim": claim, "context": "review", "witness": witness}], "retired_contexts": [], "authority_key": "reviewer-key"}
                 planned = request("knowledge.propose", {"candidate": candidate, "target_use": "review", "now": 5})["result"]["payload"]
                 operator = KnowledgeEngine(repo, knowledge_dir, anchor)
                 approval = operator.sign(PlanId(planned["id"]), key_path, AuthorityKeyId("reviewer-key"))
                 admitted = request("knowledge.admit", {"plan": planned["id"], "approval": approval.wire()})["result"]["payload"]
                 context["snapshot"] = "generation-1"
-                retrieved = request("knowledge.context", {"context": context, "claims": [claim], "release": admitted["release"]})["result"]
+                retrieved = request("knowledge.context", {"context_id": "review", "context": context, "claims": [claim], "release": admitted["release"]})["result"]
                 self.assertTrue(retrieved["complete"])
                 self.assertEqual(retrieved["generation"]["release"], admitted["release"])
                 self.assertIn(b'"support":"positive"', canonical(retrieved["payload"]))
-                explained = request("knowledge.explain", {"context": context, "claim": claim, "release": admitted["release"]})["result"]
+                explained = request("knowledge.explain", {"context_id": "review", "context": context, "claim": claim, "release": admitted["release"]})["result"]
                 self.assertTrue(explained["complete"])
                 self.assertTrue(request("knowledge.recover")["result"]["complete"])
                 self.assertIn("error", request("knowledge.sign", {"private_key": str(key_path)}))

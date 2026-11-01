@@ -11,7 +11,7 @@ from kctx.cli.result import Reply
 from kctx.cli.values import decode, many, optional
 from kctx.codecs.gates import encode_gate_result
 from kctx.codecs.proposals import encode_added, encode_listing, encode_shown, encode_updated
-from kctx.domain.ids import GateId, ProposalId, TargetRevision
+from kctx.domain.ids import GateId, ProposalId, SourceId, TargetRevision
 from kctx.domain.vocabulary import (
     GateOutcome,
     ProposalKind,
@@ -54,6 +54,7 @@ def proposal() -> None:
 @click.option("--requested-by")
 @click.option("--force", is_flag=True)
 @click.option("--target-revision")
+@click.option("--target-source", help="Intended repository or local file; no revision required.")
 @click.option("--environment")
 @click.option("--scope")
 @click.pass_obj
@@ -80,12 +81,13 @@ def add(
     requested_by: str | None,
     force: bool,
     target_revision: str | None,
+    target_source: str | None,
     environment: str | None,
     scope: str | None,
 ) -> Reply:
     decoded_types = many("type", types, ProposalType)
     proposal_type = decoded_types[0] if len(decoded_types) == 1 else decoded_types or None
-    if gates:
+    if gates and "\n" not in gates and "\r" not in gates:
         gates_path = Path(gates)
         try:
             if gates_path.is_file():
@@ -116,6 +118,7 @@ def add(
         requested_by=requested_by,
         force=force,
         target_revision=optional("target_revision", target_revision, TargetRevision),
+        target_source=optional("target_source", target_source, SourceId),
         environment=environment,
         scope=scope,
     )
@@ -153,6 +156,7 @@ def list_proposals(
 @click.option("--swept-at")
 @click.option("--landed", "landed_add", multiple=True)
 @click.option("--target-revision")
+@click.option("--target-source")
 @click.option("--expected-revision", help="Proposal source revision returned by show.")
 @click.option("--environment")
 @click.option("--scope")
@@ -170,6 +174,7 @@ def set_proposal(
     swept_at: str | None,
     landed_add: tuple[str, ...],
     target_revision: str | None,
+    target_source: str | None,
     expected_revision: str | None,
     environment: str | None,
     scope: str | None,
@@ -189,12 +194,106 @@ def set_proposal(
         swept_at=swept_at,
         landed_add=landed_add or None,
         target_revision=optional("target_revision", target_revision, TargetRevision),
+        target_source=optional("target_source", target_source, SourceId),
         expected_revision=optional("expected_revision", expected_revision, FileRevision),
         environment=environment,
         scope=scope,
     )
     path = relative_path(proposals.load(root, proposal_id).path, root) if not state.as_json else ""
     return Reply(encode_updated(updated), presentation="proposal-single", path=path)
+
+
+@proposal.command("bind")
+@click.argument("id")
+@click.option("--target-revision", required=True)
+@click.option("--by", required=True)
+@click.option("--expected-revision")
+@click.pass_obj
+def bind(
+    state: CliState,
+    id: str,
+    target_revision: str,
+    by: str,
+    expected_revision: str | None,
+) -> Reply:
+    """Bind accepted design to resolved implementation, clearing old landing refs."""
+    result = proposals.bind(
+        state.root,
+        decode("id", id, ProposalId),
+        target_revision=decode("target_revision", target_revision, TargetRevision),
+        by=by,
+        expected_revision=optional("expected_revision", expected_revision, FileRevision),
+    )
+    path = (
+        relative_path(proposals.load(state.root, result.proposal.id).path, state.root)
+        if not state.as_json
+        else ""
+    )
+    return Reply(encode_updated(result), presentation="proposal-single", path=path)
+
+
+@proposal.command("reopen")
+@click.argument("id")
+@click.option("--by", required=True)
+@click.option("--note", required=True)
+@click.option("--target-source", help="Required for workflow2 migration unless target can resolve.")
+@click.option("--expected-revision")
+@click.pass_obj
+def reopen(
+    state: CliState,
+    id: str,
+    by: str,
+    note: str,
+    target_source: str | None,
+    expected_revision: str | None,
+) -> Reply:
+    """Explicitly discard accepted/landing approval and reopen design review."""
+    result = proposals.reopen(
+        state.root,
+        decode("id", id, ProposalId),
+        by=by,
+        note=note,
+        target_source=optional("target_source", target_source, SourceId),
+        expected_revision=optional("expected_revision", expected_revision, FileRevision),
+    )
+    path = (
+        relative_path(proposals.load(state.root, result.proposal.id).path, state.root)
+        if not state.as_json
+        else ""
+    )
+    return Reply(encode_updated(result), presentation="proposal-single", path=path)
+
+
+@proposal.command("adopt")
+@click.argument("id")
+@click.option("--by", required=True)
+@click.option("--note", required=True)
+@click.option("--target-source", help="Required unless the old target can resolve.")
+@click.option("--expected-revision")
+@click.pass_obj
+def adopt(
+    state: CliState,
+    id: str,
+    by: str,
+    note: str,
+    target_source: str | None,
+    expected_revision: str | None,
+) -> Reply:
+    """Explicitly migrate workflow2 draft/proposed intent; never reuse acceptance."""
+    result = proposals.adopt(
+        state.root,
+        decode("id", id, ProposalId),
+        by=by,
+        note=note,
+        target_source=optional("target_source", target_source, SourceId),
+        expected_revision=optional("expected_revision", expected_revision, FileRevision),
+    )
+    path = (
+        relative_path(proposals.load(state.root, result.proposal.id).path, state.root)
+        if not state.as_json
+        else ""
+    )
+    return Reply(encode_updated(result), presentation="proposal-single", path=path)
 
 
 @proposal.command("gate")

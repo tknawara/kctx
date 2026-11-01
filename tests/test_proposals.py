@@ -9,7 +9,7 @@ import kctx.codecs.frontmatter as storage
 from kctx.errors import KctxError
 from kctx.codecs.documents import render_document
 from kctx.codecs.proposals import encode_proposal
-from kctx.domain.ids import GateId, ProposalId, TargetRevision
+from kctx.domain.ids import GateId, ProposalId, SourceId, TargetRevision
 from kctx.domain.vocabulary import GateOutcome, ProposalKind, ProposalOrigin, ProposalStatus, ProposalType
 
 GATES_TABLE_LAND = (
@@ -46,6 +46,7 @@ def _add(root, **overrides):
         alternatives=TWO_ALTERNATIVES,
         gates=GATES_TABLE_FULL,
         target_revision=TargetRevision(_landed(root)),
+        target_source=SourceId("fixture-target.txt"),
         environment="fixture-environment", scope="fixture-target.txt",
     )
     kwargs.update(overrides)
@@ -196,13 +197,21 @@ class LegacyLayoutTest(KctxTestCase):
             },
         )
 
-    def test_legacy_file_keeps_its_shape_after_a_status_change(self):
+    def test_legacy_file_requires_explicit_adoption_before_status_changes(self):
         path = self._write_legacy()
-        proposals.set_status(self.root, ProposalId("skill/2026-10-01-legacy-thing"), status=ProposalStatus("accepted"), by="user")
-        text = path.read_text(encoding="utf-8")
-        self.assertNotIn("## Research", text)
-        self.assertNotIn("## Acceptance gates", text)
-        self.assertIn("## Decision log", text)
+        original = path.read_bytes()
+        identity = ProposalId("skill/2026-10-01-legacy-thing")
+        with self.assertRaises(KctxError):
+            proposals.set_status(self.root, identity, status=ProposalStatus.ACCEPTED, by="user")
+        self.assertEqual(path.read_bytes(), original)
+        result = proposals.adopt(
+            self.root, identity, by="user", note="Renew review",
+            target_source=SourceId("./intended-skill.md"),
+        )
+        self.assertEqual(result.proposal.workflow_version, 3)
+        self.assertIs(result.proposal.status, ProposalStatus.DRAFT)
+        self.assertIsNone(result.proposal.accepted_revision)
+        self.assertNotIn("## Research", path.read_text())
 
     def test_legacy_proposal_cannot_newly_apply_without_bound_gates(self):
         path = self._write_legacy(status="landing", decided_by="user")
@@ -223,6 +232,7 @@ class LifecycleTransitionTest(KctxTestCase):
         added = _add(self.root, title=title, gates=GATES_TABLE_LAND)
         pid = added.id
         proposals.set_status(self.root, pid, status=ProposalStatus("accepted"), by="user")
+        proposals.bind(self.root, pid, target_revision=TargetRevision(_landed(self.root)), by="agent")
         proposals.set_status(self.root, pid, status=ProposalStatus("landing"), by="agent")
         return pid
 
@@ -320,6 +330,7 @@ class LifecycleTransitionTest(KctxTestCase):
         added = _add(self.root, title="Deploy flow", gates=GATES_TABLE_FULL)
         pid = added.id
         proposals.set_status(self.root, pid, status=ProposalStatus("accepted"), by="user")
+        proposals.bind(self.root, pid, target_revision=TargetRevision(_landed(self.root)), by="agent")
         proposals.set_status(self.root, pid, status=ProposalStatus("landing"), by="agent")
         proposals.gate(self.root, pid, GateId("G1"), outcome=GateOutcome("pass"), evidence="obs:1", checker="fixture-checker", expires_at=4102444800, by="agent")
         proposals.set_status(self.root, pid, status=ProposalStatus("applied"), by="agent", landed_add=(_landed(self.root),))
@@ -381,6 +392,7 @@ class GateTest(KctxTestCase):
         added = _add(self.root, title="Pending flow", gates=GATES_TABLE_FULL)
         pid = added.id
         proposals.set_status(self.root, pid, status=ProposalStatus("accepted"), by="user")
+        proposals.bind(self.root, pid, target_revision=TargetRevision(_landed(self.root)), by="agent")
         proposals.set_status(self.root, pid, status=ProposalStatus("landing"), by="agent")
         proposals.gate(self.root, pid, GateId("G1"), outcome=GateOutcome("pass"), evidence="obs:1", checker="fixture-checker", expires_at=4102444800, by="agent")
         proposals.set_status(self.root, pid, status=ProposalStatus("applied"), by="agent", landed_add=(_landed(self.root),))
@@ -408,7 +420,7 @@ class ShowTest(KctxTestCase):
 
 
 class BackfillLandedTest(KctxTestCase):
-    def test_backfills_landed_from_decision_log_token(self):
+    def test_backfill_detects_tokens_but_cannot_rewrite_finalized_history(self):
         added = _add(self.root, gates=GATES_TABLE_LAND)
         path = proposals.load(self.root, added.id).path
         text = path.read_text(encoding="utf-8").replace(
@@ -417,13 +429,12 @@ class BackfillLandedTest(KctxTestCase):
         text = text.rstrip() + "\n- 2026-10-24: applied by user — dotfiles@e72e37d\n"
         path.write_text(text, encoding="utf-8")
 
-        changed = proposals.backfill_landed_from_notes(self.root)
-        self.assertEqual(len(changed), 1)
-        fm = proposals.load(self.root, added.id).proposal
-        self.assertEqual(list(fm.landed), ["dotfiles@e72e37d"])
-
-        # idempotent: already-backfilled proposals are left alone.
-        self.assertEqual(proposals.backfill_landed_from_notes(self.root), ())
+        before = path.read_bytes()
+        with self.assertRaises(KctxError):
+            proposals.backfill_landed_from_notes(self.root)
+        self.assertEqual(path.read_bytes(), before)
+        changed = proposals.backfill_landed_from_notes(self.root, dry_run=True)
+        self.assertEqual(changed[0].landed, ("dotfiles@e72e37d",))
 
     def test_dry_run_does_not_write(self):
         added = _add(self.root, gates=GATES_TABLE_LAND)

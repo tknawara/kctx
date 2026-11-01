@@ -11,25 +11,27 @@ knowledge are distinct stores and APIs.
 flowchart TD
     A[knowledge context or explain request] --> B[Select explicit release or completed release]
     B --> C[Validate manifest and native Dolt commit]
-    C --> D[Bind context snapshot and exact source selections]
+    C --> D[Bind named context ID snapshot policy and exact sources]
     D --> E[Read selected claim revisions at pinned generation]
     E --> F[Check recursive witnesses and receipts]
     F --> G[Independent support freshness validation contestation]
     G --> H[Bound records and response bytes]
     H --> I[Return release provenance missing and omissions]
     I --> J{More records?}
-    J -->|yes| K[Continuation binds release offset and query digest]
+    J -->|yes| K[Continuation binds release context offset and query digest]
     K --> D
     J -->|no| L[Completed page sequence]
 ```
 
-Owner: `services/knowledge.py::context`/`explain`. Limits are 1–100 records,
-default 20, and 64 KiB. `complete`, `omitted`, `missing`, `scope_omitted`,
+Owner: `services/knowledge.py::contexts`/`context`/`explain`. Discovery authenticates
+the context collection before returning it. Retrieval limits are 1–100 records,
+default 20, and 64 KiB; asset/diff retrieval counts context–claim pairs and labels
+each assessment. `complete`, `omitted`, `missing`, `scope_omitted`,
 `selection_omitted`, `not_selected`, and `evidence_omitted` describe different
-losses. A complete record page does not imply unbounded domain coverage. Detailed
-evidence may be removed to fit the ceiling, setting `complete=false`; a single
-unrepresentable claim/query fails explicitly. `explain` is the same bounded
-retrieval for one exact claim, not a hidden unlimited authority oracle.
+losses, not proof of domain coverage. Detailed evidence can be omitted before
+records are removed, setting `complete=false`; a single unrepresentable
+claim/query fails explicitly. `explain` remains bounded to one exact claim in
+one explicitly selected context.
 
 Graph navigation instead uses `graph/query_session.py` and
 `adapters/dolt/read_session.py`: a session retains its pinned completed graph
@@ -43,10 +45,10 @@ support. Qualification pointers: `tests/test_knowledge.py`,
 flowchart TD
     A[Source PR or document bytes] --> B[Capture exact bytes revision time and kind]
     B --> C[Retained acquisition record]
-    C --> D[Explicit structured candidate and witnesses]
-    D --> E[Propose against completed predecessor]
-    E --> F[Validate whole candidate context and retained inputs]
-    F --> G[Canonical plan bound to policy and target use]
+    C --> D[Explicit candidate named contexts and claim witness assignments]
+    D --> E[Propose against exact completed predecessor]
+    E --> F[Check each assigned claim in one complete context]
+    F --> G[Canonical plan binds contexts retirements policies and uses]
     G --> H[Operator signs with private Ed25519 key]
     H --> I[Detached approval]
     I --> J[Admit authenticates policy key signature and exact plan]
@@ -56,12 +58,13 @@ flowchart TD
 ```
 
 Owner: `services/knowledge.py`, `services/knowledge_models.py`,
-`semantics/workflow.py`, `semantics/wellformed.py`. Private signing is CLI-only,
-not an engine protocol method. Acquisition success, candidate readiness,
-authenticated admission and assessed usability are deliberately different.
-Replacing this with “PR merged therefore claim true” or automatic prose approval
-would cross the trust boundary. Qualification pointers:
-`tests/test_knowledge.py` and `tests/test_knowledge_boundaries.py`.
+`semantics/portfolio.py`, `semantics/wellformed.py`. The schema-3 signature binds
+the full candidate and authorization collection; every context's intended use
+requires the signing key's permission. Private signing is CLI-only, not an RPC
+method. Acquisition, candidate readiness, authenticated admission and usability
+remain different. A context collection is not a new inference rule or a pool of
+premises. Qualification pointers: `tests/test_knowledge.py`,
+`tests/test_knowledge_boundaries.py`, `tests/test_knowledge_portfolio.py`.
 
 ## Citation
 
@@ -137,6 +140,12 @@ structured knowledge; Git owns authored assets, retained release manifests and
 artifacts. There is no whole-KB JSON blob pretending to be relational storage,
 no two independent authoritative writers, and no cross-store transaction claim:
 the completed publication ref is the reader-visible boundary.
+
+Current workflow envelopes use schema 3 and retain complete named contexts in the
+signed plan and Git manifest. Core normalized Dolt record schema 2 is unchanged.
+Historical completed schema-2 operations are verified under their original
+interpretation; their journals are read-only and cannot authorize new publication.
+Schema-3 history cannot be downgraded to a schema-2 operation.
 
 The authored graph projection has its own candidate-directory/active-pointer
 journal in `graph/operations.py`; it remains rebuildable from pinned authored

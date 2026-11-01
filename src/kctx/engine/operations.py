@@ -8,6 +8,7 @@ from kctx.citations import code, construction, rendering, scan
 from kctx.config import Config
 from kctx.domain.ids import (
     AuthorityKeyId,
+    ContextId,
     PlanId,
     PolicyDigest,
     ProposalId,
@@ -22,6 +23,7 @@ from kctx.graph import queries, sync
 from kctx.graph.models import GraphNodeId
 from kctx.graph.query_session import QuerySession
 from kctx.semantics.wire import dec_context, dec_ref
+from kctx.semantics.workflow_wire import dec_named_context
 from kctx.services import backlinks, context, discovery
 from kctx.services.diff_impact import impact_diff
 from kctx.services.knowledge import KnowledgeEngine
@@ -172,9 +174,14 @@ class Operations:
             elif isinstance(params, s.Rollback):
                 payload = engine.rollback(
                     ReleaseId(params.release),
-                    dec_context(params.context),
+                    tuple(dec_named_context(value) for value in params.contexts),
                     AuthorityKeyId(params.key_id),
+                    target_use=params.target_use,
                 ).wire()
+            elif isinstance(params, s.KnowledgeContexts):
+                payload = engine.contexts(
+                    ReleaseId(params.release) if params.release is not None else None
+                )
             elif isinstance(params, s.KnowledgeContext):
                 payload = engine.context(
                     tuple(dec_ref(value) for value in params.claims),
@@ -182,12 +189,14 @@ class Operations:
                     params.limit,
                     None if params.continuation is None else object_value(params.continuation),
                     ReleaseId(params.release) if params.release is not None else None,
+                    context_id=ContextId(params.context_id),
                 )
             elif isinstance(params, s.Explain):
                 payload = engine.explain(
                     dec_ref(params.claim),
                     dec_context(params.context),
                     ReleaseId(params.release) if params.release is not None else None,
+                    context_id=ContextId(params.context_id),
                 )
             else:
                 payload = engine.recover()

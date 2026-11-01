@@ -10,7 +10,7 @@ class Params(BaseModel):
 
 
 class Initialize(Params):
-    protocol_version: Literal["1"]
+    protocol_version: Literal["2"]
     capabilities: list[str] = Field(default_factory=list)
 
 
@@ -73,11 +73,17 @@ class Admit(Params):
 
 class Rollback(Params):
     release: str
-    context: dict[str, JsonValue]
+    contexts: list[dict[str, JsonValue]]
+    target_use: str
     key_id: str
 
 
+class KnowledgeContexts(Params):
+    release: str | None = None
+
+
 class KnowledgeContext(Params):
+    context_id: str
     context: dict[str, JsonValue]
     claims: list[dict[str, JsonValue]]
     release: str | None = None
@@ -86,6 +92,7 @@ class KnowledgeContext(Params):
 
 
 class Explain(Params):
+    context_id: str
     context: dict[str, JsonValue]
     claim: dict[str, JsonValue]
     release: str | None = None
@@ -221,6 +228,7 @@ METHODS: dict[str, type[Params]] = {
     "knowledge.capture": Capture,
     "knowledge.propose": Propose,
     "knowledge.admit": Admit,
+    "knowledge.contexts": KnowledgeContexts,
     "knowledge.context": KnowledgeContext,
     "knowledge.explain": Explain,
     "knowledge.rollback": Rollback,

@@ -14,15 +14,17 @@ from kctx.cli.values import optional
 from kctx.config import Config
 from kctx.domain.ids import (
     AuthorityKeyId,
+    ContextId,
     PlanId,
     PolicyDigest,
     ReleaseId,
     SourceId,
     SourceRevision,
 )
-from kctx.domain.json import object_value
+from kctx.domain.json import object_value, text
 from kctx.errors import KctxError
 from kctx.semantics.wire import dec_context, dec_ref
+from kctx.semantics.workflow_wire import dec_named_context
 from kctx.services.knowledge import KnowledgeEngine
 from kctx.services.knowledge_models import Approval, CaptureKind
 
@@ -116,9 +118,15 @@ def admit(state: CliState, plan: str, approval: str) -> Reply:
 def rollback(state: CliState, release: str, context: str, key_id: str) -> Reply:
     """Propose an authorized forward retained-snapshot selection."""
     with knowledge_engine(state) as engine:
+        payload = load(Path(context))
+        if set(payload) != {"contexts", "target_use"} or not isinstance(payload["contexts"], list):
+            raise KctxError("malformed", "rollback requires contexts array and explicit target_use")
         return Reply(
             engine.rollback(
-                ReleaseId(release), dec_context(load(Path(context))), AuthorityKeyId(key_id)
+                ReleaseId(release),
+                tuple(dec_named_context(value) for value in payload["contexts"]),
+                AuthorityKeyId(key_id),
+                target_use=text(payload["target_use"], "target_use"),
             ).wire()
         )
 
@@ -134,21 +142,37 @@ def query(
 ) -> Reply:
     with knowledge_engine(state) as engine:
         payload = load(Path(request))
-        if set(payload) != {"context", "claims"} or not isinstance(payload["claims"], list):
-            raise KctxError("malformed", "request requires context and claims array")
+        if set(payload) != {"context_id", "context", "claims"} or not isinstance(
+            payload["claims"], list
+        ):
+            raise KctxError("malformed", "request requires context_id, context and claims array")
+        context_id = ContextId(text(payload["context_id"], "context_id"))
         claims = tuple(dec_ref(object_value(value)) for value in payload["claims"])
         context = dec_context(payload["context"])
         release_id = optional("release", release, ReleaseId)
         if explain:
             if len(claims) != 1:
                 raise KctxError("malformed", "explain requires one exact claim revision")
-            return Reply(engine.explain(claims[0], context, release_id))
+            return Reply(engine.explain(claims[0], context, release_id, context_id=context_id))
         cursor = load(Path(continuation)) if continuation is not None else None
-        return Reply(engine.context(claims, context, limit, cursor, release_id))
+        return Reply(
+            engine.context(claims, context, limit, cursor, release_id, context_id=context_id)
+        )
 
 
 @knowledge.command()
-@click.option("--request", required=True, help="JSON with context and exact claim refs.")
+@click.option("--release")
+@click.pass_obj
+def contexts(state: CliState, release: str | None) -> Reply:
+    """Discover full authenticated named contexts in a pinned release."""
+    with knowledge_engine(state) as engine:
+        return Reply(engine.contexts(optional("release", release, ReleaseId)))
+
+
+@knowledge.command()
+@click.option(
+    "--request", required=True, help="JSON with context_id, context and exact claim refs."
+)
 @click.option("--release")
 @click.option("--limit", type=int, default=20)
 @click.option("--continuation")
@@ -161,7 +185,9 @@ def context(
 
 
 @knowledge.command()
-@click.option("--request", required=True, help="JSON with context and one exact claim ref.")
+@click.option(
+    "--request", required=True, help="JSON with context_id, context and one exact claim ref."
+)
 @click.option("--release")
 @click.pass_obj
 def explain(state: CliState, request: str, release: str | None) -> Reply:

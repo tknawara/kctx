@@ -8,13 +8,21 @@ from __future__ import annotations
 from contextlib import ExitStack
 from dataclasses import replace
 from unittest.mock import patch
+import json
+from pathlib import Path
 
-from kctx.semantics import checker, model as M, wire, workflow
+from kctx.domain.ids import ContextId
+from kctx.semantics import checker, design_workflow, model as M, portfolio, wire, workflow, workflow_reference
+from kctx.semantics import workflow_models as W
 from scripts.semantic_cases import reviewed_cases
 
 
 def mutation_campaign() -> dict[str, object]:
     fixtures = {str(case["id"]): case for case in reviewed_cases()}
+    for path in sorted((Path(__file__).resolve().parents[1] / "tests/conformance").glob("workflow-v3*.jsonl")):
+        fixtures.update((str(case["id"]), case) for case in (
+            json.loads(line) for line in path.read_text().splitlines() if line.strip()
+        ))
     original_fresh = checker.assess_fresh
     original_assess = checker.assess
     original_union = checker.dependencies_union
@@ -46,6 +54,18 @@ def mutation_campaign() -> dict[str, object]:
     def skipped_gate(kb: M.KB, context: M.Context, proposal: M.Proposal, target: M.ProposalStatus) -> bool:
         return proposal.status is M.ProposalStatus.APPROVED and target is M.ProposalStatus.APPLIED
 
+    def skipped_assignment(kb: M.KB, contexts: tuple[W.NamedContext, ...], assignment: W.ClaimAssignment) -> bool:
+        return True
+
+    def borrowed_context(state: W.PortfolioState, identity: ContextId, context: M.Context) -> bool:
+        return True
+
+    def implicit_retirement(before: tuple[W.NamedContext, ...], after: tuple[W.NamedContext, ...], retired: tuple[ContextId, ...]) -> bool:
+        return True
+
+    def skipped_implementation(proposal: W.DesignProposal, now: int) -> bool:
+        return True
+
     mutations: tuple[tuple[str, str, object, str, str], ...] = (
         ("ttl-boundary", "inclusive-evidence-ttl", ttl_boundary, "checker", "assess_fresh"),
         ("dropped-dependency", "retained-footprint-complete", dropped_dependency, "checker", "dependencies_union"),
@@ -54,12 +74,16 @@ def mutation_campaign() -> dict[str, object]:
         ("skipped-gate", "skipped-gate-not-applied", skipped_gate, "wire", "transition"),
         ("erased-dispute", "dispute-preserves-support", erased_dispute, "wire", "assess"),
         ("historical-latest-selection", "authored-historical-prefilter", historical_latest, "workflow", "authored_gate_passes"),
+        ("unsupported-portfolio-assignment", "v3-unsupported-added-claim", skipped_assignment, "portfolio", "assignment_valid"),
+        ("borrowed-context-authorization", "v3-cannot-borrow-target-authority", borrowed_context, "workflow_reference", "query_context_allowed"),
+        ("implicit-context-retirement", "v3-implicit-context-retirement-refused", implicit_retirement, "portfolio", "context_evolution_valid"),
+        ("unbound-implementation", "v3-finalized-requires-implementation-binding", skipped_implementation, "design_workflow", "implementation_bound"),
     )
-    modules = {"checker": checker, "wire": wire, "workflow": workflow}
+    modules = {"checker": checker, "wire": wire, "workflow": workflow, "portfolio": portfolio, "workflow_reference": workflow_reference, "design_workflow": design_workflow}
     reports: list[dict[str, object]] = []
     for name, fixture_id, replacement, module, attribute in mutations:
         fixture = fixtures[fixture_id]
-        request = {key: value for key, value in fixture.items() if key not in ("expected", "expected_response")}
+        request = {key: value for key, value in fixture.items() if key not in ("expected", "expected_response", "trusted_environment", "category")}
         expected = {"id": fixture_id, "ok": True, "result": fixture["expected"]}
         baseline = wire.evaluate_request(request)
         with ExitStack() as stack:

@@ -12,6 +12,8 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from kctx.adapters.files.knowledge import canonical, digest, load, save
 from kctx.domain.ids import AssetId, AuthorityKeyId, PlanId, PolicyDigest, ReceiptId, ReleaseId, SourceId, SourceRevision
+from kctx.domain.ids import ContextId, SnapshotId
+from kctx.semantics.workflow_models import NamedContext
 from kctx.domain.json import JsonObject, object_value
 from kctx.errors import KctxError
 from kctx.semantics.wire import dec_context, dec_kb, dec_ref, dec_witness, enc_context, enc_kb, enc_receipt
@@ -45,7 +47,8 @@ class KnowledgeAdmissionTests(unittest.TestCase):
         context: JsonObject = {"snapshot": "bootstrap:test-kb", "semantic_version": "2.0.0", "ruleset": "core-2", "checker": "kctx-2", "policy": {"id": "review-policy", "require_fresh": True, "require_validation": False, "require_uncontested": True, "ttl": 100, "authorized_actors": ["reviewer-key"]}, "now": 5, "target": scope, "intended_use": "review"}
         context["sources"] = [{"source": capture.source.val, "revision": capture.revision.val, "content": capture.content.val}]
         kb: JsonObject = {"snapshot": "generation-1", "observations": [{"id": "observation-1", "source": capture.source.val, "revision": capture.revision.val, "content": capture.content.val, "observed_at": 1, "outcome": "ok"}], "claims": [{"id": "reviewed", "revision": "r1", "statement": statement}], "attestations": [{"id": "attestation-1", "claim": ref, "observation": "observation-1", "statement": statement, "authority": "reviewer-key"}], "enumerations": [], "derivations": [{"id": "derivation-1", "claim": ref, "witness": witness}], "corrections": [], "receipts": []}
-        return {"kb": kb, "capture_ids": [capture.id.val], "context": context, "claim": ref, "witness": witness, "authority_key": "reviewer-key"}
+        context["snapshot"] = kb["snapshot"]
+        return {"schema_version": 3, "expected_snapshot": "bootstrap:test-kb", "kb": kb, "capture_ids": [capture.id.val], "contexts": [{"id": "review", "context": context}], "assignments": [{"claim": ref, "context": "review", "witness": witness}], "retired_contexts": [], "authority_key": "reviewer-key"}
 
     def test_document_requires_signature_then_retrieves_pinned_support(self) -> None:
         candidate = self.candidate(CaptureKind.DOCUMENT)
@@ -57,8 +60,8 @@ class KnowledgeAdmissionTests(unittest.TestCase):
         result = self.engine.admit(plan.id, approval)
         self.assertEqual(result["outcome"], "applied")
         self.assertEqual(self.engine.admit(plan.id, approval)["outcome"], "already_applied")
-        context = replace(dec_context(candidate["context"]), snapshot=plan.semantic.candidate.snapshot)
-        response = self.engine.context((dec_ref(candidate["claim"]),), context, release=ReleaseId(str(result["release"])))
+        context = replace(dec_context(candidate["contexts"][0]["context"]), snapshot=plan.semantic.candidate.snapshot)
+        response = self.engine.context((dec_ref(candidate["assignments"][0]["claim"]),), context, release=ReleaseId(str(result["release"])), context_id=ContextId("review"))
         self.assertIn(b'"support":"positive"', canonical(response))
         self.assertIn(b'"usable":true', canonical(response))
         self.assertTrue(response["complete"])
@@ -85,7 +88,7 @@ class KnowledgeAdmissionTests(unittest.TestCase):
         first = self.engine.propose(candidate, "review", 5)
         first_release = ReleaseId(str(self.engine.admit(first.id, self.engine.sign(first.id, self.key_file, AuthorityKeyId("reviewer-key")))["release"]))
         kb = object_value(enc_kb(first.semantic.candidate))
-        original = object_value(candidate["claim"])
+        original = object_value(candidate["assignments"][0]["claim"])
         statement = object_value(object_value(kb["claims"][0])["statement"]) if isinstance(kb["claims"], list) else {}
         statement["formula"] = {"tag": "atom", "atom": {"subject": "service", "predicate": "secondary", "args": []}}
         second_ref: JsonObject = {"id": "secondary", "revision": "r1"}
@@ -100,16 +103,16 @@ class KnowledgeAdmissionTests(unittest.TestCase):
             if isinstance(entries, list):
                 entries.append(object_value(record))
         kb["snapshot"] = "generation-2"
-        second_context = replace(first.context, snapshot=first.semantic.candidate.snapshot, now=6)
-        second_input: JsonObject = {"kb": kb, "capture_ids": candidate["capture_ids"], "context": object_value(enc_context(second_context)), "claim": second_ref, "witness": witness, "authority_key": "reviewer-key"}
+        second_context = replace(first.semantic.contexts[0].context, snapshot=SnapshotId("generation-2"), now=6)
+        second_input: JsonObject = {"schema_version": 3, "expected_snapshot": first.semantic.candidate.snapshot.val, "kb": kb, "capture_ids": candidate["capture_ids"], "contexts": [{"id": "review", "context": object_value(enc_context(second_context))}], "assignments": [{"claim": second_ref, "context": "review", "witness": witness}], "retired_contexts": [], "authority_key": "reviewer-key"}
         second = self.engine.propose(second_input, "review", 6)
         second_release = ReleaseId(str(self.engine.admit(second.id, self.engine.sign(second.id, self.key_file, AuthorityKeyId("reviewer-key")))["release"]))
         selection_context = replace(second_context, snapshot=second.semantic.candidate.snapshot, now=7)
-        rollback = self.engine.rollback(first_release, selection_context, AuthorityKeyId("reviewer-key"))
+        rollback = self.engine.rollback(first_release, (NamedContext(ContextId("review"), selection_context),), AuthorityKeyId("reviewer-key"), target_use="review")
         self.assertEqual(self.engine.git.current(), second_release.val)
         selected_release = ReleaseId(str(self.engine.admit(rollback.id, self.engine.sign(rollback.id, self.key_file, AuthorityKeyId("reviewer-key")))["release"]))
         selected_context = replace(selection_context, snapshot=rollback.semantic.new_snapshot)
-        response = self.engine.context((), selected_context)
+        response = self.engine.context((), selected_context, context_id=ContextId("review"))
         self.assertEqual(response["selection_omitted"], 1)
         self.assertIn(b'"support":"none"', canonical(response))
         self.assertIn(b'"correction-1"', canonical(response))
@@ -120,16 +123,16 @@ class KnowledgeAdmissionTests(unittest.TestCase):
         )
         self.assertEqual(asset_context["records"][0]["assessment"]["support"], "none")
         self.assertEqual(asset_context["selection_omitted"], 1)
-        historical = self.engine.context((dec_ref(original),), replace(first.context, snapshot=first.semantic.candidate.snapshot), release=first_release)
+        historical = self.engine.context((dec_ref(original),), replace(first.semantic.contexts[0].context, snapshot=first.semantic.candidate.snapshot), release=first_release, context_id=ContextId("review"))
         self.assertIn(b'"support":"positive"', canonical(historical))
-        forward = self.engine.rollback(second_release, replace(selected_context, now=8), AuthorityKeyId("reviewer-key"))
+        forward = self.engine.rollback(second_release, (NamedContext(ContextId("review"), replace(selected_context, now=8)),), AuthorityKeyId("reviewer-key"), target_use="review")
         self.engine.admit(forward.id, self.engine.sign(forward.id, self.key_file, AuthorityKeyId("reviewer-key")))
-        forward_response = self.engine.context((), replace(selected_context, now=8, snapshot=forward.semantic.new_snapshot))
+        forward_response = self.engine.context((), replace(selected_context, now=8, snapshot=forward.semantic.new_snapshot), context_id=ContextId("review"))
         self.assertEqual(forward_response["selection_omitted"], 0)
         self.assertIn(b'"correction-1"', canonical(forward_response))
         self.assertNotEqual(self.engine.git.current(), selected_release.val)
         with self.assertRaises(KctxError):
-            self.engine.rollback(ReleaseId("f" * 40), replace(selected_context, snapshot=forward.semantic.new_snapshot), AuthorityKeyId("reviewer-key"))
+            self.engine.rollback(ReleaseId("f" * 40), (NamedContext(ContextId("review"), replace(selected_context, snapshot=forward.semantic.new_snapshot)),), AuthorityKeyId("reviewer-key"), target_use="review")
 
     def test_legacy_import_accounts_restores_and_does_not_admit_prose(self) -> None:
         legacy = self.root / "legacy"
@@ -161,11 +164,11 @@ class KnowledgeAdmissionTests(unittest.TestCase):
         plan = self.engine.propose(self.candidate(CaptureKind.DOCUMENT), "review", 5)
         approval = self.engine.sign(plan.id, self.key_file, AuthorityKeyId("reviewer-key"))
         changed = plan.wire()
-        context = object_value(changed["context"])
+        context = changed["plan"]["contexts"][0]["context"]
         policy = object_value(context["policy"])
         policy["require_fresh"] = False
         context["policy"] = policy
-        changed["context"] = context
+        changed["plan"]["contexts"][0]["context"] = context
         save(self.engine.root / "plans" / (plan.id.val + ".json"), changed)
         with self.assertRaises(KctxError):
             self.engine.admit(plan.id, approval)
@@ -173,13 +176,13 @@ class KnowledgeAdmissionTests(unittest.TestCase):
 
     def test_named_receipt_checker_rejects_forged_result_and_dependencies(self) -> None:
         candidate = self.candidate(CaptureKind.DOCUMENT)
-        context = dec_context(candidate["context"])
+        context = dec_context(candidate["contexts"][0]["context"])
         context = replace(context, policy=replace(context.policy, require_validation=True))
-        candidate["context"] = object_value(enc_context(context))
+        candidate["contexts"][0]["context"] = object_value(enc_context(context))
         kb = dec_kb(candidate["kb"])
         execution = replace(context, snapshot=kb.snapshot)
-        ref = dec_ref(candidate["claim"])
-        witness = dec_witness(candidate["witness"])
+        ref = dec_ref(candidate["assignments"][0]["claim"])
+        witness = dec_witness(candidate["assignments"][0]["witness"])
         checked = accepted(kb, execution, ref)[0][1]
         receipt = Receipt(ReceiptId("actual-check"), ref, execution, witness, checked.dependencies, ReceiptResult.PASS, 10)
         raw_kb = object_value(candidate["kb"])
@@ -197,7 +200,7 @@ class KnowledgeAdmissionTests(unittest.TestCase):
         old_release = ReleaseId(str(self.engine.admit(first.id, self.engine.sign(first.id, self.key_file, AuthorityKeyId("reviewer-key")))["release"]))
         capture = self.engine.capture(CaptureKind.DOCUMENT, SourceId("docs/design.md"), SourceRevision("immutable-revision-18"), b"Changed exact source bytes", 6)
         kb = object_value(enc_kb(first.semantic.candidate))
-        statement: JsonObject = {"formula": {"tag": "atom", "atom": {"subject": "service", "predicate": "new-review", "args": []}}, "scope": object_value(candidate["context"])["target"], "polarity": "positive"}
+        statement: JsonObject = {"formula": {"tag": "atom", "atom": {"subject": "service", "predicate": "new-review", "args": []}}, "scope": object_value(candidate["contexts"][0]["context"])["target"], "polarity": "positive"}
         ref: JsonObject = {"id": "new-review", "revision": "r2"}
         witness: JsonObject = {"tag": "attest", "attestation": "attestation-2"}
         for collection, row in (
@@ -210,22 +213,22 @@ class KnowledgeAdmissionTests(unittest.TestCase):
             if isinstance(values, list):
                 values.append(object_value(row))
         kb["snapshot"] = "generation-2"
-        context = replace(first.context, snapshot=first.semantic.candidate.snapshot, now=7, sources=(SourceSelection(capture.source, capture.revision, capture.content_identity),))
+        context = replace(first.semantic.contexts[0].context, snapshot=SnapshotId("generation-2"), now=7, sources=(SourceSelection(capture.source, capture.revision, capture.content_identity),))
         capture_ids = candidate["capture_ids"]
         if not isinstance(capture_ids, list):
             self.fail("capture fixture must be an array")
-        changed: JsonObject = {"kb": kb, "capture_ids": [*capture_ids, capture.id.val], "context": object_value(enc_context(context)), "claim": ref, "witness": witness, "authority_key": "reviewer-key"}
+        changed: JsonObject = {"schema_version": 3, "expected_snapshot": first.semantic.candidate.snapshot.val, "kb": kb, "capture_ids": [*capture_ids, capture.id.val], "contexts": [{"id": "review", "context": object_value(enc_context(context))}], "assignments": [{"claim": ref, "context": "review", "witness": witness}], "retired_contexts": [], "authority_key": "reviewer-key"}
         plan = self.engine.propose(changed, "review", 7)
         self.engine.admit(plan.id, self.engine.sign(plan.id, self.key_file, AuthorityKeyId("reviewer-key")))
         current = replace(context, snapshot=plan.semantic.candidate.snapshot)
-        old_ref = dec_ref(candidate["claim"])
-        self.assertIn(b'"support":"none"', canonical(self.engine.context((old_ref,), current)))
+        old_ref = dec_ref(candidate["assignments"][0]["claim"])
+        self.assertIn(b'"support":"none"', canonical(self.engine.context((old_ref,), current, context_id=ContextId("review"))))
         with self.assertRaises(KctxError):
-            self.engine.context((old_ref,), replace(current, sources=first.context.sources))
-        historical = self.engine.context((old_ref,), replace(first.context, snapshot=first.semantic.candidate.snapshot), release=old_release)
+            self.engine.context((old_ref,), replace(current, sources=first.semantic.contexts[0].context.sources), context_id=ContextId("review"))
+        historical = self.engine.context((old_ref,), replace(first.semantic.contexts[0].context, snapshot=first.semantic.candidate.snapshot), release=old_release, context_id=ContextId("review"))
         self.assertIn(b'"support":"positive"', canonical(historical))
         kb["snapshot"] = first.semantic.candidate.snapshot.val
-        changed["context"] = object_value(enc_context(current))
+        changed["contexts"][0]["context"] = object_value(enc_context(current))
         with self.assertRaises(KctxError):
             self.engine.propose(changed, "review", 7)
 
@@ -258,6 +261,7 @@ class KnowledgeAdmissionTests(unittest.TestCase):
                 "id": f"derive-{identity}", "claim": ref,
                 "witness": {"tag": "attest", "attestation": f"attest-{identity}"},
             })
+            candidate["assignments"].append({"claim": ref, "context": "review", "witness": {"tag": "attest", "attestation": f"attest-{identity}"}})
         candidate["kb"] = kb
         plan = self.engine.propose(candidate, "review", 5)
         release = self.engine.admit(
@@ -265,7 +269,7 @@ class KnowledgeAdmissionTests(unittest.TestCase):
         )["release"]
         first = self.engine.context_for_assets((AssetId("service"),), limit=1)
         self.assertEqual(first["release"], release)
-        self.assertEqual(first["context"]["now"], 5)
+        self.assertEqual(first["contexts"][0]["context"]["now"], 5)
         self.assertEqual(first["records"][0]["claim"]["id"], "reviewed")
         self.assertEqual(first["records"][0]["assessment"]["support"], "positive")
         self.assertEqual(first["records"][0]["matched_assets"], ["service"])

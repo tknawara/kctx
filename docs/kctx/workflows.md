@@ -29,11 +29,13 @@ public key encoded as hex):
 ```
 
 This is the policy shape in `tests/test_knowledge.py`, with the generated public
-key represented descriptively. Compute the canonical policy digest with
-`kctx.adapters.files.knowledge.canonical` and `digest` in the trusted provisioning
-process, then set `knowledge_policy_digest` in the single config file. A modified
-policy under the same name cannot replace that bootstrap anchor. `knowledge_dir`
-selects the native Dolt destination; the authored root must be a Git repository.
+key represented descriptively. Persist canonical bytes with
+`kctx.adapters.files.knowledge.save`, then compute their SHA-256 with `canonical`
+and `digest` in the trusted provisioning process and set `knowledge_policy_digest`.
+The bootstrap reader still hashes exact file bytes, so do not pretty-print the
+file after anchoring it. A changed policy cannot replace that trust anchor.
+`knowledge_dir` selects the native Dolt destination; the authored root must be a
+Git repository.
 
 Capture already acquired exact bytes, identifying the actual immutable upstream
 revision and observation time. This command does not fetch a PR URL or parse prose
@@ -46,16 +48,30 @@ uv run kctx --json knowledge capture --kind document --source "$DOCUMENT_SOURCE"
 ```
 
 Choose the relevant kind; they share the same admission path. Retain each returned
-capture record. Author `candidate.json` with exactly `kb`, `capture_ids`,
-`context`, `claim`, `witness`, and `authority_key`. The KB contains observations,
-claims, attestations, enumerations, derivations, corrections and receipts. Bind
-observations and context source selections to returned source/revision/content
-identities; name the retained capture IDs. Use a new candidate snapshot and the
-completed predecessor in the context (`bootstrap:<kb_id>` for first admission).
-The initial complete working fixture is
-`KnowledgeAdmissionTests.candidate` in `tests/test_knowledge.py`; wire components
-are shown in [calculus.md](calculus.md). It deliberately requires an explicit
-attestation and witness, not just a successful capture.
+capture record. A new `candidate.json` has exactly these fields:
+
+- `schema_version`: integer `3`.
+- `expected_snapshot`: the current completed snapshot, or `bootstrap:<kb_id>` for
+  first admission.
+- `kb`: the complete candidate KB with a new snapshot and the previous collections
+  preserved as immutable prefixes.
+- `capture_ids`: actual returned retained capture IDs covering the observations
+  and selected sources.
+- `contexts`: named records with an `id` and a complete core-v2 `context`. Each
+  context identifies the **candidate** snapshot, explicit `--now`, target,
+  intended use, policy and exact source/revision/content selections.
+- `assignments`: one record per newly added claim, in candidate order, with
+  `claim`, the named `context` ID, and its exact `witness`.
+- `retired_contexts`: exact IDs intentionally removed from the predecessor;
+  use an empty list when retaining all prior context identities.
+- `authority_key`: the approving public-key identity.
+
+The KB contains observations, claims, attestations, enumerations, derivations,
+corrections and receipts. Captured bytes alone establish no atomic support.
+The complete fixture is `KnowledgeAdmissionTests.candidate` in
+`tests/test_knowledge.py`; component shapes are in [calculus.md](calculus.md).
+Multiple selectors/projects use separate named contexts and explicit assignments,
+not an empty selector substituted for a specific claim.
 
 ```sh
 uv run kctx --json knowledge propose --candidate candidate.json --target-use review --now "$NOW"
@@ -63,20 +79,32 @@ uv run kctx --json knowledge sign "$PLAN" --private-key "$PRIVATE_KEY" --key-id 
 uv run kctx --json knowledge admit "$PLAN" --approval approval.json
 ```
 
-`PLAN` is the ID returned by propose. Review its exact candidate, policy, inputs,
-target use and predecessor before signing. The approval JSON authorizes that
-plan, not arbitrary future revisions. Preserve the returned `release` and
-snapshot. Identical replay is idempotent; changed inputs or a competing completed
-predecessor conflict. Operators retain private signing authority; `kctx serve`
-does not expose a signing method.
+`PLAN` is the ID returned by propose. Review its exact candidate, context
+collection, assignments, retirements, policies, inputs, operation use and
+predecessor before signing. The declared `--target-use` must occur in the
+contexts; the key must permit that use **and every context's intended use**.
+Sources and policies are never merged between contexts. Zero added claims are
+allowed for an explicit signed context/correction change.
+
+The schema-3 approval authorizes that complete plan, not future revisions.
+Preserve the returned release and snapshot. Identical replay is idempotent;
+changed inputs or a competing predecessor conflict. Operators retain private
+signing authority; `kctx serve` does not expose signing.
 
 ## Retrieve, explain and continue at one release
 
-A request file has exactly `context` and `claims`; each claim reference is
-`{"id":"reviewed","revision":"r1"}`. Use the admitted context with its snapshot
-updated to the published candidate snapshot. Its source selections, semantic
-version, policy, checker, scope and intended use must still match the selected
-release; `now` is an explicit evaluation time.
+First discover the selected release's authenticated context IDs and full values:
+
+```sh
+uv run kctx --json knowledge contexts --release "$RELEASE"
+```
+
+A request file has exactly `context_id`, `context`, and `claims`; each claim
+reference is `{"id":"reviewed","revision":"r1"}`. Copy the chosen discovery entry's
+ID and context; it already names the published snapshot. Policy, source selections,
+versions, checker and intended use remain exact. The target may narrow within
+that entry's authorization, and `now` may advance but cannot predate it. Supplying
+another context's target or sources under this ID is rejected.
 
 ```sh
 uv run kctx --json knowledge context --request request.json --release "$RELEASE" --limit 20
@@ -85,17 +113,28 @@ uv run kctx --json knowledge context --request request.json --release "$RELEASE"
 ```
 
 Save **only the returned `continuation` object** as `continuation.json`. Keep the
-same request; the continuation binds the query digest and release, not “whatever
-is latest.” An empty claims list selects in-scope active claims. Read omissions,
-missing refs, contrary evidence, assessment and provenance before using results.
-`knowledge explain` requires one exact claim revision. For authored navigation,
-use `context ID`, `home ID`, `uses TARGET`, or `timeline ID` instead; those are not
-an alternative source of proved claim support.
+same request; continuation binds context identity, complete query and release,
+not “whatever is latest.” An explicitly supplied release must agree with the
+continuation. An empty claims list selects active claims applicable to this one
+context. Each record identifies `context_id`. `knowledge explain` requires one
+exact claim revision and does not accept pagination options.
 
-The single programmatic server is `uv run kctx serve`, JSON-RPC 2.0 over JSONL.
-Initialize with `protocol_version: 1`, then use the advertised citation, graph
-and knowledge methods. Python embedding imports `serve` from `kctx.engine`.
-Engine protocol version 1 and calculus schema 2 identify different contracts.
+The response ceiling is 64 KiB, not a fixed record count. Evidence may be omitted
+before records are dropped; inspect `evidence_omitted`, `complete`, contrary
+evidence, missing refs and omission counts. Smaller limits can help but cannot
+guarantee complete evidence, because provenance and individual records also have
+a size. Continuation advances records; it does not recover evidence omitted from
+already returned records. Retry a narrower exact query at the same release and
+context, and preserve any remaining limitation.
+
+For authored navigation, use `context ID`, `home ID`, `uses TARGET`, or
+`timeline ID`; those are not alternative sources of proved claim support.
+
+The programmatic server is `uv run kctx serve`, JSON-RPC 2.0 over JSONL. Initialize
+with `protocol_version: "2"` and use its advertised schemas. `knowledge.contexts`
+discovers named contexts; `knowledge.context` and `knowledge.explain` require
+`context_id`. Python embedding imports `serve` from `kctx.engine`. Engine protocol
+2, workflow schema 3 and core calculus schema 2 identify different contracts.
 
 ## Citation maintenance is not knowledge admission
 
@@ -146,21 +185,23 @@ The reply gives exact `base`/`head` identities and a `files` checklist:
 - Repository-locator assets, inbound/outbound relationships, bounded impact and
   related assets, plus signatures explicitly listing those assets. This is
   repository-level candidate ownership, not a guessed path ownership proof.
-- `claims` from the single selected completed release, with existing assessment,
-  contrary refs and evidence. Exact asset IDs in structured formula subjects,
-  arguments or scope selectors determine relevance; names/prose are not aliases.
-  Scope filtering and release selection remain authoritative.
+- `claims` from all authorized contexts of one completed release, retaining
+  `context_id` on each assessment, contrary refs and evidence. Exact asset IDs in
+  structured formula subjects, arguments or scope selectors determine relevance;
+  names/prose are not aliases. Scope filtering remains authoritative.
 
-Top-level `knowledge` carries the pinned release, approved evaluation `context`,
-provenance, omission counts and continuation. Its `context.now` is the release's
-explicit evaluation time—not the current wall clock. A newer publication cannot
-mix claim generations within one reply. With no completed publication, the
-status is `no_release`; broken storage/configuration is `unavailable`, never an
-empty admitted result. Both are partial (`complete: false`, exit 2), as are
-warnings, depth cutoffs or omitted claims.
+Top-level `knowledge` carries the pinned release, approved named `contexts`,
+provenance, omission counts and continuation. Each context uses its approved
+explicit time, not the wall clock. A claim can appear under more than one context
+with different assessments; these are not pooled into a global verdict. A newer
+publication cannot mix generations within a reply. With no completed publication
+the status is `no_release`; broken storage/configuration is `unavailable`, never
+an empty admitted result. Both are partial (`complete: false`, exit 2), as are
+warnings, depth cutoffs or omissions.
 
-Use `--claims-limit 1..100` to bound a claim page (default 100). Save only
-`knowledge.continuation` and continue with the same resolved diff and asset set:
+Use `--claims-limit 1..100` to bound context–claim pairs per page (default 100).
+Save only `knowledge.continuation` and continue with the same resolved diff and
+asset set:
 
 ```sh
 uv run kctx --json impact --diff "$BASE..$HEAD" --repo /path/to/local/checkout \
@@ -170,7 +211,7 @@ uv run kctx --json impact --diff "$BASE..$HEAD" --repo /path/to/local/checkout \
 JSON-RPC exposes the same service after initialization:
 
 ```jsonl
-{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocol_version":"1"}}
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocol_version":"2"}}
 {"jsonrpc":"2.0","id":2,"method":"authored.impact_diff","params":{"diff":"HEAD~1..HEAD","repo":"/path/to/local/checkout","depth":2,"claims_limit":100}}
 ```
 
@@ -182,61 +223,96 @@ See the [acceptance rationale](review-feature-requests.md).
 
 ## Authored proposals and gates
 
-```sh
-uv run kctx --json proposal add --kind decision --origin user-request --title "$TITLE" --target "$TARGET" --context "$CONTEXT" --evidence "$EVIDENCE" --change "$CHANGE" --why "$WHY" --gates gates.md --target-revision "$TARGET_REVISION" --environment "$ENVIRONMENT" --scope "$SCOPE"
-uv run kctx --json proposal show "$PROPOSAL"
-uv run kctx --json proposal gate "$PROPOSAL" "$GATE" --outcome pass --evidence "$GATE_EVIDENCE" --by "$ACTOR" --rev "$REPO_AT_SHA" --target-revision "$TARGET_REVISION" --checker "$CHECKER_VERSION" --expires-at "$EXPIRY_EPOCH" --environment "$ENVIRONMENT" --scope "$SCOPE" --expected-revision "$FILE_REVISION"
-uv run kctx --json proposal show "$PROPOSAL"
-uv run kctx --json proposal set "$PROPOSAL" --status proposed --by "$ACTOR" --expected-revision "$NEW_FILE_REVISION"
-```
-
-Author a real gate table in `gates.md` and use its returned gate ID; gates have
-land/deploy/use timing. `show` supplies the source revision used for conditional
-writes; reread after a gate append before the next mutation. Gate evidence binds
-proposal material revision, target revision, environment, scope, checker,
-checked time, expiry and actor. `--rev` is repository evidence such as
-`org/repo@<sha>`; it is retained verbatim in the result's `repo_rev` and is
-never used as the gate-definition binding — that digest is always computed
-from the authored table. It is not interchangeable with proposal material
-revision or `--expected-revision`. A text label `pass` cannot authorize
-changed material.
-Use `fail` or `unk` honestly; required missing/expired/mismatched gates block the
-relevant transition. Proposed/accepted/landing/applied/verified are distinct
-states; record actual landing evidence with `proposal set --landed ...`, not a
-fabricated status shortcut. This authored workflow does not replace the separate
-Ed25519 knowledge approval protocol.
-
-Owners: `cli/proposals.py`, `services/proposals.py`, `codecs/gates.py`,
-`semantics/workflow.py`. Qualification pointers: `tests/test_gates_rev.py`,
-`tests/test_proposal_boundaries.py`, `tests/test_proposals.py`.
-
-### Adopting a legacy flat-file proposal
-
-A flat-file (`proposals/<kind>/<date>-<slug>.md`) record keeps its legacy
-profile: readable, exempt from review readiness, and never treated as verified
-knowledge. A decided status is still earned — a historical `applied` record
-without bindings is reported by `validate` with the exact missing predicates,
-not accepted silently. To bring one to a valid decided status, record the
-bindings in order, because each material change (table, target, environment,
-scope) must precede the acceptance that pins it:
+New proposals use `workflow_version: 3` within document schema 1. Declare the
+intended source with `--target-source` before the implementation exists, or let
+an already supplied, exactly resolving `--target-revision` establish it. Use
+`./path` or an absolute path for an uncreated local file/repository; `org/repo`
+names a remote repository, not a local two-component path.
 
 ```sh
-# 1. Edit the file to add a real Acceptance gates table (a material change),
-#    then bind target/environment/scope — all before acceptance is recorded.
-kctx proposal set "$LEGACY" --target-revision "$TARGET" --environment "$ENV" --scope "$SCOPE"
-# 2. Record bound evidence at that material revision.
-kctx --json proposal gate "$LEGACY" G1 --outcome pass --evidence "$EVIDENCE" \
-  --by "$ACTOR" --checker "$CHECKER" --expires-at "$EPOCH" --environment "$ENV" --scope "$SCOPE"
-# 3. Earn the transitions; acceptance pins the current material revision.
-kctx proposal set "$LEGACY" --status accepted --by "$ACCEPTOR"
-kctx proposal set "$LEGACY" --status landing --by "$EXECUTOR"
-kctx proposal set "$LEGACY" --status applied --by "$EXECUTOR" --landed "$SOURCE_AT_REVISION"
+uv run kctx --json proposal add --kind decision --origin user-request --title "$TITLE" --target "$TARGET" --context "$CONTEXT" --evidence "$EVIDENCE" --change "$CHANGE" --why "$WHY" --research "$RESEARCH" --alternatives "$ALTERNATIVES" --gates gates.md --target-source "$SOURCE" --environment "$ENVIRONMENT" --scope "$SCOPE"
+uv run kctx --json proposal set "$PROPOSAL" --status accepted --by "$ACCEPTOR"
+# Implement the accepted design, then bind its exact retained revision.
+uv run kctx --json proposal show "$PROPOSAL"
+uv run kctx --json proposal bind "$PROPOSAL" --target-revision "$TARGET_REVISION" --by "$EXECUTOR" --expected-revision "$FILE_REVISION"
+uv run kctx --json proposal set "$PROPOSAL" --status landing --by "$EXECUTOR"
+uv run kctx --json proposal gate "$PROPOSAL" "$GATE" --outcome pass --evidence "$GATE_EVIDENCE" --by "$ACTOR" --rev "$REPO_AT_SHA" --checker "$CHECKER_VERSION" --expires-at "$EXPIRY_EPOCH"
+uv run kctx --json proposal set "$PROPOSAL" --status applied --by "$EXECUTOR" --landed "$SOURCE_AT_REVISION"
 ```
 
-Every transition still warns `W101`: the legacy profile's status is authored
-history, not verified knowledge or release authority. Superseding the legacy
-record with a modern proposal is the alternative when gate evidence cannot be
-re-earned honestly.
+Use actual returned proposal/gate IDs and source revisions. Research, at least
+two alternatives and a real gate table establish modern review readiness; an
+incomplete new record remains draft. `--gates` accepts a file or multiline table.
+Gate phases remain land/deploy/use. `show` supplies the file revision for optional
+conditional writes; reread after each mutation before reusing `--expected-revision`.
+`accepted_revision` is a `design-v3:<sha256>` design identity, not the `revision`
+file hash returned by `show`. Never use one in place of the other.
+
+Acceptance binds design intent, intended source, environment, scope and gate
+definitions. `bind` records the accepted design, resolved source/target, actor
+and time, preserves acceptance, and clears previous landing refs. Rebinding in
+accepted/landing to a different target makes old-target gates ineligible.
+Matching evidence must be recorded for the new target before application.
+An identical-target/context pass can remain reusable while unexpired; binding
+itself never attests landing.
+
+Gate evidence still binds exact design revision, target, definition, environment,
+scope, checker, observation/expiry times and actor. `--rev` is repository evidence
+retained in `repo_rev`, never the computed gate-table digest or the proposal file
+revision. A text label `pass` cannot authorize changed inputs. Applied proposals
+can record deploy/use evidence and advance to verified; finalized records cannot
+be retargeted or reopened.
+Gate outcomes remain observations recorded by an actor; the tool does not execute
+arbitrary check prose or infer that an implementation satisfies natural-language
+intent merely because its metadata is structurally eligible.
+
+To change accepted/landing design material, first run:
+
+```sh
+uv run kctx --json proposal reopen "$PROPOSAL" --by "$ACTOR" --note "$REASON"
+```
+
+This returns to proposed and clears acceptance, execution roles, binding, target
+and landing refs while preserving material and historical gate records. Edit the
+design, earn fresh acceptance, then bind and check the implementation. Generic
+`set` and `add --force` cannot bypass this boundary. Authored workflow eligibility
+does not replace the separate Ed25519 knowledge approval protocol.
+
+Owners: `cli/proposals.py`, `services/proposals.py`, `proposal_targets.py`,
+`semantics/design_workflow.py`. Qualification pointers:
+`tests/test_authored_design.py`, `tests/test_authored_design_cli.py`,
+`tests/test_gates_rev.py`, `tests/test_proposal_boundaries.py`.
+
+### Adopting a historical proposal
+
+Records without `workflow_version` retain workflow 2: their original material
+hashes, validation rules and historical gate bindings are not reinterpreted.
+Flat-file paths remain readable. A legacy readiness exemption does not waive
+decided-status bindings or confer signed release authority.
+
+For a workflow-2 **draft/proposed** record:
+
+```sh
+uv run kctx --json proposal adopt "$LEGACY" --by "$ACTOR" --note "$REASON" --target-source "$SOURCE"
+```
+
+For a workflow-2 **accepted/landing** record:
+
+```sh
+uv run kctx --json proposal reopen "$LEGACY" --by "$ACTOR" --note "$REASON" --target-source "$SOURCE"
+```
+
+An exactly resolvable existing target may supply the source when it is omitted.
+Both operations retain authored content/history, switch to workflow 3's modern
+readiness profile, and discard old acceptance/execution authority. Adoption
+chooses draft or proposed according to readiness; reopening requires a new review.
+Supply real research, alternatives and gates before fresh acceptance. Then use
+`bind`, evidence recording and the normal landing transitions.
+
+Already applied/verified history is not migrated in place. Create and review a
+new proposal, then supersede the old record with an explicit resolving
+`--superseded-by` reference. `backfill-landed --dry-run` only discovers historical
+text hints; it does not authorize writing finalized landing evidence.
 
 ## Investigations can conclude unknown
 
@@ -324,6 +400,29 @@ Structured claim corrections belong in a new approved candidate and target an
 exact claim revision. `knowledge rollback` only **proposes** forward retained
 selection: sign its returned plan and `knowledge admit` it normally. Later
 corrections remain; use explicit historical retrieval to inspect the old state.
+
+`selection-context.json` has exactly `contexts` and `target_use`. Copy the current
+named contexts from `knowledge contexts`: inputs name the current predecessor
+snapshot and explicit desired times. The operation preserves every context's
+policy, sources, target and use, allowing only a new snapshot and nondecreasing
+times. It selects the retained release's active refs, not every claim stored in
+that release's ledger. Sign the returned schema-3 selection plan normally.
+
+### Reading and extending signed schema-2 history
+
+Completed old releases remain authenticated under their exact original operation
+bytes, policy anchor and signature domain. Discovery exposes their one approved
+context as `legacy`; use that ID for historical queries. A first schema-3
+candidate uses the current `expected_snapshot`, preserves the full retained KB
+prefix and capture IDs, and explicitly keeps `legacy` or lists it in
+`retired_contexts`. Add other contexts and assignments without broadening the old
+claim scopes. Never relabel an old plan or approval as schema 3.
+
+Published old journals can be authenticated read-only as already applied.
+Unfinished schema-2 operations are not resumed by the new writer: re-author an
+explicit candidate against the actual current predecessor and obtain fresh
+approval. A schema-2 operation cannot follow a schema-3 completed release.
+
 
 ```sh
 uv run kctx --json knowledge backup "$NEW_BACKUP_DIRECTORY"

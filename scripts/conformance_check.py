@@ -86,6 +86,22 @@ def python_handle(req: dict[str, object]) -> dict[str, object]:
         return wire.loads_request(wire.evaluate_json(_str(req["raw_request"])))
     environment = wire.obj(req.get("trusted_environment", {"approvals": [], "selections": [], "retained": []}),
                            "approvals selections retained")
+    if req.get("schema_version") == 3:
+        from kctx.semantics import workflow_reference, workflow_wire
+
+        portfolio_approvals = wire.items(
+            environment["approvals"], workflow_wire.dec_verified_portfolio_approval
+        )
+        portfolio_selections = wire.items(
+            environment["selections"], workflow_wire.dec_verified_portfolio_selection_approval
+        )
+        portfolios = wire.items(environment["retained"], workflow_wire.dec_portfolio_state)
+        if len({state.kb.snapshot for state in portfolios}) != len(portfolios):
+            raise ValueError("duplicate trusted retained snapshot")
+        return workflow_reference.evaluate_request(
+            request_payload(req), trusted_approvals=portfolio_approvals,
+            trusted_selections=portfolio_selections, retained=portfolios
+        )
     approvals = wire.items(environment["approvals"],
                            lambda value: VerifiedApproval(wire.dec_plan(wire.obj(value, "plan")["plan"])))
     selections = wire.items(environment["selections"],

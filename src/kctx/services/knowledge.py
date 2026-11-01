@@ -38,6 +38,7 @@ from kctx.domain.ids import (
     AuthorityKeyId,
     ContentDigest,
     ContentId,
+    ContextId,
     DoltCommitId,
     OperationId,
     PlanId,
@@ -54,16 +55,13 @@ from kctx.semantics.checker import accepted, assess, assessment_gaps
 from kctx.semantics.model import (
     KB,
     Atomic,
-    Authority,
     Claim,
     ClaimRef,
     CommitOutcome,
     Conjunction,
     Context,
     Formula,
-    Plan,
     ReceiptResult,
-    SelectionPlan,
     SelectionState,
     SourceSelection,
     VerifiedApproval,
@@ -71,26 +69,48 @@ from kctx.semantics.model import (
     find_claim,
     narrower,
 )
+from kctx.semantics.portfolio import (
+    apply_portfolio,
+    apply_portfolio_selection,
+    assignment_valid,
+    context_evolution_valid,
+    context_family_valid,
+    portfolio_plan_valid,
+    portfolio_selection_valid,
+    query_context_allowed,
+)
 from kctx.semantics.wellformed import well_formed
 from kctx.semantics.wire import (
-    dec_context,
     dec_kb,
     dec_ref,
     dec_source_selection,
-    dec_witness,
     enc_assessment,
-    enc_context,
     enc_kb,
     enc_ref,
-    enc_source_selection,
 )
-from kctx.semantics.workflow import apply_plan, apply_selection, plan_valid, selection_plan_valid
+from kctx.semantics.workflow import apply_plan, apply_selection, preserves_prefix
+from kctx.semantics.workflow_models import (
+    NamedContext,
+    PortfolioPlan,
+    PortfolioSelectionPlan,
+    PortfolioState,
+    VerifiedPortfolioApproval,
+    VerifiedPortfolioSelectionApproval,
+)
+from kctx.semantics.workflow_wire import (
+    dec_claim_assignment,
+    dec_named_context,
+    enc_named_context,
+)
 from kctx.services.knowledge_migration import Disposition, inspect_legacy, safe_restore_path
 from kctx.services.knowledge_models import (
-    AdmissionPlan,
     Approval,
     CaptureKind,
-    ReleaseSelectionPlan,
+    LegacyAdmissionPlan,
+    LegacyReleaseSelectionPlan,
+    Operation,
+    PortfolioAdmissionPlan,
+    PortfolioReleaseSelectionPlan,
     SourceCapture,
     decode_hex,
     decode_journal,
@@ -99,7 +119,15 @@ from kctx.services.knowledge_models import (
     decode_value,
 )
 
-TOOLCHAIN = "kctx-semantic-2.0.0"
+TOOLCHAIN = "kctx-semantic-2.0.0-workflow-3"
+LEGACY_TOOLCHAIN = "kctx-semantic-2.0.0"
+
+VerifiedOperation = (
+    VerifiedApproval
+    | VerifiedSelectionApproval
+    | VerifiedPortfolioApproval
+    | VerifiedPortfolioSelectionApproval
+)
 
 
 def _formula_assets(formula: Formula, assets: frozenset[str]) -> frozenset[str]:
@@ -203,9 +231,7 @@ class KnowledgeEngine:
         current = self.git.current()
         return ReleaseId(current) if current else None
 
-    def _release_operation(
-        self, release: ReleaseId
-    ) -> tuple[JsonObject, AdmissionPlan | ReleaseSelectionPlan, Approval]:
+    def _release_operation(self, release: ReleaseId) -> tuple[JsonObject, Operation, Approval]:
         manifest = self.git.manifest(release.val)
         plan = decode_operation(
             decode(
@@ -227,8 +253,19 @@ class KnowledgeEngine:
         if release is None:
             return KB(SnapshotId("bootstrap:" + text(policy["kb_id"], "kb_id")))
         manifest, plan, approval = self._release_operation(release)
-        if manifest["toolchain"] != TOOLCHAIN:
+        legacy = isinstance(plan, (LegacyAdmissionPlan, LegacyReleaseSelectionPlan))
+        if manifest["schema_version"] != (2 if legacy else 3) or manifest["toolchain"] != (
+            LEGACY_TOOLCHAIN if legacy else TOOLCHAIN
+        ):
             raise KctxError("malformed", "unsupported release toolchain")
+        if (
+            legacy
+            and plan.base is not None
+            and self.git.manifest(plan.base.val)["schema_version"] != 2
+        ):
+            raise KctxError(
+                "conflict", "historical schema2 operations cannot follow a workflow schema3 release"
+            )
         _, verified = self._verify(plan, approval, policy_source=release)
         if (
             manifest["operation"] != plan.id.val
@@ -236,9 +273,13 @@ class KnowledgeEngine:
             or manifest["kb_id"] != policy["kb_id"]
         ):
             raise KctxError("conflict", "release differs from the authenticated operation")
-        expected_kind = "admission" if isinstance(plan, AdmissionPlan) else "selection"
+        expected_kind = (
+            "admission"
+            if isinstance(plan, (LegacyAdmissionPlan, PortfolioAdmissionPlan))
+            else "selection"
+        )
         if manifest["operation_kind"] != expected_kind or (
-            isinstance(plan, ReleaseSelectionPlan)
+            isinstance(plan, (LegacyReleaseSelectionPlan, PortfolioReleaseSelectionPlan))
             and manifest["retained_release"] != plan.retained.val
         ):
             raise KctxError("conflict", "release operation kind or retained target differs")
@@ -251,7 +292,12 @@ class KnowledgeEngine:
             raise KctxError(
                 "conflict", "native generation differs from the authenticated candidate"
             )
-        if self._sources(release) != plan.context.sources or self._selected(release) != selected:
+        contexts_match = (
+            self._sources(release) == plan.context.sources
+            if isinstance(plan, (LegacyAdmissionPlan, LegacyReleaseSelectionPlan))
+            else self._named_contexts(release) == plan.semantic.contexts
+        )
+        if not contexts_match or self._selected(release) != selected:
             raise KctxError(
                 "conflict",
                 "release source or claim selection differs from the authenticated operation",
@@ -286,25 +332,58 @@ class KnowledgeEngine:
 
     def _evaluate_operation(
         self,
-        plan: AdmissionPlan | ReleaseSelectionPlan,
-        verified: VerifiedApproval | VerifiedSelectionApproval,
+        plan: Operation,
+        verified: VerifiedOperation,
         policy: JsonObject,
         *,
         capture_release: ReleaseId | None = None,
     ) -> tuple[KB, tuple[SourceCapture, ...], tuple[ClaimRef, ...]]:
         base = self._base(plan.base, policy)
-        if isinstance(plan, AdmissionPlan):
+        if isinstance(plan, (PortfolioAdmissionPlan, PortfolioReleaseSelectionPlan)):
+            state = PortfolioState(base, self._selected(plan.base), self._named_contexts(plan.base))
+            if isinstance(plan, PortfolioAdmissionPlan):
+                if not isinstance(verified, VerifiedPortfolioApproval):
+                    raise KctxError("conflict", "wrong verified portfolio capability")
+                captures = self._validate_sources(
+                    plan, base, policy, capture_release=capture_release
+                )
+                result = apply_portfolio(state, (), plan.semantic, trusted_approvals=(verified,))
+            else:
+                if not isinstance(verified, VerifiedPortfolioSelectionApproval):
+                    raise KctxError("conflict", "wrong verified portfolio selection capability")
+                self._require_in_history(plan.retained, plan.base)
+                retained_kb = self._base(plan.retained, policy)
+                retained = PortfolioState(
+                    retained_kb, self._selected(plan.retained), self._named_contexts(plan.retained)
+                )
+                result = apply_portfolio_selection(
+                    state, (), plan.semantic, trusted_approvals=(verified,), retained=(retained,)
+                )
+                prior = self.git.manifest(plan.base.val)
+                captures = tuple(
+                    SourceCapture.decode(row)
+                    for row in self.store.rows(
+                        "captures", DoltCommitId(text(prior["dolt_commit"], "dolt_commit"))
+                    )
+                )
+            if result.outcome is not CommitOutcome.APPLIED:
+                raise KctxError(
+                    "conflict", "complete approved portfolio failed semantic validation"
+                )
+            self._assert_unused_snapshot(result.state.kb.snapshot, plan.base)
+            return result.state.kb, captures, result.state.selected
+        if isinstance(plan, LegacyAdmissionPlan):
             if not isinstance(verified, VerifiedApproval):
                 raise KctxError("conflict", "wrong verified operation capability")
             captures = self._validate_sources(plan, base, policy, capture_release=capture_release)
-            result = apply_plan(
+            legacy_result = apply_plan(
                 base, plan.context, (), plan.semantic, trusted_approvals=(verified,)
             )
-            if result.outcome is not CommitOutcome.APPLIED:
+            if legacy_result.outcome is not CommitOutcome.APPLIED:
                 raise KctxError(
                     "conflict", "complete approved candidate failed semantic validation"
                 )
-            candidate = result.kb
+            candidate = legacy_result.kb
             selected = self._selected(plan.base) + tuple(
                 claim.ref for claim in candidate.claims[len(base.claims) :]
             )
@@ -341,22 +420,22 @@ class KnowledgeEngine:
         return candidate, captures, selected
 
     @staticmethod
-    def _admission_row(
-        plan: AdmissionPlan | ReleaseSelectionPlan, approval: Approval
-    ) -> JsonObject:
+    def _admission_row(plan: Operation, approval: Approval) -> JsonObject:
         return {
             "id": plan.id.val,
             "actor": approval.key.val,
             "signature": approval.signature.hex(),
             "policy": plan.policy.val,
-            "target_use": plan.context.intended_use,
+            "target_use": plan.context.intended_use
+            if isinstance(plan, (LegacyAdmissionPlan, LegacyReleaseSelectionPlan))
+            else plan.target_use,
             "base": plan.base.val if plan.base else None,
         }
 
     def _validate_native_operation(
         self,
         commit: DoltCommitId,
-        plan: AdmissionPlan | ReleaseSelectionPlan,
+        plan: Operation,
         approval: Approval,
         captures: tuple[SourceCapture, ...],
     ) -> None:
@@ -379,7 +458,7 @@ class KnowledgeEngine:
     def _validate_release_hint(
         self,
         release: ReleaseId,
-        plan: AdmissionPlan | ReleaseSelectionPlan,
+        plan: Operation,
         approval: Approval,
         policy: JsonObject,
         commit: DoltCommitId | None = None,
@@ -398,7 +477,7 @@ class KnowledgeEngine:
     def _retain_prepared(
         self,
         release: ReleaseId,
-        plan: AdmissionPlan | ReleaseSelectionPlan,
+        plan: Operation,
         approval: Approval,
         policy: JsonObject,
     ) -> None:
@@ -475,7 +554,7 @@ class KnowledgeEngine:
 
     def _validate_sources(
         self,
-        plan: AdmissionPlan,
+        plan: LegacyAdmissionPlan | PortfolioAdmissionPlan,
         base: KB,
         policy: JsonObject,
         *,
@@ -499,14 +578,8 @@ class KnowledgeEngine:
             ):
                 raise KctxError("conflict", "observation lacks exact retained capture provenance")
         for attestation in plan.semantic.candidate.attestations[len(base.attestations) :]:
-            if attestation.authority != plan.semantic.authority.actor:
+            if attestation.authority != ActorId(plan.actor.val):
                 raise KctxError("conflict", "new attestation is not bound to approving authority")
-        previous = {item.source: item for item in self._sources(plan.base)}
-        selected = {item.source: item for item in plan.context.sources}
-        if len(selected) != len(plan.context.sources) or previous.keys() - selected.keys():
-            raise KctxError(
-                "conflict", "source selection duplicates or drops a previously selected source"
-            )
         prior_capture_ids: set[SourceCaptureId] = set()
         if plan.base:
             prior_manifest = self.git.manifest(plan.base.val)
@@ -516,29 +589,49 @@ class KnowledgeEngine:
                     "captures", DoltCommitId(text(prior_manifest["dolt_commit"], "dolt_commit"))
                 )
             }
-        for selection in plan.context.sources:
-            matching = tuple(
-                capture
-                for capture in captures
-                if capture.source == selection.source
-                and capture.revision == selection.revision
-                and self._content_matches(selection.content, capture, capture_release)
+        previous_contexts = {entry.id: entry.context for entry in self._named_contexts(plan.base)}
+        contexts = (
+            (NamedContext(ContextId("legacy"), plan.context),)
+            if isinstance(plan, LegacyAdmissionPlan)
+            else plan.semantic.contexts
+        )
+        for named in contexts:
+            previous_context = previous_contexts.get(named.id)
+            previous = (
+                {}
+                if previous_context is None
+                else {item.source: item for item in previous_context.sources}
             )
-            if not matching:
-                raise KctxError(
-                    "conflict", "selected source identity has no exact retained capture"
-                )
-            if (
-                selection.source in previous
-                and selection != previous[selection.source]
-                and not any(capture.id not in prior_capture_ids for capture in matching)
-            ):
+            selected = {item.source: item for item in named.context.sources}
+            if len(selected) != len(named.context.sources) or previous.keys() - selected.keys():
                 raise KctxError(
                     "conflict",
-                    "source replacement requires an explicit new capture, not an old retained observation",
+                    f"context {named.id.val}: source selection duplicates or drops a previously selected source",
                 )
+            for selection in named.context.sources:
+                matching = tuple(
+                    capture
+                    for capture in captures
+                    if capture.source == selection.source
+                    and capture.revision == selection.revision
+                    and self._content_matches(selection.content, capture, capture_release)
+                )
+                if not matching:
+                    raise KctxError(
+                        "conflict",
+                        f"context {named.id.val}: selected source identity has no exact retained capture",
+                    )
+                if (
+                    selection.source in previous
+                    and selection != previous[selection.source]
+                    and not any(capture.id not in prior_capture_ids for capture in matching)
+                ):
+                    raise KctxError(
+                        "conflict",
+                        f"context {named.id.val}: source replacement requires an explicit new capture, not an old retained observation",
+                    )
+            self._validate_policy_context(named.context, policy)
         self._validate_receipts(plan, base)
-        self._validate_policy_context(plan.context, policy)
         return captures
 
     def _validate_policy_context(self, context: Context, policy: JsonObject) -> None:
@@ -560,34 +653,26 @@ class KnowledgeEngine:
             )
 
     def _validate_query_context(
-        self, release: ReleaseId, context: Context, policy: JsonObject
+        self, state: PortfolioState, context_id: ContextId, context: Context, policy: JsonObject
     ) -> None:
         self._validate_policy_context(context, policy)
-        _, plan, _ = self._release_operation(release)
-        approved = plan.context
-        if (
-            context.policy != approved.policy
-            or context.intended_use != approved.intended_use
-            or context.semantic_version != approved.semantic_version
-            or context.ruleset != approved.ruleset
-            or context.checker != approved.checker
-            or context.sources != approved.sources
-        ):
+        if not query_context_allowed(state, context_id, context):
             raise KctxError(
                 "conflict",
-                "query policy, use, versions or sources differ from the authenticated release context",
+                "query context differs from the exact authenticated named context, widens its target, or predates its time",
             )
-        if not narrower(context.target, approved.target):
-            raise KctxError("conflict", "query target widens the authenticated release target")
-        if context.now < approved.now:
-            raise KctxError("conflict", "query time predates the authenticated publication context")
 
     @staticmethod
-    def _validate_receipts(plan: AdmissionPlan, base: KB) -> None:
-        execution_context = replace(plan.context, snapshot=plan.semantic.candidate.snapshot)
+    def _validate_receipts(plan: LegacyAdmissionPlan | PortfolioAdmissionPlan, base: KB) -> None:
+        contexts = (
+            (replace(plan.context, snapshot=plan.semantic.candidate.snapshot),)
+            if isinstance(plan, LegacyAdmissionPlan)
+            else tuple(named.context for named in plan.semantic.contexts)
+        )
         for receipt in plan.semantic.candidate.receipts[len(base.receipts) :]:
+            execution_context = receipt.context
             if (
-                receipt.context != execution_context
+                execution_context not in contexts
                 or receipt.context.checker.val != "kctx-2"
                 or receipt.expires_at < execution_context.now
             ):
@@ -615,9 +700,32 @@ class KnowledgeEngine:
     def _sources(self, release: ReleaseId | None) -> tuple[SourceSelection, ...]:
         if release is None:
             return ()
+        if self.git.manifest(release.val)["schema_version"] != 2:
+            raise KctxError(
+                "conflict", "legacy source selection cannot reinterpret a portfolio release"
+            )
         return tuple(
             decode_value(dec_source_selection, value)
             for value in self._list(self.git.manifest(release.val)["sources"])
+        )
+
+    def _named_contexts(self, release: ReleaseId | None) -> tuple[NamedContext, ...]:
+        """Read only after authenticating the release through _base."""
+        if release is None:
+            return ()
+        manifest = self.git.manifest(release.val)
+        if manifest["schema_version"] == 3:
+            return tuple(
+                decode_value(dec_named_context, value) for value in self._list(manifest["contexts"])
+            )
+        _, plan, _ = self._release_operation(release)
+        if not isinstance(plan, (LegacyAdmissionPlan, LegacyReleaseSelectionPlan)):
+            raise KctxError("conflict", "legacy manifest requires legacy signed operation")
+        return (
+            NamedContext(
+                ContextId("legacy"),
+                replace(plan.context, snapshot=SnapshotId(text(manifest["snapshot"], "snapshot"))),
+            ),
         )
 
     def _assert_unused_snapshot(self, snapshot: SnapshotId, base: ReleaseId | None) -> None:
@@ -657,9 +765,14 @@ class KnowledgeEngine:
         )
 
     def rollback(
-        self, retained_release: ReleaseId, context: Context, authority_key: AuthorityKeyId
-    ) -> ReleaseSelectionPlan:
-        """Propose a signed forward selection, never rewind a completed pointer."""
+        self,
+        retained_release: ReleaseId,
+        contexts: tuple[NamedContext, ...],
+        authority_key: AuthorityKeyId,
+        *,
+        target_use: str,
+    ) -> PortfolioReleaseSelectionPlan:
+        """Select exact retained active refs while preserving the current ledger."""
         with writer_lock(self.lock):
             base_release = self._current()
             if base_release is None:
@@ -668,36 +781,39 @@ class KnowledgeEngine:
             policy_id, policy = self._policy(base_release)
             base = self._base(base_release, policy)
             retained = self._base(retained_release, policy)
-            self._validate_policy_context(context, policy)
-            if context.sources != self._sources(base_release):
-                raise KctxError("conflict", "rollback must preserve current source selections")
-            self._key(policy, authority_key, context.intended_use)
+            if any(named.context.snapshot != base.snapshot for named in contexts):
+                raise KctxError(
+                    "conflict", "rollback input contexts must identify current predecessor snapshot"
+                )
+            self._authorize_contexts(contexts, target_use, authority_key, policy)
             material: JsonObject = {
                 "base": base_release.val,
                 "retained": retained_release.val,
-                "context": object_value(enc_context(context)),
+                "contexts": [object_value(enc_named_context(named)) for named in contexts],
                 "actor": authority_key.val,
                 "policy": policy_id.val,
+                "target_use": target_use,
             }
             snapshot = SnapshotId("selection:" + digest(canonical(material)))
             self._assert_unused_snapshot(snapshot, base_release)
-            semantic = SelectionPlan(
+            semantic = PortfolioSelectionPlan(
                 OperationId("pending"),
                 base.snapshot,
                 retained.snapshot,
                 snapshot,
-                tuple(claim.ref for claim in retained.claims),
                 ActorId(authority_key.val),
-                context.policy.id,
-                context.intended_use,
-                context=context,
+                tuple(
+                    replace(named, context=replace(named.context, snapshot=snapshot))
+                    for named in contexts
+                ),
+                self._selected(retained_release),
             )
-            plan = ReleaseSelectionPlan(
+            plan = PortfolioReleaseSelectionPlan(
                 PlanId("0" * 64),
                 base_release,
                 retained_release,
                 policy_id,
-                context,
+                target_use,
                 semantic,
                 self._retain(self._toolchain_bytes()),
             )
@@ -705,11 +821,18 @@ class KnowledgeEngine:
             plan = replace(
                 plan, id=identity, semantic=replace(semantic, id=OperationId(identity.val))
             )
-            if not selection_plan_valid(
-                SelectionState(base, self._selected(base_release)),
-                context,
+            if not portfolio_selection_valid(
+                PortfolioState(
+                    base, self._selected(base_release), self._named_contexts(base_release)
+                ),
                 plan.semantic,
-                retained=(retained,),
+                retained=(
+                    PortfolioState(
+                        retained,
+                        self._selected(retained_release),
+                        self._named_contexts(retained_release),
+                    ),
+                ),
             ):
                 raise KctxError(
                     "conflict", "retained snapshot is not a compatible authorized selection"
@@ -718,7 +841,7 @@ class KnowledgeEngine:
             return plan
 
     @staticmethod
-    def _identity(plan: AdmissionPlan | ReleaseSelectionPlan) -> PlanId:
+    def _identity(plan: Operation) -> PlanId:
         record = plan.wire()
         del record["id"]
         semantic = object_value(record["plan"])
@@ -726,59 +849,76 @@ class KnowledgeEngine:
         record["plan"] = semantic
         return PlanId(digest(canonical(record)))
 
-    def propose(self, candidate: JsonObject, target_use: str, now: int) -> AdmissionPlan:
-        if set(candidate) != {"kb", "capture_ids", "context", "claim", "witness", "authority_key"}:
+    def propose(self, candidate: JsonObject, target_use: str, now: int) -> PortfolioAdmissionPlan:
+        required = {
+            "schema_version",
+            "expected_snapshot",
+            "kb",
+            "capture_ids",
+            "contexts",
+            "assignments",
+            "retired_contexts",
+            "authority_key",
+        }
+        if (
+            set(candidate) != required
+            or type(candidate["schema_version"]) is not int
+            or candidate["schema_version"] != 3
+        ):
             raise KctxError(
-                "malformed", "candidate requires kb,capture_ids,context,claim,witness,authority_key"
+                "malformed", "candidate requires exact workflow schema3 portfolio fields"
             )
         with writer_lock(self.lock):
             base_release = self._current()
             policy_id, policy = self._policy(base_release)
             base = self._base(base_release, policy)
-            kb = decode_value(dec_kb, candidate["kb"])
-            self._assert_unused_snapshot(kb.snapshot, base_release)
-            context = decode_value(dec_context, candidate["context"])
             if (
-                context.snapshot != base.snapshot
-                or context.now != now
-                or context.intended_use != target_use
+                SnapshotId(text(candidate["expected_snapshot"], "expected_snapshot"))
+                != base.snapshot
             ):
                 raise KctxError(
-                    "conflict", "proposal context must identify exact base, time and intended use"
+                    "conflict", "proposal expected snapshot differs from current predecessor"
                 )
-            claim = decode_value(dec_ref, candidate["claim"])
-            record = find_claim(kb, claim)
-            if record is None:
-                raise KctxError("malformed", "designated candidate claim missing")
-            actor = AuthorityKeyId(text(candidate["authority_key"], "authority_key"))
-            authority = Authority(
-                actor=ActorId(actor.val),
-                target=claim,
-                intended_use=target_use,
-                policy=context.policy.id,
-                statement=record.statement,
-                approved=kb,
-                approvals=kb.claims[len(base.claims) :],
-                context=context,
+            kb = decode_value(dec_kb, candidate["kb"])
+            self._assert_unused_snapshot(kb.snapshot, base_release)
+            contexts = tuple(
+                decode_value(dec_named_context, value)
+                for value in self._list(candidate["contexts"])
             )
-            raw_ids = candidate["capture_ids"]
-            if not isinstance(raw_ids, list):
-                raise KctxError("malformed", "capture_ids must be an array")
+            if any(
+                named.context.snapshot != kb.snapshot or named.context.now != now
+                for named in contexts
+            ):
+                raise KctxError(
+                    "conflict", "proposal contexts must identify exact candidate snapshot and time"
+                )
+            actor = AuthorityKeyId(text(candidate["authority_key"], "authority_key"))
+            self._authorize_contexts(contexts, target_use, actor, policy)
             placeholder = PlanId("0" * 64)
-            semantic = Plan(
+            semantic = PortfolioPlan(
                 OperationId(placeholder.val),
                 base.snapshot,
                 kb,
-                authority,
-                claim,
-                decode_value(dec_witness, candidate["witness"]),
+                ActorId(actor.val),
+                contexts,
+                tuple(
+                    decode_value(dec_claim_assignment, value)
+                    for value in self._list(candidate["assignments"])
+                ),
+                tuple(
+                    ContextId(text(value, "retired context"))
+                    for value in self._list(candidate["retired_contexts"])
+                ),
             )
-            plan = AdmissionPlan(
+            plan = PortfolioAdmissionPlan(
                 placeholder,
                 base_release,
                 policy_id,
-                tuple(SourceCaptureId(text(item, "capture_id")) for item in raw_ids),
-                context,
+                tuple(
+                    SourceCaptureId(text(item, "capture_id"))
+                    for item in self._list(candidate["capture_ids"])
+                ),
+                target_use,
                 semantic,
                 self._retain(self._toolchain_bytes()),
             )
@@ -786,23 +926,66 @@ class KnowledgeEngine:
             plan = replace(
                 plan, id=identity, semantic=replace(semantic, id=OperationId(identity.val))
             )
-            self._key(policy, actor, target_use)
             self._validate_sources(plan, base, policy)
-            if not plan_valid(base, context, plan.semantic):
-                gaps = assessment_gaps(
-                    plan.semantic.candidate,
-                    replace(context, snapshot=plan.semantic.candidate.snapshot),
-                    plan.semantic.claim,
-                )
+            state = PortfolioState(
+                base, self._selected(base_release), self._named_contexts(base_release)
+            )
+            if not portfolio_plan_valid(state, plan.semantic):
+                if (
+                    not well_formed(kb)
+                    or not preserves_prefix(base, kb)
+                    or not context_family_valid(kb, contexts)
+                    or not context_evolution_valid(
+                        state.contexts, contexts, plan.semantic.retired_contexts
+                    )
+                    or tuple(item.claim for item in plan.semantic.assignments)
+                    != tuple(claim.ref for claim in kb.claims[len(base.claims) :])
+                ):
+                    raise KctxError(
+                        "conflict",
+                        "candidate rejected by structural preflight: invalid portfolio structure, prefix, assignment order, or context evolution",
+                    )
+                diagnostics: list[str] = []
+                for assignment in plan.semantic.assignments:
+                    if not assignment_valid(kb, contexts, assignment):
+                        named = next(
+                            (entry for entry in contexts if entry.id == assignment.context), None
+                        )
+                        gaps = (
+                            ()
+                            if named is None
+                            else assessment_gaps(kb, named.context, assignment.claim)
+                        )
+                        diagnostics.append(
+                            f"{assignment.claim.id.val}@{assignment.claim.rev.val} context {assignment.context.val}: "
+                            + ("; ".join(gaps) or "invalid assignment or witness")
+                        )
                 raise KctxError(
                     "conflict",
-                    "candidate rejected by calculus preflight"
-                    + (f": {'; '.join(gaps)}" if gaps else ""),
+                    "candidate rejected by calculus preflight: "
+                    + (
+                        "; ".join(diagnostics)
+                        or "invalid portfolio structure, prefix, or context evolution"
+                    ),
                 )
             save(self.root / "plans" / (identity.val + ".json"), plan.wire())
             return plan
 
-    def _plan(self, identity: PlanId) -> AdmissionPlan | ReleaseSelectionPlan:
+    def _authorize_contexts(
+        self,
+        contexts: tuple[NamedContext, ...],
+        target_use: str,
+        actor: AuthorityKeyId,
+        policy: JsonObject,
+    ) -> None:
+        if target_use not in {named.context.intended_use for named in contexts}:
+            raise KctxError("conflict", "declared operation use must occur in portfolio contexts")
+        self._key(policy, actor, target_use)
+        for named in contexts:
+            self._key(policy, actor, named.context.intended_use)
+            self._validate_policy_context(named.context, policy)
+
+    def _plan(self, identity: PlanId) -> Operation:
         plan = decode_operation(load(self.root / "plans" / (identity.val + ".json")))
         if (
             plan.id != identity
@@ -828,6 +1011,8 @@ class KnowledgeEngine:
 
     def sign(self, identity: PlanId, private_key: Path, key_id: AuthorityKeyId) -> Approval:
         plan = self._plan(identity)
+        if not isinstance(plan, (PortfolioAdmissionPlan, PortfolioReleaseSelectionPlan)):
+            raise KctxError("conflict", "historical schema2 operations are read-only")
         if plan.actor != key_id:
             raise KctxError("conflict", "signer is not designated proposal authority")
         try:
@@ -839,22 +1024,27 @@ class KnowledgeEngine:
         if not isinstance(key, Ed25519PrivateKey):
             raise KctxError("malformed", "approval requires Ed25519 PEM private key")
         approval = Approval(
-            identity, key_id, key.sign(b"kctx-operation-v2\x00" + canonical(plan.wire()))
+            identity, key_id, key.sign(b"kctx-operation-v3\x00" + canonical(plan.wire()))
         )
         self._verify(plan, approval)
         return approval
 
     def _verify(
         self,
-        plan: AdmissionPlan | ReleaseSelectionPlan,
+        plan: Operation,
         approval: Approval,
         *,
         policy_source: ReleaseId | None = None,
-    ) -> tuple[JsonObject, VerifiedApproval | VerifiedSelectionApproval]:
+    ) -> tuple[JsonObject, VerifiedOperation]:
         if plan.semantic.id.val != plan.id.val or self._identity(plan) != plan.id:
             raise KctxError(
                 "conflict", "signed operation has inconsistent canonical inner and outer identities"
             )
+        legacy = isinstance(plan, (LegacyAdmissionPlan, LegacyReleaseSelectionPlan))
+        if approval.schema_version != (2 if legacy else 3):
+            raise KctxError("conflict", "approval version differs from signed operation")
+        if legacy and policy_source is None:
+            raise KctxError("conflict", "historical schema2 operations are read-only")
         identity, policy = self._policy(policy_source or plan.base or self._current())
         if identity != plan.policy or approval.plan != plan.id or approval.key != plan.actor:
             raise KctxError("conflict", "approval is bound to different plan, policy or actor")
@@ -862,22 +1052,33 @@ class KnowledgeEngine:
             digest(self._toolchain_bytes())
         ):
             raise KctxError("stale", "operation toolchain inputs changed since proposal")
-        declared_context = (
-            plan.semantic.authority.context
-            if isinstance(plan, AdmissionPlan)
-            else plan.semantic.context
-        )
-        if declared_context != plan.context:
-            raise KctxError("conflict", "signed semantic operation and service context differ")
+        if isinstance(plan, (LegacyAdmissionPlan, LegacyReleaseSelectionPlan)):
+            declared_context = (
+                plan.semantic.authority.context
+                if isinstance(plan, LegacyAdmissionPlan)
+                else plan.semantic.context
+            )
+            if declared_context != plan.context:
+                raise KctxError("conflict", "signed semantic operation and service context differ")
+            target_use = plan.context.intended_use
+        else:
+            self._authorize_contexts(plan.semantic.contexts, plan.target_use, plan.actor, policy)
+            target_use = plan.target_use
         try:
-            self._key(policy, approval.key, plan.context.intended_use).verify(
-                approval.signature, b"kctx-operation-v2\x00" + canonical(plan.wire())
+            self._key(policy, approval.key, target_use).verify(
+                approval.signature,
+                (b"kctx-operation-v2\x00" if legacy else b"kctx-operation-v3\x00")
+                + canonical(plan.wire()),
             )
         except InvalidSignature as exc:
             raise KctxError("conflict", "invalid detached approval signature") from exc
-        return policy, VerifiedApproval(plan.semantic) if isinstance(
-            plan, AdmissionPlan
-        ) else VerifiedSelectionApproval(plan.semantic)
+        if isinstance(plan, LegacyAdmissionPlan):
+            return policy, VerifiedApproval(plan.semantic)
+        if isinstance(plan, LegacyReleaseSelectionPlan):
+            return policy, VerifiedSelectionApproval(plan.semantic)
+        if isinstance(plan, PortfolioAdmissionPlan):
+            return policy, VerifiedPortfolioApproval(plan.semantic)
+        return policy, VerifiedPortfolioSelectionApproval(plan.semantic)
 
     def _phase(self, journal: JsonObject, phase: str) -> None:
         journal["phase"] = phase
@@ -898,7 +1099,7 @@ class KnowledgeEngine:
                     raise KctxError("conflict", "conflicting operation replay")
             else:
                 journal = {
-                    "schema_version": 2,
+                    "schema_version": 3,
                     "id": identity.val,
                     "approval": approval.wire(),
                     "phase": "prepared",
@@ -908,14 +1109,31 @@ class KnowledgeEngine:
                 self._phase(journal, "prepared")
             return self._finish(plan, approval, journal)
 
-    def _finish(
-        self, plan: AdmissionPlan | ReleaseSelectionPlan, approval: Approval, journal: JsonObject
-    ) -> JsonObject:
+    def _finish(self, plan: Operation, approval: Approval, journal: JsonObject) -> JsonObject:
         journal = decode_journal(journal, plan.id)
+        if journal["schema_version"] != plan.wire()["schema_version"]:
+            raise KctxError("conflict", "journal version differs from signed operation")
         if journal["approval"] != approval.wire():
             raise KctxError(
                 "conflict", "journal approval differs from the supplied signed operation"
             )
+        if isinstance(plan, (LegacyAdmissionPlan, LegacyReleaseSelectionPlan)):
+            if journal["phase"] != "published":
+                raise KctxError(
+                    "conflict",
+                    "historical schema2 pending journals cannot execute current mutations",
+                )
+            completed = ReleaseId(text(journal["release"], "release"))
+            self._require_completed(completed)
+            _, historical_policy = self._policy(completed)
+            self._validate_release_hint(
+                completed,
+                plan,
+                approval,
+                historical_policy,
+                DoltCommitId(text(journal["dolt_commit"], "dolt_commit")),
+            )
+            return {"outcome": "already_applied", "release": completed.val, "plan": plan.id.val}
         policy, verified = self._verify(plan, approval)
         release_value = journal.get("release")
         release = ReleaseId(text(release_value, "release")) if release_value is not None else None
@@ -994,7 +1212,7 @@ class KnowledgeEngine:
             artifacts[plan.toolchain.val] = self._artifact(plan.toolchain, plan.base)
             artifact_ids: list[JsonValue] = [identity for identity in sorted(artifacts)]
             manifest: JsonObject = {
-                "schema_version": 2,
+                "schema_version": 3,
                 "semantic_version": "2.0.0",
                 "snapshot": candidate_kb.snapshot.val,
                 "kb_id": policy["kb_id"],
@@ -1009,13 +1227,13 @@ class KnowledgeEngine:
             }
             manifest["toolchain_artifact"] = plan.toolchain.val
             manifest["selected"] = [object_value(enc_ref(ref)) for ref in selected]
-            manifest["sources"] = [
-                object_value(enc_source_selection(source)) for source in plan.context.sources
+            manifest["contexts"] = [
+                object_value(enc_named_context(named)) for named in plan.semantic.contexts
             ]
             manifest["operation_kind"] = (
-                "admission" if isinstance(plan, AdmissionPlan) else "selection"
+                "admission" if isinstance(plan, PortfolioAdmissionPlan) else "selection"
             )
-            if isinstance(plan, ReleaseSelectionPlan):
+            if isinstance(plan, PortfolioReleaseSelectionPlan):
                 manifest["retained_release"] = plan.retained.val
             release = ReleaseId(
                 self.git.prepare(manifest, plan.base.val if plan.base else None, artifacts)
@@ -1054,62 +1272,107 @@ class KnowledgeEngine:
         continuation: JsonObject | None = None,
         release: ReleaseId | None = None,
         *,
+        context_id: ContextId,
         assets: tuple[AssetId, ...] | None = None,
+    ) -> JsonObject:
+        release = self._query_release(release, continuation)
+        _, policy = self._policy(release)
+        kb = self._base(release, policy)
+        state = PortfolioState(kb, self._selected(release), self._named_contexts(release))
+        self._validate_query_context(state, context_id, context, policy)
+        return self._context_page(
+            state,
+            (NamedContext(context_id, context),),
+            claims,
+            release,
+            limit,
+            continuation,
+            assets=assets,
+        )
+
+    def _query_release(
+        self, release: ReleaseId | None, continuation: JsonObject | None
+    ) -> ReleaseId:
+        if continuation is not None:
+            pinned = ReleaseId(text(continuation.get("release"), "release"))
+            if release is not None and release != pinned:
+                raise KctxError("conflict", "continuation belongs to another release")
+            release = pinned
+        release = release or self._current()
+        if release is None:
+            raise KctxError("not-found", "no completed knowledge release")
+        self._require_completed(release)
+        return release
+
+    def contexts(self, release: ReleaseId | None = None) -> JsonObject:
+        release = self._query_release(release, None)
+        _, policy = self._policy(release)
+        kb = self._base(release, policy)
+        return {
+            "release": release.val,
+            "snapshot": kb.snapshot.val,
+            "contexts": [
+                object_value(enc_named_context(named)) for named in self._named_contexts(release)
+            ],
+        }
+
+    def _context_page(
+        self,
+        state: PortfolioState,
+        contexts: tuple[NamedContext, ...],
+        claims: tuple[ClaimRef, ...],
+        release: ReleaseId,
+        limit: int,
+        continuation: JsonObject | None,
+        *,
+        assets: tuple[AssetId, ...] | None,
+        all_contexts: bool = False,
     ) -> JsonObject:
         if limit < 1 or limit > 100:
             raise KctxError("malformed", "context limit must be between 1 and 100")
+        kb = state.kb
         query_input: JsonObject = {
+            "release": release.val,
             "claims": [object_value(enc_ref(ref)) for ref in claims],
-            "context": object_value(enc_context(context)),
+            "contexts": [object_value(enc_named_context(named)) for named in contexts],
+            "all_contexts": all_contexts,
         }
         asset_ids = None if assets is None else frozenset(asset.val for asset in assets)
         if asset_ids is not None:
             query_input["assets"] = [identity for identity in sorted(asset_ids)]
         query = digest(canonical(query_input))
         offset = 0
-        if continuation:
+        if continuation is not None:
             if (
                 set(continuation) != {"release", "offset", "query"}
                 or continuation["query"] != query
             ):
                 raise KctxError("conflict", "continuation belongs to another query/context")
-            release = ReleaseId(text(continuation["release"], "release"))
             raw_offset = continuation["offset"]
             if type(raw_offset) is not int or raw_offset < 0:
                 raise KctxError("malformed", "invalid continuation offset")
             offset = raw_offset
-        release = release or self._current()
-        if release is None:
-            raise KctxError("not-found", "no completed knowledge release")
-        self._require_completed(release)
-        _, policy = self._policy(release)
-        kb = self._base(release, policy)
-        self._validate_query_context(release, context, policy)
-        if context.snapshot != kb.snapshot:
-            raise KctxError("conflict", "context snapshot does not match pinned release")
-        if context.sources != self._sources(release):
-            raise KctxError(
-                "conflict", "query source selections differ from the pinned completed release"
-            )
         wanted = set(claims)
-        active = set(self._selected(release))
+        active = set(state.selected)
         asset_matches = (
             {}
             if asset_ids is None
             else {claim.ref: _claim_assets(claim, asset_ids) for claim in kb.claims}
         )
         selected = [
-            claim
+            (named, claim)
+            for named in contexts
             for claim in kb.claims
             if claim.ref in active
             and (not wanted or claim.ref in wanted)
             and (asset_ids is None or bool(asset_matches[claim.ref]))
-            and narrower(context.target, claim.statement.scope)
+            and narrower(named.context.target, claim.statement.scope)
         ]
         page = selected[offset : offset + limit]
         records: list[JsonValue] = []
         wire = object_value(enc_kb(kb))
-        for claim in page:
+        for named, claim in page:
+            context = named.context
             ref = object_value(enc_ref(claim.ref))
             opposite = [
                 other
@@ -1121,6 +1384,7 @@ class KnowledgeEngine:
             relevant_refs = [ref] + [object_value(enc_ref(other.ref)) for other in opposite]
             records.append(
                 {
+                    "context_id": named.id.val,
                     "claim": {
                         "id": claim.id.val,
                         "revision": claim.revision.val,
@@ -1179,14 +1443,21 @@ class KnowledgeEngine:
             "provenance": {"manifest": manifest, "observations": wire["observations"]},
             "evidence_omitted": False,
         }
+        if all_contexts:
+            result["contexts"] = [object_value(enc_named_context(named)) for named in contexts]
+            result["status"] = "available"
+            result["relevance"] = "exact asset ID in formula subject/arguments or scope selector"
+        else:
+            result["context_id"] = contexts[0].id.val
         result["scope_omitted"] = sum(
             1
+            for named in contexts
             for claim in kb.claims
             if (not wanted or claim.ref in wanted)
-            and not narrower(context.target, claim.statement.scope)
+            and not narrower(named.context.target, claim.statement.scope)
             and (asset_ids is None or bool(asset_matches[claim.ref]))
         )
-        result["selection_omitted"] = sum(
+        result["selection_omitted"] = len(contexts) * sum(
             1
             for claim in kb.claims
             if claim.ref not in active
@@ -1240,9 +1511,14 @@ class KnowledgeEngine:
         return value
 
     def explain(
-        self, claim: ClaimRef, context: Context, release: ReleaseId | None = None
+        self,
+        claim: ClaimRef,
+        context: Context,
+        release: ReleaseId | None = None,
+        *,
+        context_id: ContextId,
     ) -> JsonObject:
-        return self.context((claim,), context, 1, release=release)
+        return self.context((claim,), context, 1, release=release, context_id=context_id)
 
     def context_for_assets(
         self,
@@ -1252,19 +1528,19 @@ class KnowledgeEngine:
         release: ReleaseId | None = None,
         continuation: JsonObject | None = None,
     ) -> JsonObject:
-        """Read relevant claims under one release's authenticated evaluation context."""
-        if continuation is not None:
-            release = ReleaseId(text(continuation.get("release"), "continuation release"))
-        release = release or self._current()
-        if release is None:
+        """Assess each authorized (context, claim) pair under one authenticated release."""
+        if release is None and continuation is None and self._current() is None:
             return {"status": "no_release", "release": None, "records": [], "complete": False}
-        manifest, plan, _ = self._release_operation(release)
-        context = replace(plan.context, snapshot=SnapshotId(text(manifest["snapshot"], "snapshot")))
-        result = self.context((), context, limit, continuation, release, assets=assets)
-        result["status"] = "available"
-        result["context"] = object_value(enc_context(context))
-        result["relevance"] = "exact asset ID in formula subject/arguments or scope selector"
-        return result
+        release = self._query_release(release, continuation)
+        _, policy = self._policy(release)
+        kb = self._base(release, policy)
+        contexts = self._named_contexts(release)
+        state = PortfolioState(kb, self._selected(release), contexts)
+        for named in contexts:
+            self._validate_query_context(state, named.id, named.context, policy)
+        return self._context_page(
+            state, contexts, (), release, limit, continuation, assets=assets, all_contexts=True
+        )
 
     def backup(self, destination: Path) -> JsonObject:
         with writer_lock(self.lock):

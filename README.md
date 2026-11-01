@@ -54,7 +54,7 @@ module shims. The installed runtime does not need Lean or formal source files.
 | Manage authored workflows | `proposal`, `inv`, `ktlo`, `sig`, `dossier` | Typed state transitions and lossless authored-document updates |
 | Correct knowledge and repair projections | `retract`, `correction recover` | Durable correction event first, then replayable target/review projections |
 | Admit canonical structured knowledge | `knowledge capture/propose/sign/admit` | Exact captures, explicit candidates, authenticated approval and conditional publication |
-| Read admitted knowledge | `knowledge context/explain` | Pinned claims, contrary evidence, assessment, provenance and bounded continuation |
+| Read admitted knowledge | `knowledge contexts/context/explain` | Discover authenticated named contexts, then retrieve pinned claims, assessments, evidence and bounded continuation |
 | Recover, migrate or retain history | `knowledge recover/migrate/rollback/backup/restore` | Explicit recoverable operations; migration does not auto-admit prose |
 | Query the relationship projection | `graph sync/status/uses/impact/diff/check`, `serve` | Completed immutable generations, exact binding parity and reusable read-only sessions |
 | Diagnose records or operations | `validate`, `logs` | Aggregated typed diagnostics and redacted structured operation logs |
@@ -76,8 +76,8 @@ bypasses styling, including command-line errors. Full logs remain redacted JSONL
 `kctx serve` exposes the same application to agents over JSON-RPC 2.0, one JSON
 frame per line. Initialize before sending operations:
 
-```json
-{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocol_version":"1"}}
+```jsonl
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocol_version":"2"}}
 {"jsonrpc":"2.0","id":2,"method":"cite.make","params":{"citation":{"kind":"web","fields":{"url":"https://example.com","q":"reference"}}}}
 {"jsonrpc":"2.0","id":3,"method":"shutdown"}
 ```
@@ -114,11 +114,13 @@ and fails closed. See [citation flow and limits](docs/kctx/flows.md#citation).
 
 ## Authored workflows versus signed admission
 
-A proposal's lifecycle is not the same thing as publication of admitted
-knowledge. Authored proposal transitions validate the complete candidate using
-the shared semantic predicates, bind gate results to material proposal/target/
-environment/scope/checker identities, and preserve actor history. Actual landed
-references must resolve. See [the workflow guide](docs/kctx/workflows.md).
+A proposal's lifecycle is not publication of admitted knowledge. Workflow 3
+separates acceptance of a material **design revision** from binding its concrete
+implementation with `proposal bind`. The design names its intended source before
+the implementing file or commit exists. Gates remain bound to that design, exact
+target, environment, scope, checker, time and actor; old-target passes do not
+transfer. Material changes require `proposal reopen` and fresh acceptance.
+Actual landed references must resolve. See [the workflow guide](docs/kctx/workflows.md).
 
 Canonical knowledge admission additionally needs a trusted policy and detached
 Ed25519 approval. Configure `knowledge_policy_digest` to the exact SHA256 of the
@@ -132,14 +134,17 @@ kctx --json knowledge propose --candidate /path/to/candidate.json \
   --target-use review --now <epoch>
 kctx --json knowledge sign <plan-id> --private-key /private/operator.pem --key-id reviewer
 kctx --json knowledge admit <plan-id> --approval /path/to/approval.json
+kctx --json knowledge contexts --release <release-id>
 kctx --json knowledge context --request /path/to/context-request.json
 ```
 
 `capture` retains supplied acquisition bytes and declared source identity; it does
-not infer arbitrary prose claims. A candidate explicitly names its structured
-claims, evidence, witnesses and context. Signing binds the complete candidate,
-base, policy and material inputs—not a mutable `accepted` flag. Prepared native
-commits are not current until the authenticated release publication succeeds.
+not infer arbitrary prose claims. A schema-3 candidate names its expected snapshot,
+full KB, retained captures, named contexts and an explicit context/witness
+assignment for every added claim. Signing binds the complete candidate and all
+context authorizations, not a mutable `accepted` flag. Queries require
+`context_id`; multiple contexts never pool premises or assessments. Prepared
+native commits are not current until authenticated publication succeeds.
 [Admission and retrieval flows](docs/kctx/flows.md).
 
 ## Storage and history
@@ -162,6 +167,15 @@ commits are not current until the authenticated release publication succeeds.
 - **Recovery:** operation journals are recovery hints, not authority. They are
   revalidated against signed inputs and retained objects before replay or
   publication. No live `.dolt` directory is committed as ordinary authored files.
+
+The finite-witness inference language remains semantic version `2.0.0` (core wire
+schema 2). New knowledge operations/manifests and authored workflow contracts use
+schema/version 3; stdio initialization uses protocol `"2"`. Signed schema-2 history
+keeps its original bytes and interpretation, exposed through the explicit
+`legacy` context. New writes cannot downgrade a schema-3 history or reinterpret
+an old approval. Open authored records migrate through `proposal adopt` or
+`proposal reopen`; finalized history is superseded, not silently rewritten.
+See [cutover details](PORTING.md#workflow-3-cutover).
 
 [Detailed flows](docs/kctx/flows.md) · [Schemas and calculus](docs/kctx/calculus.md)
 

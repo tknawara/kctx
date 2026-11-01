@@ -73,6 +73,7 @@ class ProposalDecisionValidationTest(KctxTestCase):
         result = _add_reviewable(self.root)
         fm = proposals.load(self.root, result.id).proposal
         self.assertEqual(fm.status, ProposalStatus.PROPOSED)
+        self.assertEqual(fm.workflow_version, 3)
 
         listed_proposed = proposals.list_proposals(self.root, status=ProposalStatus.PROPOSED)
         listed_accepted = proposals.list_proposals(self.root, status=ProposalStatus.ACCEPTED)
@@ -120,6 +121,7 @@ class ProposalLandedValidationTest(KctxTestCase):
     def _to_landing(self, title: str = "Lands somewhere") -> ProposalAdded:
         added = _add_reviewable(self.root, title=title)
         proposals.set_status(self.root, added.id, status=ProposalStatus.ACCEPTED, by="user")
+        proposals.bind(self.root, added.id, target_revision=TargetRevision(_landed_reference(self.root)), by="agent")
         proposals.set_status(self.root, added.id, status=ProposalStatus.LANDING, by="agent")
         proposals.gate(
             self.root, added.id, GateId("G1"), outcome=GateOutcome.PASS,
@@ -313,8 +315,15 @@ class LegacyProposalValidationTest(KctxTestCase):
                 "environment": "test",
                 "scope": "landed-artifact.txt",
             }
-        ).update_section("Acceptance gates", self.LEGACY_TABLE).write(path)
+        ).update_section("Acceptance gates", self.LEGACY_TABLE).update_section(
+            "Research", "Reviewed historical implementation"
+        ).update_section("Alternatives considered", "- Keep old behavior\n- Renew design").write(path)
         ident = ProposalId("skill/2026-10-01-legacy-thing")
+        proposals.adopt(self.root, ident, by="alice", note="Renew legacy design explicitly")
+        proposals.set_status(self.root, ident, status=ProposalStatus.ACCEPTED, by="alice")
+        proposals.bind(
+            self.root, ident, target_revision=TargetRevision(_landed_reference(self.root)), by="bob"
+        )
         proposals.gate(
             self.root,
             ident,
@@ -325,7 +334,6 @@ class LegacyProposalValidationTest(KctxTestCase):
             expires_at=4102444800,
             by="agent",
         )
-        proposals.set_status(self.root, ident, status=ProposalStatus.ACCEPTED, by="alice")
         proposals.set_status(self.root, ident, status=ProposalStatus.LANDING, by="bob")
         proposals.set_status(
             self.root,

@@ -10,12 +10,13 @@ import re
 from pathlib import Path
 
 from kctx.adapters.git.citations import (
+    ORG_REPO_RE,
     git_rev_parse,
     looks_like_git_repo,
     repo_from_url,
     resolve_repo_for_make,
 )
-from kctx.domain.ids import TargetRevision
+from kctx.domain.ids import SourceId, TargetRevision
 from kctx.domain.vocabulary import AssetKind
 from kctx.errors import KctxError
 from kctx.semantics.model import AuthoredLanded
@@ -96,3 +97,58 @@ def resolve_landed(root: Path, references: tuple[str, ...]) -> tuple[AuthoredLan
 def resolve_target(root: Path, revision: TargetRevision) -> TargetRevision:
     """Decode a nominal target only at the source-reference I/O boundary."""
     return resolve_landed(root, (revision.val,))[0].target_revision
+
+
+def resolve_source(root: Path, source: SourceId) -> SourceId:
+    """Canonicalize intended source identity without requiring an implementation."""
+    value = source.val.strip()
+    if not value or value.lower() in {"unknown", "unk"}:
+        raise KctxError("incomplete", "target_source must name an explicit source")
+    local = Path(value).expanduser()
+    if not local.is_absolute():
+        local = root / local
+    if local.exists() or value.startswith(("/", "./", "../", "~")):
+        return SourceId(str(local.resolve()))
+    try:
+        asset = resolve_asset(root, value)
+    except KctxError as exc:
+        if exc.category != "not-found":
+            raise
+    else:
+        if asset.kind is not AssetKind.REPO or not asset.locator.strip():
+            raise KctxError("malformed", "target_source asset must name a repository")
+        value = asset.locator.strip()
+        local = Path(value).expanduser()
+        if not local.is_absolute():
+            local = root / local
+        if local.exists() or value.startswith(("/", "./", "../", "~")):
+            return SourceId(str(local.resolve()))
+    remote = repo_from_url(value)
+    if remote is not None:
+        return SourceId(f"{remote[0]}/{remote[1]}")
+    if ORG_REPO_RE.fullmatch(value):
+        return SourceId(value)
+    # A relative intended local file/repository need not have been created yet.
+    return SourceId(str(local.resolve()))
+
+
+def source_of_target(revision: TargetRevision) -> SourceId:
+    source, separator, _ = revision.val.rpartition("@")
+    if not separator or not source:
+        raise KctxError("malformed", "target revision must name source@revision")
+    return SourceId(source)
+
+
+def design_target(
+    root: Path, source: SourceId | None, target: TargetRevision | None
+) -> tuple[SourceId, TargetRevision | None]:
+    resolved = resolve_target(root, target) if target is not None else None
+    intended = resolve_source(root, source) if source is not None else None
+    if resolved is not None:
+        actual = source_of_target(resolved)
+        if intended is not None and intended != actual:
+            raise KctxError("conflict", "target revision source differs from target_source")
+        intended = actual
+    if intended is None:
+        raise KctxError("incomplete", "proposal requires --target-source or --target-revision")
+    return intended, resolved

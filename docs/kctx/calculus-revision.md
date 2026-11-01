@@ -82,6 +82,36 @@ remain compatible. The reference protocol becomes explicitly versioned.
   advisory classification are distinct operations, with retained evidence and
   explicit missing-object outcomes.
 
+## Workflow 3 extension: inference remains v2
+
+`Portfolio.lean` and `DesignWorkflow.lean` extend operation/authorization judgments
+without changing formulas, witnesses, `narrower`, `Derives`, `check` or `assess`.
+The workflow wire/native operation boundary is schema 3; core contexts and
+knowledge records remain version 2. Historical signed v2 bytes retain their
+original interpretation, never a silent multi-context approval.
+
+Portfolio admission explicitly assigns every added claim to a named full context
+and witness. Exact retirement lists preserve context coverage unless its removal
+is deliberately signed. The assignment derivability/interpretation laws reuse
+the original checker soundness and local evidence premise; query projection and
+noninterference prevent unrelated authorization entries from becoming premises.
+Forward selection preserves ledger/corrections/current context configurations
+and selects the retained release's active refs.
+
+Authored design acceptance and implementation binding are separate records.
+Binding/reopening operate against an exact expected state. Applied/verified
+eligibility retains all earlier gates/landing conditions and additionally proves
+exact design/source/target binding. Rebinding cannot transfer a pass from another
+target; explicit reopening clears acceptance and execution authority. Actual
+source resolution and material hashing remain adapter obligations.
+
+The new codec laws and positive/negative examples are included in the T01–T22
+registry audit. Python twins are checked through full-response schema-3
+conformance and native behavior, not represented as universally proved
+refinements. Public CLI/RPC and migration details are in [workflows](workflows.md)
+and [PORTING.md](../../PORTING.md#workflow-3-cutover).
+
+
 ## Qualification work
 
 The v1 counterexamples become failing-before/passing-after regressions, not

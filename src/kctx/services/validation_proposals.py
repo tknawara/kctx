@@ -8,10 +8,16 @@ from kctx.codecs.proposals import decode_proposal
 from kctx.domain.ids import ProposalId
 from kctx.domain.proposals import ProposalDocument, ProposalProfile
 from kctx.errors import KctxError
+from kctx.semantics.design_workflow import design_candidate_problems
 from kctx.semantics.model import AuthoredReplacement
 from kctx.semantics.workflow import authored_candidate_problems
 from kctx.services.gates import load_results
-from kctx.services.proposals import DECIDED_STATUSES, all_paths, persisted_assessment
+from kctx.services.proposals import (
+    DECIDED_STATUSES,
+    all_paths,
+    design_assessment,
+    persisted_assessment,
+)
 from kctx.services.validation_common import Diagnostics
 
 
@@ -73,7 +79,13 @@ def validate_proposals(root: Path, diagnostics: Diagnostics) -> int:
                     "legacy_limited authored profile: historical status is not verified "
                     "knowledge or release authority",
                 )
-            problems = authored_candidate_problems(model, model.status, now)
+            problems = (
+                design_candidate_problems(
+                    design_assessment(record.proposal, model), model.status, now
+                )
+                if record.proposal.workflow_version == 3
+                else authored_candidate_problems(model, model.status, now)
+            )
             if problems:
                 diagnostics.problem(
                     "incomplete",

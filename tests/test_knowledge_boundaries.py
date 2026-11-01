@@ -12,12 +12,14 @@ from kctx.cli.context import CliState
 from kctx.cli import knowledge as knowledge_cli
 from kctx.config import Config
 from kctx.domain.ids import AuthorityKeyId, DoltCommitId, OperationId, PlanId, PolicyDigest, ReleaseId, SourceId, SourceRevision
+from kctx.domain.ids import ContextId, SnapshotId
+from kctx.semantics.workflow_models import NamedContext
 from kctx.domain.json import JsonObject, object_value, text
 from kctx.errors import KctxError
 from kctx.semantics.model import TTL_NO_EXPIRY
-from kctx.semantics.wire import enc_context, enc_kb, enc_ref, enc_witness
+from kctx.semantics.wire import enc_context, enc_kb
 from kctx.services.knowledge import KnowledgeEngine
-from kctx.services.knowledge_models import AdmissionPlan, Approval, CaptureKind
+from kctx.services.knowledge_models import PortfolioAdmissionPlan, Approval, CaptureKind
 
 
 class SimulatedStop(RuntimeError):
@@ -32,28 +34,29 @@ class KnowledgeBoundaryTests(unittest.TestCase):
         self.engine = self.fixture.engine
         self.key = AuthorityKeyId("reviewer-key")
 
-    def plan(self, snapshot: str = "generation-1") -> tuple[AdmissionPlan, Approval]:
+    def plan(self, snapshot: str = "generation-1") -> tuple[PortfolioAdmissionPlan, Approval]:
         candidate = self.fixture.candidate(CaptureKind.DOCUMENT)
         kb = object_value(candidate["kb"])
         kb["snapshot"] = snapshot
         candidate["kb"] = kb
+        candidate["contexts"][0]["context"]["snapshot"] = snapshot
         plan = self.engine.propose(candidate, "review", 5)
         return plan, self.engine.sign(plan.id, self.fixture.key_file, self.key)
 
-    def published(self) -> tuple[AdmissionPlan, Approval, ReleaseId]:
+    def published(self) -> tuple[PortfolioAdmissionPlan, Approval, ReleaseId]:
         plan, approval = self.plan()
         reply = self.engine.admit(plan.id, approval)
         return plan, approval, ReleaseId(text(reply["release"], "release"))
 
-    def next_plan(self, previous: AdmissionPlan, snapshot: str) -> tuple[AdmissionPlan, Approval]:
+    def next_plan(self, previous: PortfolioAdmissionPlan, snapshot: str) -> tuple[PortfolioAdmissionPlan, Approval]:
         kb = object_value(enc_kb(previous.semantic.candidate))
         kb["snapshot"] = snapshot
-        context = replace(previous.context, snapshot=previous.semantic.candidate.snapshot, now=6)
-        candidate: JsonObject = {"kb": kb, "capture_ids": [identity.val for identity in previous.captures], "context": object_value(enc_context(context)), "claim": object_value(enc_ref(previous.semantic.claim)), "witness": object_value(enc_witness(previous.semantic.witness)), "authority_key": self.key.val}
+        context = replace(previous.semantic.contexts[0].context, snapshot=SnapshotId(snapshot), now=6)
+        candidate: JsonObject = {"schema_version": 3, "expected_snapshot": previous.semantic.candidate.snapshot.val, "kb": kb, "capture_ids": [identity.val for identity in previous.captures], "contexts": [{"id": "review", "context": object_value(enc_context(context))}], "assignments": [], "retired_contexts": [], "authority_key": self.key.val}
         plan = self.engine.propose(candidate, "review", 6)
         return plan, self.engine.sign(plan.id, self.fixture.key_file, self.key)
 
-    def interrupt(self, plan: AdmissionPlan, approval: Approval, phase: str) -> JsonObject:
+    def interrupt(self, plan: PortfolioAdmissionPlan, approval: Approval, phase: str) -> JsonObject:
         def stop(current: str) -> None:
             if current == phase:
                 raise SimulatedStop(current)
@@ -88,7 +91,7 @@ class KnowledgeBoundaryTests(unittest.TestCase):
             with self.subTest(record=record), self.assertRaises(KctxError):
                 Approval.decode(record)
         candidate = self.fixture.candidate(CaptureKind.DOCUMENT)
-        candidate["context"] = {"unknown": True}
+        candidate["contexts"][0]["context"] = {"unknown": True}
         path = self.fixture.root / "bad-candidate.json"
         save(path, candidate)
         config = Config(knowledge_dir=self.engine.store.path, knowledge_policy_digest=plan.policy.val)
@@ -100,7 +103,7 @@ class KnowledgeBoundaryTests(unittest.TestCase):
 
     def test_boundary_unsigned_query_cannot_weaken_approved_context(self) -> None:
         plan, _, _ = self.published()
-        context = replace(plan.context, snapshot=plan.semantic.candidate.snapshot)
+        context = replace(plan.semantic.contexts[0].context, snapshot=plan.semantic.candidate.snapshot)
         variants = (
             replace(context, intended_use="production-deploy"),
             replace(context, policy=replace(context.policy, require_fresh=False)),
@@ -112,9 +115,9 @@ class KnowledgeBoundaryTests(unittest.TestCase):
         )
         for changed in variants:
             with self.subTest(context=changed), self.assertRaises(KctxError):
-                self.engine.context((plan.semantic.claim,), changed)
+                self.engine.context((plan.semantic.assignments[0].claim,), changed, context_id=ContextId("review"))
         narrower_query = replace(context, target=replace(context.target, selector="specific-endpoint"), now=context.now + 1)
-        self.assertIn(b'"support":"positive"', canonical(self.engine.context((plan.semantic.claim,), narrower_query)))
+        self.assertIn(b'"support":"positive"', canonical(self.engine.context((plan.semantic.assignments[0].claim,), narrower_query, context_id=ContextId("review"))))
 
     def test_boundary_foreign_signed_journal_release_is_not_authority(self) -> None:
         first, approval = self.plan("candidate-a")
@@ -165,11 +168,11 @@ class KnowledgeBoundaryTests(unittest.TestCase):
         pending, pending_approval = self.next_plan(first, "unpublished-view")
         journal = self.interrupt(pending, pending_approval, "manifest")
         target = ReleaseId(text(journal["release"], "release"))
-        context = replace(first.context, snapshot=first.semantic.candidate.snapshot, now=7)
+        context = replace(first.semantic.contexts[0].context, snapshot=first.semantic.candidate.snapshot, now=7)
         with self.assertRaises(KctxError):
-            self.engine.rollback(target, context, self.key)
-        selection = self.engine.rollback(release, context, self.key)
-        changed = replace(selection, retained=target, semantic=replace(selection.semantic, target_snapshot=pending.semantic.candidate.snapshot))
+            self.engine.rollback(target, (NamedContext(ContextId("review"), context),), self.key, target_use="review")
+        selection = self.engine.rollback(release, (NamedContext(ContextId("review"), context),), self.key, target_use="review")
+        changed = replace(selection, retained=target, semantic=replace(selection.semantic, retained_snapshot=pending.semantic.candidate.snapshot))
         material = changed.wire()
         del material["id"]
         semantic = object_value(material["plan"])
@@ -260,7 +263,7 @@ class KnowledgeBoundaryTests(unittest.TestCase):
             candidate = self.fixture.candidate(CaptureKind.DOCUMENT)
             kb = object_value(candidate["kb"])
             if kind == "witness":
-                candidate["witness"] = {}
+                candidate["assignments"][0]["witness"] = {}
             elif kind == "formula":
                 claims = kb["claims"]
                 if not isinstance(claims, list):
@@ -271,9 +274,9 @@ class KnowledgeBoundaryTests(unittest.TestCase):
                 claim["statement"] = statement
                 claims[0] = claim
             else:
-                context = object_value(candidate["context"])
+                context = object_value(candidate["contexts"][0]["context"])
                 context["snapshot"] = kb["snapshot"]
-                kb["receipts"] = [{"id": "bad-dependency", "claim": candidate["claim"], "context": context, "witness": candidate["witness"], "dependencies": [{}], "result": "pass", "expires_at": 10}]
+                kb["receipts"] = [{"id": "bad-dependency", "claim": candidate["assignments"][0]["claim"], "context": context, "witness": candidate["assignments"][0]["witness"], "dependencies": [{}], "result": "pass", "expires_at": 10}]
             candidate["kb"] = kb
             path = self.fixture.root / ("missing-tag-" + kind + ".json")
             save(path, candidate)
@@ -289,7 +292,7 @@ class KnowledgeBoundaryTests(unittest.TestCase):
         journal = self.interrupt(plan, approval, "manifest")
         original = ReleaseId(text(journal["release"], "release"))
         altered = replace(plan, semantic=replace(plan.semantic, id=OperationId("caller-chosen")))
-        signature = self.fixture.key.sign(b"kctx-operation-v2\x00" + canonical(altered.wire()))
+        signature = self.fixture.key.sign(b"kctx-operation-v3\x00" + canonical(altered.wire()))
         signed = Approval(plan.id, self.key, signature)
         self.engine.store.execute("UPDATE admissions SET signature = '" + signature.hex() + "'")
         self.engine.store.run("add", ".")
@@ -312,9 +315,9 @@ class KnowledgeBoundaryTests(unittest.TestCase):
         manifest["artifacts"] = [identity for identity in sorted(artifacts)]
         forged = self.engine.git.prepare(manifest, None, artifacts)
         self.engine.git.publish(forged, None)
-        context = replace(plan.context, snapshot=plan.semantic.candidate.snapshot)
+        context = replace(plan.semantic.contexts[0].context, snapshot=plan.semantic.candidate.snapshot)
         with self.assertRaises(KctxError):
-            self.engine.context((plan.semantic.claim,), context)
+            self.engine.context((plan.semantic.assignments[0].claim,), context, context_id=ContextId("review"))
 
 
 if __name__ == "__main__":

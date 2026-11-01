@@ -22,13 +22,14 @@ from kctx.adapters.files.mutations import (
 )
 from kctx.adapters.files.storage import atomic_write_json, slugify
 from kctx.codecs.documents import MarkdownDocument, read_document, render_document, unfenced_lines
-from kctx.codecs.proposals import decode_proposal, proposal_fields
+from kctx.codecs.proposals import BINDING_FIELDS, binding_fields, decode_proposal, proposal_fields
 from kctx.domain.ids import (
     ActorId,
     CheckerId,
     GateId,
     ProposalId,
     ProposalMaterialRevision,
+    SourceId,
     TargetRevision,
 )
 from kctx.domain.proposals import (
@@ -54,6 +55,12 @@ from kctx.domain.vocabulary import (
     ProposalType,
 )
 from kctx.errors import KctxError
+from kctx.semantics.design_workflow import (
+    bind_implementation,
+    design_candidate_problems,
+    design_transition,
+    reopen_design,
+)
 from kctx.semantics.model import (
     AuthoredGateDefinition,
     AuthoredGateResult,
@@ -65,15 +72,27 @@ from kctx.semantics.model import (
 from kctx.semantics.model import GateOutcome as SemanticOutcome
 from kctx.semantics.model import GateWhen as SemanticWhen
 from kctx.semantics.workflow import (
+    authored_candidate_problems,
     authored_edge,
     authored_gate_passes,
     authored_gate_valid,
     authored_ready,
     authored_transition,
 )
+from kctx.semantics.workflow_models import (
+    DesignBindingCommand,
+    DesignProposal,
+    DesignReopenCommand,
+    ImplementationBinding,
+)
 from kctx.services import gates as gates_mod
 from kctx.services.proposal_mutation import publish, recover
-from kctx.services.proposal_targets import resolve_landed, resolve_target
+from kctx.services.proposal_targets import (
+    design_target,
+    resolve_landed,
+    resolve_target,
+    source_of_target,
+)
 
 SECTION_ORDER = (
     "Context",
@@ -164,6 +183,8 @@ def material_revision(document: MarkdownDocument) -> ProposalMaterialRevision:
         "last_actor",
         "regression_note",
     }
+    if document.frontmatter.get("workflow_version") == "3":
+        bookkeeping.update(("target_revision", *BINDING_FIELDS))
     preamble = document.body
     for offset, line in unfenced_lines(document.body):
         if re.match(r"^##\s", line):
@@ -180,9 +201,12 @@ def material_revision(document: MarkdownDocument) -> ProposalMaterialRevision:
             if name != "Decision log"
         ],
     }
-    return ProposalMaterialRevision(
-        revision_of(json.dumps(value, sort_keys=True, ensure_ascii=False).encode("utf-8")).val
-    )
+    identity = revision_of(
+        json.dumps(value, sort_keys=True, ensure_ascii=False).encode("utf-8")
+    ).val
+    if document.frontmatter.get("workflow_version") == "3":
+        identity = "design-v3:" + identity
+    return ProposalMaterialRevision(identity)
 
 
 def _context_label(value: str | None) -> str:
@@ -236,6 +260,10 @@ def assessment(
     target = proposal.target_revision
     if root is not None and proposal.target_revision is not None:
         target = resolve_target(root, proposal.target_revision)
+        if proposal.workflow_version == 3 and source_of_target(target) != proposal.target_source:
+            raise KctxError(
+                "conflict", "resolved implementation source differs from design target_source"
+            )
     resolved = (
         resolve_landed(root, proposal.landed) if root is not None and resolve_landed_refs else ()
     )
@@ -300,6 +328,12 @@ def persisted_assessment(
     )
 
 
+def design_assessment(proposal: Proposal, authored: AuthoredProposal) -> DesignProposal:
+    if proposal.workflow_version != 3 or proposal.target_source is None:
+        raise KctxError("incomplete", "explicit workflow3 adoption with target_source required")
+    return DesignProposal(authored, proposal.target_source, proposal.binding)
+
+
 def review_gate_missing(body: Mapping[str, str]) -> tuple[str, ...]:
     """Diagnostics for the same primitive requirements used by authored_ready."""
     missing: list[str] = []
@@ -337,10 +371,12 @@ def add(
     plan: str = "",
     force: bool = False,
     target_revision: TargetRevision | None = None,
+    target_source: SourceId | None = None,
     environment: str | None = None,
     scope: str | None = None,
 ) -> ProposalAdded:
     created = today()
+    target_source, target_revision = design_target(root, target_source, target_revision)
     home = proposals_root(root) / kind.value / f"{created}-{slugify(title)}"
     path = home / "proposal.md"
     identity = ProposalId(f"{kind.value}/{created}-{slugify(title)}")
@@ -373,6 +409,7 @@ def add(
         project,
         references=references or (),
         target_revision=target_revision,
+        target_source=target_source,
         environment=environment,
         scope=scope,
     )
@@ -389,6 +426,17 @@ def add(
         previous = read_revision(path)
         if previous is not None and not force:
             raise KctxError("conflict", f"proposal {identity} already exists (use --force)")
+        if previous is not None:
+            existing = _read(path).proposal
+            if existing.workflow_version != 3:
+                raise KctxError(
+                    "conflict",
+                    "workflow2 requires explicit adoption; --force cannot migrate history",
+                )
+            if existing.status not in (ProposalStatus.DRAFT, ProposalStatus.PROPOSED):
+                raise KctxError(
+                    "conflict", "cannot overwrite decided proposal history; create a replacement"
+                )
         (home / "research").mkdir(exist_ok=True)
         (home / "evidence").mkdir(exist_ok=True)
         if not (home / "gates.json").exists():
@@ -567,6 +615,7 @@ def set_status(
     landed_add: tuple[str, ...] | None = None,
     target_revision: TargetRevision | None = None,
     expected_revision: FileRevision | None = None,
+    target_source: SourceId | None = None,
     environment: str | None = None,
     scope: str | None = None,
 ) -> ProposalUpdated:
@@ -575,7 +624,41 @@ def set_status(
         _locked(root, proposal_id, expected_revision) as found,
     ):
         proposal, document = found.proposal, found.document
-        changes: dict[str, str | None] = {"updated": today(), "profile": proposal.profile.value}
+        if proposal.workflow_version != 3 and status is not ProposalStatus.SUPERSEDED:
+            raise KctxError("incomplete", "workflow2 history requires explicit adopt or reopen")
+        if proposal.workflow_version == 2 and any(
+            value is not None
+            for value in (
+                origin,
+                proposed_by,
+                requested_by,
+                swept_at,
+                environment,
+                scope,
+                target_source,
+                target_revision,
+                landed_add,
+            )
+        ):
+            raise KctxError(
+                "conflict", "workflow2 supersession cannot also rewrite historical fields"
+            )
+        if proposal.status not in (ProposalStatus.DRAFT, ProposalStatus.PROPOSED):
+            if any(
+                value is not None
+                for value in (origin, proposed_by, requested_by, environment, scope, target_source)
+            ):
+                raise KctxError(
+                    "conflict",
+                    "decided design material cannot change; reopen accepted/landing or supersede history",
+                )
+            if target_revision is not None:
+                raise KctxError("conflict", "implementation retargeting requires proposal bind")
+        if proposal.status in (ProposalStatus.APPLIED, ProposalStatus.VERIFIED) and landed_add:
+            raise KctxError("conflict", "finalized landing references are immutable")
+        changes: dict[str, str | None] = {"updated": today()}
+        if proposal.workflow_version == 3:
+            changes["profile"] = proposal.profile.value
         if origin is not None:
             changes["origin"] = origin.value
         for key, value in (
@@ -587,8 +670,15 @@ def set_status(
         ):
             if value is not None:
                 changes[key] = value
-        if target_revision is not None:
-            changes["target_revision"] = target_revision.val
+        if target_revision is not None or target_source is not None:
+            source, target = design_target(
+                root,
+                target_source or proposal.target_source,
+                target_revision or proposal.target_revision,
+            )
+            changes["target_source"] = source.val
+            if target is not None:
+                changes["target_revision"] = target.val
         if landed_add:
             changes["landed"] = (
                 "[" + ", ".join(dict.fromkeys((*proposal.landed, *landed_add))) + "]"
@@ -609,12 +699,6 @@ def set_status(
                     changes["decided_by"] = by
             if status is ProposalStatus.LANDING:
                 changes["executor"] = by
-                if (
-                    not proposal.acceptor
-                    and proposal.status is ProposalStatus.ACCEPTED
-                    and proposal.decided_by
-                ):
-                    changes["acceptor"] = proposal.decided_by
             if status is ProposalStatus.VERIFIED and by:
                 changes["verifier"] = by
             if status is ProposalStatus.REJECTED and not proposal.decided_by:
@@ -646,16 +730,30 @@ def set_status(
                 root=root if status in (ProposalStatus.APPLIED, ProposalStatus.VERIFIED) else None,
                 resolve_landed_refs=status in (ProposalStatus.APPLIED, ProposalStatus.VERIFIED),
             )
-            if not authored_transition(model, _STATUS[status], int(time.time())):
+            now = int(time.time())
+            design = design_assessment(admitted, model) if proposal.workflow_version == 3 else None
+            valid = (
+                design_transition(design, _STATUS[status], now)
+                if design is not None
+                else authored_transition(model, _STATUS[status], now)
+            )
+            if not valid:
                 missing = (
                     review_gate_missing(candidate.sections)
                     if proposal.profile is ProposalProfile.MODERN
                     else ()
                 )
                 detail = "; missing for review: " + ", ".join(missing) if missing else ""
+                problems = (
+                    design_candidate_problems(design, _STATUS[status], now)
+                    if design is not None
+                    else authored_candidate_problems(model, _STATUS[status], now)
+                )
                 raise KctxError(
                     "incomplete",
-                    f"authored transition {proposal.status.value!r} -> {status.value!r} rejected: readiness, actors, landed references, or current bound gates do not satisfy policy{detail}",
+                    f"authored transition {proposal.status.value!r} -> {status.value!r} rejected: "
+                    + ", ".join(problems)
+                    + detail,
                 )
             candidate = candidate.update_fields({"status": status.value}).append_section(
                 "Decision log",
@@ -673,6 +771,7 @@ def set_status(
                     swept_at,
                     landed_add,
                     target_revision,
+                    target_source,
                     environment,
                     scope,
                 )
@@ -693,6 +792,178 @@ def set_status(
         return ProposalUpdated(admitted, warnings)
 
 
+def bind(
+    root: Path,
+    proposal_id: ProposalId,
+    *,
+    target_revision: TargetRevision,
+    by: str,
+    expected_revision: FileRevision | None = None,
+) -> ProposalUpdated:
+    """Bind an existing accepted design to one resolved implementation."""
+    with _locked(root, proposal_id, expected_revision) as found:
+        proposal = found.proposal
+        current = design_assessment(
+            proposal,
+            persisted_assessment(proposal, found.document, gates_mod.load_results(found.path)),
+        )
+        if not by.strip():
+            raise KctxError("incomplete", "bind requires a nonblank actor --by")
+        revision = current.authored.proposal_revision
+        if revision is None:
+            raise KctxError("incomplete", "binding requires an exact design material revision")
+        by = by.strip()
+        resolved = resolve_target(root, target_revision)
+        now = int(time.time())
+        binding = ImplementationBinding(
+            revision,
+            source_of_target(resolved),
+            resolved,
+            ActorId(by),
+            now,
+        )
+        result = bind_implementation(current, DesignBindingCommand(current, binding), now)
+        if result is None:
+            problems = design_candidate_problems(current, current.authored.status, now)
+            if proposal.status not in (ProposalStatus.ACCEPTED, ProposalStatus.LANDING):
+                problems += ("status accepted or landing",)
+            if binding.source != current.target_source:
+                problems += ("binding source equals design target_source",)
+            raise KctxError("conflict", "implementation binding rejected: " + ", ".join(problems))
+        fields = {
+            **binding_fields(result.binding),
+            "target_revision": resolved.val,
+            "landed": "[]",
+            "updated": today(),
+        }
+        candidate = found.document.update_fields(fields).append_section(
+            "Decision log",
+            f"- {today()}: bound {resolved.val} by {by} to design {binding.design_revision.val}",
+        )
+        admitted = decode_proposal(candidate)
+        publish(found, candidate.text)
+        return ProposalUpdated(admitted)
+
+
+def _renew(
+    root: Path,
+    proposal_id: ProposalId,
+    *,
+    by: str,
+    note: str,
+    target_source: SourceId | None,
+    expected_revision: FileRevision | None,
+    adopting: bool,
+) -> ProposalUpdated:
+    with _locked(root, proposal_id, expected_revision) as found:
+        proposal = found.proposal
+        if not by.strip() or not note.strip():
+            raise KctxError("incomplete", "adopt/reopen requires nonblank --by and --note")
+        if adopting:
+            if proposal.workflow_version != 2 or proposal.status not in (
+                ProposalStatus.DRAFT,
+                ProposalStatus.PROPOSED,
+            ):
+                raise KctxError("conflict", "adopt requires a workflow2 draft or proposed record")
+        elif proposal.status not in (ProposalStatus.ACCEPTED, ProposalStatus.LANDING):
+            raise KctxError(
+                "conflict", "reopen requires accepted or landing; supersede finalized history"
+            )
+        if proposal.workflow_version == 3:
+            if target_source is not None:
+                raise KctxError("conflict", "reopen preserves design source; edit after reopening")
+            source = proposal.target_source
+        else:
+            source, _ = design_target(
+                root, target_source, proposal.target_revision if target_source is None else None
+            )
+        renewed = replace(
+            proposal,
+            workflow_version=3,
+            target_source=source,
+            profile=ProposalProfile.MODERN,
+        )
+        model = design_assessment(
+            renewed,
+            persisted_assessment(renewed, found.document, gates_mod.load_results(found.path)),
+        )
+        if adopting:
+            next_status = (
+                ProposalStatus.PROPOSED if authored_ready(model.authored) else ProposalStatus.DRAFT
+            )
+        else:
+            reopened = reopen_design(model, DesignReopenCommand(model, ActorId(by), note))
+            if reopened is None:
+                raise KctxError("conflict", "explicit design reopening rejected")
+            next_status = ProposalStatus.PROPOSED
+        assert source is not None
+        fields = {
+            **binding_fields(None),
+            "schema_version": "1",
+            "workflow_version": "3",
+            "target_source": source.val,
+            "profile": ProposalProfile.MODERN.value,
+            "status": next_status.value,
+            "accepted_revision": None,
+            "acceptor": None,
+            "executor": None,
+            "verifier": None,
+            "decided_by": None,
+            "target_revision": None,
+            "landed": "[]",
+            "last_actor": by,
+            "regression_note": None,
+            "updated": today(),
+        }
+        action = "adopted workflow3" if adopting else "reopened"
+        candidate = found.document.update_fields(fields).append_section(
+            "Decision log", f"- {today()}: {action} by {by} — {note}"
+        )
+        admitted = decode_proposal(candidate)
+        publish(found, candidate.text)
+        return ProposalUpdated(admitted)
+
+
+def reopen(
+    root: Path,
+    proposal_id: ProposalId,
+    *,
+    by: str,
+    note: str,
+    target_source: SourceId | None = None,
+    expected_revision: FileRevision | None = None,
+) -> ProposalUpdated:
+    return _renew(
+        root,
+        proposal_id,
+        by=by,
+        note=note,
+        target_source=target_source,
+        expected_revision=expected_revision,
+        adopting=False,
+    )
+
+
+def adopt(
+    root: Path,
+    proposal_id: ProposalId,
+    *,
+    by: str,
+    note: str,
+    target_source: SourceId | None = None,
+    expected_revision: FileRevision | None = None,
+) -> ProposalUpdated:
+    return _renew(
+        root,
+        proposal_id,
+        by=by,
+        note=note,
+        target_source=target_source,
+        expected_revision=expected_revision,
+        adopting=True,
+    )
+
+
 def gate(
     root: Path,
     proposal_id: ProposalId,
@@ -710,6 +981,10 @@ def gate(
     scope: str | None = None,
 ) -> GateResult:
     with _locked(root, proposal_id, expected_revision) as found:
+        if found.proposal.workflow_version != 3:
+            raise KctxError(
+                "incomplete", "workflow2 gate history is read-only; adopt or reopen first"
+            )
         table = gates_mod.parse_gates_table(found.document.sections)
         definition = next((item for item in table if item.id == gate_id), None)
         if definition is None:
@@ -748,12 +1023,10 @@ def gate(
         if repo_rev is not None and not repo_rev.strip():
             raise KctxError("incomplete", "gate requires non-blank repository evidence --rev")
         target = resolve_target(root, target)
-        # The published candidate is what the result must bind: this same write
-        # introduces the ``profile`` field on a first-touched legacy file, which
-        # is material — binding the pre-mutation document would self-invalidate.
+        # Gate recording changes lifecycle bookkeeping, never design material.
         line = f"- {today()}: gate {gate_id.val} -> {outcome.value} by {by} ({evidence})"
         candidate = found.document.append_section("Decision log", line).update_fields(
-            {"updated": today(), "profile": found.proposal.profile.value}
+            {"updated": today()}
         )
         entry = GateResult(
             gate_id,
@@ -802,13 +1075,8 @@ def backfill_landed_from_notes(
                 continue
             changed.append(ProposalBackfill(found.proposal.id, path, tokens))
             if not dry_run:
-                publish(
-                    found,
-                    found.document.update_fields(
-                        {
-                            "landed": "[" + ", ".join(tokens) + "]",
-                            "profile": found.proposal.profile.value,
-                        }
-                    ).text,
+                raise KctxError(
+                    "conflict",
+                    "finalized proposal history is read-only; create a superseding proposal",
                 )
     return tuple(changed)

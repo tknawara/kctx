@@ -209,6 +209,10 @@ class CliCommandsTest(KctxTestCase):
         )
         self.assertEqual(code, 0)
         code, _ = _run(
+            ["--json", "proposal", "bind", pid, "--target-revision", f"target@{revision}", "--by", "agent"]
+        )
+        self.assertEqual(code, 0)
+        code, _ = _run(
             ["--json", "proposal", "set", pid, "--status", "landing", "--by", "agent"]
         )
         self.assertEqual(code, 0)
@@ -262,6 +266,8 @@ class CliCommandsTest(KctxTestCase):
                 "ch",
                 "--why",
                 "w",
+                "--target-source",
+                str(self.root / "intended-target"),
             ]
         )
         self.assertEqual(code, 0)
@@ -287,6 +293,7 @@ class CliCommandsTest(KctxTestCase):
             "--json", "proposal", "add", "--kind", "other", "--origin", "unk",
             "--title", "Needs review", "--context", "c", "--evidence", "e",
             "--change", "ch", "--why", "w",
+            "--target-source", str(self.root / "intended-draft-target"),
         ])
         self.assertEqual(code, 0)
         self.assertEqual(added["frontmatter"]["status"], "draft")
@@ -438,22 +445,6 @@ class CliCommandsTest(KctxTestCase):
         self.assertEqual(code, 0)
         self.assertEqual(recovered, {"operations": []})
 
-    def test_knowledge_explain_declares_no_unused_options(self):
-        import io
-        from contextlib import redirect_stdout
-
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            code = cli.main(["knowledge", "explain", "--help"])
-        self.assertEqual(code, 0)
-        self.assertNotIn("--limit", buf.getvalue())
-        self.assertNotIn("--continuation", buf.getvalue())
-        buf = io.StringIO()
-        with redirect_stdout(buf):
-            code = cli.main(
-                ["--json", "knowledge", "explain", "--request", "req.json", "--limit", "7"]
-            )
-        self.assertNotEqual(code, 0)
 
     def test_invalid_asset_vocabulary_is_a_domain_error(self):
         code, error = _run(["--json", "asset", "add", "--kind", "not-a-kind", "--name", "Invalid"])

@@ -1,11 +1,12 @@
 """Proposal admission and explicit command-wire rendering."""
 
+from collections.abc import Mapping
 from enum import Enum
 from typing import TypeVar
 
 from kctx.codecs.documents import MarkdownDocument
 from kctx.codecs.frontmatter import split_list_value
-from kctx.domain.ids import ProposalId, ProposalMaterialRevision, TargetRevision
+from kctx.domain.ids import ActorId, ProposalId, ProposalMaterialRevision, SourceId, TargetRevision
 from kctx.domain.json import texts
 from kctx.domain.proposals import (
     Proposal,
@@ -18,6 +19,49 @@ from kctx.domain.proposals import (
 )
 from kctx.domain.vocabulary import ProposalKind, ProposalOrigin, ProposalStatus, ProposalType
 from kctx.errors import KctxError
+from kctx.semantics.workflow_models import ImplementationBinding
+
+BINDING_FIELDS = (
+    "binding_design_revision",
+    "binding_source",
+    "binding_target_revision",
+    "binding_actor",
+    "binding_observed_at",
+)
+
+
+def binding_fields(binding: ImplementationBinding | None) -> dict[str, str | None]:
+    if binding is None:
+        return dict.fromkeys(BINDING_FIELDS)
+    return {
+        "binding_design_revision": binding.design_revision.val,
+        "binding_source": binding.source.val,
+        "binding_target_revision": binding.target_revision.val,
+        "binding_actor": binding.actor.val,
+        "binding_observed_at": str(binding.observed_at),
+    }
+
+
+def _decode_binding(fm: Mapping[str, str]) -> ImplementationBinding | None:
+    present = [key in fm for key in BINDING_FIELDS]
+    if not any(present) or (all(present) and not any(fm[key] for key in BINDING_FIELDS)):
+        return None
+    if not all(present) or not all(fm[key].strip() for key in BINDING_FIELDS):
+        raise KctxError("malformed", "implementation binding requires all five flat fields")
+    observed = fm["binding_observed_at"]
+    if not observed.isascii() or not observed.isdigit():
+        raise KctxError("malformed", "binding_observed_at must be a nonnegative integer")
+    try:
+        return ImplementationBinding(
+            ProposalMaterialRevision(fm["binding_design_revision"]),
+            SourceId(fm["binding_source"]),
+            TargetRevision(fm["binding_target_revision"]),
+            ActorId(fm["binding_actor"]),
+            int(observed),
+        )
+    except ValueError as exc:
+        raise KctxError("malformed", str(exc)) from exc
+
 
 E = TypeVar("E", bound=Enum)
 
@@ -39,6 +83,14 @@ def decode_proposal(
     version = fm.get("schema_version")
     if version is not None and version != "1":
         raise KctxError("malformed", f"unsupported proposal schema_version {version!r}")
+    workflow = fm.get("workflow_version", "2")
+    if workflow not in ("2", "3"):
+        raise KctxError("malformed", f"unsupported proposal workflow_version {workflow!r}")
+    # Under workflow2 these names were ordinary unknown authored material, not
+    # execution authority. Preserve their bytes/digest without interpreting them.
+    source = fm.get("target_source") if workflow == "3" else None
+    if workflow == "3" and (not source or source.strip().lower() in {"unknown", "unk"}):
+        raise KctxError("malformed", "workflow3 requires explicit known target_source")
     for key in ("target", "references", "landed"):
         value = fm.get(key, "")
         if value and not (value.startswith("[") and value.endswith("]")):
@@ -89,6 +141,9 @@ def decode_proposal(
         scope=fm.get("scope") or None,
         last_actor=fm.get("last_actor") or None,
         regression_note=fm.get("regression_note") or None,
+        workflow_version=int(workflow),
+        target_source=SourceId(source) if source else None,
+        binding=_decode_binding(fm) if workflow == "3" else None,
     )
 
 
@@ -131,17 +186,37 @@ def encode_proposal(proposal: Proposal) -> dict[str, object]:
         "scope": proposal.scope,
         "last_actor": proposal.last_actor,
         "regression_note": proposal.regression_note,
+        "workflow_version": proposal.workflow_version,
+        "target_source": proposal.target_source.val if proposal.target_source is not None else None,
+        "binding": {
+            "design_revision": proposal.binding.design_revision.val,
+            "source": proposal.binding.source.val,
+            "target_revision": proposal.binding.target_revision.val,
+            "actor": proposal.binding.actor.val,
+            "observed_at": proposal.binding.observed_at,
+        }
+        if proposal.binding is not None
+        else None,
     }
 
 
 def proposal_fields(proposal: Proposal) -> dict[str, str | None]:
     wire = encode_proposal(proposal)
+    wire.pop("binding")
+    if proposal.workflow_version == 2:
+        wire.pop("workflow_version")
+        wire.pop("target_source")
     fields: dict[str, str | None] = {}
     for key, value in wire.items():
         if value is None or isinstance(value, str):
             fields[key] = value
+        elif isinstance(value, int):
+            fields[key] = str(value)
         else:
             fields[key] = "[" + ", ".join(texts(value, key)) + "]"
+    if proposal.workflow_version == 3:
+        fields["schema_version"] = "1"
+        fields.update(binding_fields(proposal.binding))
     return fields
 
 

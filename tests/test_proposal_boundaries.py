@@ -20,6 +20,7 @@ class AuthoredWorkflowBoundariesTest(KctxTestCase):
     def _landing(self, title="Bound workflow"):
         added = _add(self.root, title=title)
         proposals.set_status(self.root, added.id, status=ProposalStatus.ACCEPTED, by="acceptor")
+        proposals.bind(self.root, added.id, target_revision=TargetRevision(_landed(self.root)), by="executor")
         proposals.set_status(self.root, added.id, status=ProposalStatus.LANDING, by="executor")
         return added
 

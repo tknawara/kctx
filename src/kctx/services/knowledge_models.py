@@ -30,6 +30,13 @@ from kctx.semantics.wire import (
     enc_plan,
     enc_selection_plan,
 )
+from kctx.semantics.workflow_models import PortfolioPlan, PortfolioSelectionPlan
+from kctx.semantics.workflow_wire import (
+    dec_portfolio_plan,
+    dec_portfolio_selection_plan,
+    enc_portfolio_plan,
+    enc_portfolio_selection_plan,
+)
 
 _T = TypeVar("_T")
 
@@ -76,7 +83,7 @@ def decode_journal(value: JsonObject, identity: PlanId) -> JsonObject:
     if not required <= value.keys() or value.keys() - required - {"dolt_commit", "release"}:
         raise KctxError("malformed", "invalid operation journal fields")
     if (
-        integer(value["schema_version"], "schema_version") != 2
+        integer(value["schema_version"], "schema_version") not in (2, 3)
         or PlanId(text(value["id"], "id")) != identity
     ):
         raise KctxError("malformed", "operation journal identity or version mismatch")
@@ -94,7 +101,7 @@ def decode_journal(value: JsonObject, identity: PlanId) -> JsonObject:
     if "release" in value:
         ReleaseId(text(value["release"], "release"))
     approval = Approval.decode(object_value(value["approval"]))
-    if approval.plan != identity:
+    if approval.plan != identity or approval.schema_version != value["schema_version"]:
         raise KctxError("malformed", "operation journal approval identifies another plan")
     return value
 
@@ -147,7 +154,7 @@ class SourceCapture:
 
 
 @dataclass(frozen=True, slots=True)
-class AdmissionPlan:
+class LegacyAdmissionPlan:
     id: PlanId
     base: ReleaseId | None
     policy: PolicyDigest
@@ -174,7 +181,7 @@ class AdmissionPlan:
         }
 
     @classmethod
-    def decode(cls, value: JsonObject) -> AdmissionPlan:
+    def decode(cls, value: JsonObject) -> LegacyAdmissionPlan:
         if (
             set(value)
             != {
@@ -208,7 +215,7 @@ class AdmissionPlan:
 
 
 @dataclass(frozen=True, slots=True)
-class ReleaseSelectionPlan:
+class LegacyReleaseSelectionPlan:
     id: PlanId
     base: ReleaseId
     retained: ReleaseId
@@ -238,7 +245,7 @@ class ReleaseSelectionPlan:
         }
 
     @classmethod
-    def decode(cls, value: JsonObject) -> ReleaseSelectionPlan:
+    def decode(cls, value: JsonObject) -> LegacyReleaseSelectionPlan:
         if (
             set(value)
             != {
@@ -267,12 +274,144 @@ class ReleaseSelectionPlan:
         )
 
 
-def decode_operation(value: JsonObject) -> AdmissionPlan | ReleaseSelectionPlan:
-    if value.get("kind") == "admission":
-        return AdmissionPlan.decode(value)
-    if value.get("kind") == "selection":
-        return ReleaseSelectionPlan.decode(value)
-    raise KctxError("malformed", "unknown knowledge operation kind")
+@dataclass(frozen=True, slots=True)
+class PortfolioAdmissionPlan:
+    id: PlanId
+    base: ReleaseId | None
+    policy: PolicyDigest
+    captures: tuple[SourceCaptureId, ...]
+    target_use: str
+    semantic: PortfolioPlan
+    toolchain: ContentDigest
+
+    @property
+    def actor(self) -> AuthorityKeyId:
+        return AuthorityKeyId(self.semantic.actor.val)
+
+    def wire(self) -> JsonObject:
+        return {
+            "schema_version": 3,
+            "kind": "admission",
+            "id": self.id.val,
+            "base": self.base.val if self.base else None,
+            "policy": self.policy.val,
+            "captures": [item.val for item in self.captures],
+            "target_use": self.target_use,
+            "plan": object_value(enc_portfolio_plan(self.semantic)),
+            "toolchain": self.toolchain.val,
+        }
+
+    @classmethod
+    def decode(cls, value: JsonObject) -> PortfolioAdmissionPlan:
+        if (
+            set(value)
+            != {
+                "schema_version",
+                "kind",
+                "id",
+                "base",
+                "policy",
+                "captures",
+                "target_use",
+                "plan",
+                "toolchain",
+            }
+            or value["kind"] != "admission"
+            or integer(value["schema_version"], "schema_version") != 3
+        ):
+            raise KctxError("malformed", "invalid portfolio admission envelope")
+        captures = value["captures"]
+        if not isinstance(captures, list):
+            raise KctxError("malformed", "captures requires an array")
+        return cls(
+            PlanId(text(value["id"], "id")),
+            ReleaseId(text(value["base"], "base")) if value["base"] is not None else None,
+            PolicyDigest(text(value["policy"], "policy")),
+            tuple(SourceCaptureId(text(item, "capture")) for item in captures),
+            text(value["target_use"], "target_use"),
+            decode_value(dec_portfolio_plan, value["plan"]),
+            ContentDigest(text(value["toolchain"], "toolchain")),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class PortfolioReleaseSelectionPlan:
+    id: PlanId
+    base: ReleaseId
+    retained: ReleaseId
+    policy: PolicyDigest
+    target_use: str
+    semantic: PortfolioSelectionPlan
+    toolchain: ContentDigest
+
+    @property
+    def actor(self) -> AuthorityKeyId:
+        return AuthorityKeyId(self.semantic.actor.val)
+
+    def wire(self) -> JsonObject:
+        return {
+            "schema_version": 3,
+            "kind": "selection",
+            "id": self.id.val,
+            "base": self.base.val,
+            "retained": self.retained.val,
+            "policy": self.policy.val,
+            "target_use": self.target_use,
+            "plan": object_value(enc_portfolio_selection_plan(self.semantic)),
+            "toolchain": self.toolchain.val,
+        }
+
+    @classmethod
+    def decode(cls, value: JsonObject) -> PortfolioReleaseSelectionPlan:
+        if (
+            set(value)
+            != {
+                "schema_version",
+                "kind",
+                "id",
+                "base",
+                "retained",
+                "policy",
+                "target_use",
+                "plan",
+                "toolchain",
+            }
+            or value["kind"] != "selection"
+            or integer(value["schema_version"], "schema_version") != 3
+        ):
+            raise KctxError("malformed", "invalid portfolio selection envelope")
+        return cls(
+            PlanId(text(value["id"], "id")),
+            ReleaseId(text(value["base"], "base")),
+            ReleaseId(text(value["retained"], "retained")),
+            PolicyDigest(text(value["policy"], "policy")),
+            text(value["target_use"], "target_use"),
+            decode_value(dec_portfolio_selection_plan, value["plan"]),
+            ContentDigest(text(value["toolchain"], "toolchain")),
+        )
+
+
+Operation = (
+    LegacyAdmissionPlan
+    | LegacyReleaseSelectionPlan
+    | PortfolioAdmissionPlan
+    | PortfolioReleaseSelectionPlan
+)
+
+
+def decode_operation(value: JsonObject) -> Operation:
+    schema = integer(value.get("schema_version"), "schema_version")
+    if schema == 2:
+        if value.get("kind") == "admission":
+            return LegacyAdmissionPlan.decode(value)
+        if value.get("kind") == "selection":
+            return LegacyReleaseSelectionPlan.decode(value)
+    if schema == 3:
+        if value.get("kind") == "admission":
+            return PortfolioAdmissionPlan.decode(value)
+        if value.get("kind") == "selection":
+            return PortfolioReleaseSelectionPlan.decode(value)
+    raise KctxError("malformed", "unknown knowledge operation kind or schema")
 
 
 @dataclass(frozen=True, slots=True)
@@ -280,10 +419,11 @@ class Approval:
     plan: PlanId
     key: AuthorityKeyId
     signature: bytes
+    schema_version: int = 3
 
     def wire(self) -> JsonObject:
         return {
-            "schema_version": 2,
+            "schema_version": self.schema_version,
             "plan": self.plan.val,
             "key": self.key.val,
             "signature": self.signature.hex(),
@@ -291,13 +431,13 @@ class Approval:
 
     @classmethod
     def decode(cls, value: JsonObject) -> Approval:
-        if (
-            set(value) != {"schema_version", "plan", "key", "signature"}
-            or integer(value["schema_version"], "schema_version") != 2
-        ):
+        if set(value) != {"schema_version", "plan", "key", "signature"} or integer(
+            value["schema_version"], "schema_version"
+        ) not in (2, 3):
             raise KctxError("malformed", "invalid approval envelope")
         return cls(
             PlanId(text(value["plan"], "plan")),
             AuthorityKeyId(text(value["key"], "key")),
             decode_hex(value["signature"], 64, "signature"),
+            integer(value["schema_version"], "schema_version"),
         )

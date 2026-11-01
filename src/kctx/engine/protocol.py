@@ -16,7 +16,7 @@ from kctx.errors import KctxError
 from .operations import Operations
 from .schemas import METHODS, Initialize
 
-PROTOCOL_VERSION = "1"
+PROTOCOL_VERSION = "2"
 MAX_REQUEST_BYTES = 65536
 CAPABILITIES = ("citations", "graph", "knowledge", "authored", "notifications")
 MUTATIONS = frozenset(

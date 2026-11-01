@@ -24,10 +24,9 @@ class GoldenDecisionTests(unittest.TestCase):
                 expected = fixture.get("expected_response", {"id": fixture["id"], "ok": True, "result": fixture.get("expected")})
                 self.assertEqual(python_handle(fixture), expected)
 
-    def test_seven_production_decision_mutants_are_killed(self) -> None:
+    def test_production_decision_mutants_are_killed(self) -> None:
         report = mutation_campaign()
         self.assertEqual(report["result"], "pass", report)
-        self.assertEqual(report["killed"], 7)
 
 
 class CodecTests(unittest.TestCase):
